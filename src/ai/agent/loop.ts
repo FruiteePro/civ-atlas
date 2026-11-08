@@ -59,6 +59,8 @@ export interface AgentRequest {
   feature: string;
   /** 调用记录里的说明 */
   title?: string;
+  /** AI角色: story=只读查询, intervention=提议编辑 */
+  role?: 'story' | 'intervention';
   /** system + 前情 + 这次的话 */
   messages: AiMessage[];
   tools: AgentTool[];
@@ -151,6 +153,7 @@ export async function runAgent(req: AgentRequest): Promise<AgentOutcome> {
       {
         feature: req.feature,
         title: req.title,
+        role: req.role,
         messages: msgs,
         ...(tools.length ? { tools, toolChoice: last ? ('none' as const) : ('auto' as const) } : {}),
         temperature: req.temperature,

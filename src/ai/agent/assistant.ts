@@ -1011,11 +1011,16 @@ export async function runAssistant(ctx: AssistantContext, history: readonly Assi
   const you = (t: string) => (!kept ? t : keep ? t.split(keep).map((x, i) => (i % 2 ? x : x.replace(/作者/g, '你'))).join('') : t.replace(/作者/g, '你'));
   const plain = (t: string) => you(plainIds(t, ctx));
   const onEvent = opts.onEvent;
+  // 判断角色：有干预工具用intervention，否则用story
+  const tools = [...assistantTools(ctx, state), ...(opts.extraTools ?? [])];
+  const hasInterventionTools = tools.some(t => t.def.name === 'propose_edits' || t.def.name === 'try_edits');
+  
   const out = await runAgent({
     feature: ASSISTANT_FEATURE,
     title: [...w].length > 24 ? `${[...w].slice(0, 24).join('')}…` : w,
+    role: hasInterventionTools ? 'intervention' : 'story',
     messages: assistantMessages(ctx, history, w),
-    tools: [...assistantTools(ctx, state), ...(opts.extraTools ?? [])],
+    tools,
     maxRounds: opts.maxRounds,
     temperature: 0.3,
     maxTokens: 2000,
