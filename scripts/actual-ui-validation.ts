@@ -94,9 +94,17 @@ async function main() {
     await page.goto(`${dev.url}/?seed=7&ai=mock`);
     await page.waitForSelector('body', { timeout: 5000 });
     
-    // 等待world generation
+    // 等待world generation (修复：waitForFunction需要返回boolean)
     console.log('等待world generation...');
-    const genResult = await page.waitForFunction(() => {
+    const isReady = await page.waitForFunction(() => {
+      const wf = (window as any).__wf;
+      const wfCiv = (window as any).__wfCiv;
+      // 返回boolean！
+      return wf?.ready === true && wfCiv?.ready === true;
+    }, { timeout: 60000 }).catch(() => null);
+    
+    // 单独获取详细状态用于日志
+    const result = await page.evaluate(() => {
       const wf = (window as any).__wf;
       const wfCiv = (window as any).__wfCiv;
       return {
@@ -105,9 +113,7 @@ async function main() {
         civExists: !!wfCiv,
         civReady: wfCiv?.ready === true,
       };
-    }, { timeout: 60000 });
-    
-    const result = await genResult.jsonValue();
+    });
     console.log('Generation状态:', result);
     
     await page.screenshot({ path: path.join(SCREENSHOTS_DIR, '02-world-generated.png') });

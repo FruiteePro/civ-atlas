@@ -101,7 +101,7 @@ export function clearPreview(): void {
  */
 export function validatePreview(
   preview: BaselinePreview | null,
-  current: { seed: number; year: number; edits: WorldEdits }
+  current: { seed: number; year: number; edits?: WorldEdits }
 ): PreviewValidation {
   if (!preview) {
     return { valid: false, reason: '没有可用的预览' };
@@ -121,11 +121,13 @@ export function validatePreview(
   }
   
   // 检查edits是否改变（通过signature）
-  const previewSig = ivSig(preview.proposedInterventions);
-  const currentSig = ivSig(current.edits.interventions as Intervention[]);
-  if (previewSig !== currentSig) {
-    stale.editsChanged = true;
-    isStale = true;
+  if (current.edits) {
+    const previewSig = ivSig(preview.proposedInterventions);
+    const currentSig = ivSig(current.edits.interventions as Intervention[]);
+    if (previewSig !== currentSig) {
+      stale.editsChanged = true;
+      isStale = true;
+    }
   }
   
   if (isStale) {
