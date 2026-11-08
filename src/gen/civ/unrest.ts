@@ -175,10 +175,9 @@ export const UNREST_KNOBS = defineKnobs('unrest', {
   KEEP: [0.25, 0.4] as readonly [number, number],
   PIECE_SIZE: 12,
   PIECE_MIN: 3,
-  /** 分裂改进:每个继承国至少几州;中心城市最小人口(千人);相邻中心距离阈值(标准路程) */
+  /** 分裂改进:每个继承国至少几州;相邻中心距离阈值(直接距离,不乘REACH) */
   FRAGMENT_MIN_SIZE: 3,
-  FRAGMENT_MIN_POP: 5,
-  FRAGMENT_MERGE_DIST: 3,
+  FRAGMENT_MERGE_DIST: 0.5,
 });
 
 
@@ -622,15 +621,19 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
       return scoreB - scoreA;
     });
     
-    // 合并过近的中心
+    // 合并过近的中心（按距离首都的差异）
     const finalCenters: typeof sortedCenters = [];
     for (const c of sortedCenters) {
       let tooClose = false;
       for (const fc of finalCenters) {
-        const d = Math.abs(c.distance - fc.distance);
-        if (d < FRAGMENT_MERGE_DIST * REACH) {
-          tooClose = true;
-          break;
+        // 使用距离差异的比例而非绝对值
+        const avgDist = (c.distance + fc.distance) / 2;
+        if (avgDist > 0) {
+          const relDiff = Math.abs(c.distance - fc.distance) / avgDist;
+          if (relDiff < FRAGMENT_MERGE_DIST) {
+            tooClose = true;
+            break;
+          }
         }
       }
       if (!tooClose) finalCenters.push(c);
