@@ -145,7 +145,8 @@ export function validateSelection(ctx: AssistantContext): {
   }
   
   if (kind === 'region') {
-    if (id < 0 || id >= civ.world.mesh.n) {
+    const maxRegions = ctx.world.mesh.n;
+    if (id < 0 || id >= maxRegions) {
       return { valid: false, reason: `州 ID ${id} 超出范围` };
     }
     return { valid: true, object: { id, name: `州${id}`, kind: 'region' } };
