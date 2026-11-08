@@ -42,37 +42,56 @@ async function captureAiSettings(browser: Browser, url: string): Promise<void> {
     await page.waitForFunction(() => (window as any).__wf?.ready, null, { timeout: 60_000 });
     console.log('✓ 页面已加载');
     
-    // 打开AI设置对话框
+    // 使用键盘快捷键或查找"AI"相关按钮来打开设置
+    // 方法1: 模拟点击侧栏或菜单中的AI设置按钮
     await page.evaluate(() => {
-      const { openAiSettings } = require('../src/ui/AiSettings');
-      openAiSettings('settings');
+      // 直接调用window上的全局函数（如果存在）
+      const win: any = window;
+      if (win.openAiSettings) {
+        win.openAiSettings('settings');
+      } else {
+        // 备用：触发一个自定义事件
+        window.dispatchEvent(new CustomEvent('open-ai-settings'));
+      }
     });
     
     // 等待对话框出现
     await page.waitForSelector('[data-testid="ai-dialog"]', { state: 'visible', timeout: 5000 });
     console.log('✓ AI设置对话框已打开');
     
-    // 截图：故事生成tab
-    await page.click('[data-role-tab="story"]');
+    // 截图：故事生成tab (默认tab)
     await page.waitForTimeout(500);
-    const storyTab = page.locator('[data-testid="ai-dialog"]');
-    await storyTab.screenshot({
+    const dialog = page.locator('[data-testid="ai-dialog"]');
+    await dialog.screenshot({
       path: path.join(SCREENSHOTS_DIR, 'ai-settings-story.png'),
       type: 'png',
     });
     console.log('✓ 已截图: AI设置-故事生成');
     
-    // 截图：干预建议tab
+    // 点击干预建议tab
     await page.click('[data-role-tab="intervention"]');
     await page.waitForTimeout(500);
-    await storyTab.screenshot({
+    await dialog.screenshot({
       path: path.join(SCREENSHOTS_DIR, 'ai-settings-intervention.png'),
       type: 'png',
     });
     console.log('✓ 已截图: AI设置-干预建议');
     
+    // 全屏截图显示上下文
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, 'ai-settings-fullscreen.png'),
+      type: 'png',
+      fullPage: false,
+    });
+    console.log('✓ 已截图: AI设置-全屏');
+    
   } catch (e) {
     console.error('❌ AI设置截图失败:', e);
+    // 保存错误时的截图
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, 'ai-settings-error.png'),
+      type: 'png',
+    }).catch(() => {});
     throw e;
   } finally {
     await page.close();
@@ -95,17 +114,23 @@ async function captureDiplomacyPage(browser: Browser, url: string): Promise<void
     console.log('✓ 文明已生成');
     
     // 打开世界概览
-    await page.evaluate(() => {
-      // 通过点击侧栏的世界名或"全部X国"打开概览
-      const overviewBtn = document.querySelector('[data-act="overview"]') as HTMLElement;
-      if (overviewBtn) {
-        overviewBtn.click();
-      } else {
-        // 备用方式: 直接调用 store
-        const { openOverview } = require('../src/ui/overviewStore');
-        openOverview();
-      }
-    });
+    // 尝试查找并点击概览按钮
+    const overviewBtn = await page.locator('[data-act="overview"]').first();
+    if (await overviewBtn.count() > 0) {
+      await overviewBtn.click();
+    } else {
+      // 备用：通过window全局函数
+      await page.evaluate(() => {
+        const win: any = window;
+        if (win.openOverview) {
+          win.openOverview();
+        } else {
+          // 尝试点击世界名
+          const worldName = document.querySelector('.world-name') as HTMLElement;
+          if (worldName) worldName.click();
+        }
+      });
+    }
     
     // 等待概览面板出现
     await page.waitForSelector('.world-overview', { state: 'visible', timeout: 5000 });
