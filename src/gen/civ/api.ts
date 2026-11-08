@@ -116,6 +116,11 @@ export interface PolityApi {
 /** politics那一组(原来挂在 PoliticsModel 上) */
 export interface PoliticsApi {
   /**
+   * 分裂改进(unrest.ts 提供):手动解散无接收者时产生继承国。
+   * 返回:成功创建的继承国数量(0 = 无可行继承国)
+   */
+  fragmentOnDestroy?: (pid: number, regions: readonly number[], t: Year, ivIndex: number) => number;
+  /**
    * 国家此刻的危机(hook 里填):国土太大、刚丢了国都 / 迁了都、正在打仗、这些年接连丢州。
    * 动荡(control.ts 的数表,规则见 stateTables.ts)在它上面再加边远、异族、王朝老了、饥荒、民变、割据
    */

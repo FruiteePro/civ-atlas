@@ -175,6 +175,10 @@ export const UNREST_KNOBS = defineKnobs('unrest', {
   KEEP: [0.25, 0.4] as readonly [number, number],
   PIECE_SIZE: 12,
   PIECE_MIN: 3,
+  /** 分裂改进:每个继承国至少几州;中心城市最小人口(千人);相邻中心距离阈值(州数) */
+  FRAGMENT_MIN_SIZE: 3,
+  FRAGMENT_MIN_POP: 15,
+  FRAGMENT_MERGE_DIST: 2,
 });
 
 
@@ -200,6 +204,8 @@ const U_SEED = 13;
 const U_CLAIM = 14;
 const U_CLAIM_R = 15;
 const U_SPRING = 16;
+const U_FRAG_CENTER = 17;
+const U_FRAG_MERGE = 18;
 
 // ---------------------------------------------------------------------------
 // 模型
@@ -553,6 +559,125 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
   };
 
   // ---- 大崩解 ----
+  
+  /**
+   * 分裂改进:识别可行的分裂中心(有城、人口足够、未被永久锁定的州)
+   */
+  interface FragmentationCenter {
+    region: number;
+    cityId: number;
+    population: number;
+    distance: number;
+    foreign: boolean;
+  }
+  
+  const identifyFragmentationCenters = (pid: number, regions: readonly number[], t: number): FragmentationCenter[] => {
+    const { FRAGMENT_MIN_POP } = um.pm.knobs.get(UNREST_KNOBS);
+    const P = pm.polities[pid];
+    const dist = pm.capDist[pid];
+    const centers: FragmentationCenter[] = [];
+    
+    for (const r of regions) {
+      const sid = pm.cityOf[r];
+      if (sid < 0) continue; // 无城
+      const s = pm.settlements[sid];
+      if (s.ended !== undefined) continue; // 城已毁
+      if (wm.iv?.locked(r, t)) continue; // 永久锁定的州
+      
+      const pop = populationAt(s, t) / 1000; // 千人
+      if (pop < FRAGMENT_MIN_POP) continue; // 人口不足
+      
+      centers.push({
+        region: r,
+        cityId: sid,
+        population: pop,
+        distance: dist[r] < Infinity ? dist[r] : 1000,
+        foreign: culture[r] !== P.culture,
+      });
+    }
+    
+    return centers;
+  };
+  
+  /**
+   * 分裂改进:基于中心和连通性分配领土
+   * 返回:各继承国的州列表(如无可行分裂则返回空)
+   */
+  const fragmentByConnectivity = (
+    pid: number,
+    regions: readonly number[],
+    centers: readonly FragmentationCenter[],
+    t: number,
+    tag: number,
+    k: number,
+  ): number[][] => {
+    if (centers.length === 0) return [];
+    
+    const { FRAGMENT_MIN_SIZE, FRAGMENT_MERGE_DIST } = um.pm.knobs.get(UNREST_KNOBS);
+    const inRegions = new Set(regions);
+    
+    // 按人口和距离首都排序选择中心(人口大、离首都远的优先)
+    const sortedCenters = centers.slice().sort((a, b) => {
+      const scoreA = a.population + a.distance * 10;
+      const scoreB = b.population + b.distance * 10;
+      return scoreB - scoreA;
+    });
+    
+    // 合并过近的中心
+    const finalCenters: typeof sortedCenters = [];
+    for (const c of sortedCenters) {
+      let tooClose = false;
+      for (const fc of finalCenters) {
+        const d = Math.abs(c.distance - fc.distance);
+        if (d < FRAGMENT_MERGE_DIST * REACH) {
+          tooClose = true;
+          break;
+        }
+      }
+      if (!tooClose) finalCenters.push(c);
+    }
+    
+    if (finalCenters.length === 0) return [];
+    
+    // BFS 同时从各中心扩展
+    const piece = new Int32Array(R).fill(-1);
+    let qt = 0;
+    const bfsQueue = new Int32Array(R);
+    
+    for (let i = 0; i < finalCenters.length; i++) {
+      piece[finalCenters[i].region] = i;
+      bfsQueue[qt++] = finalCenters[i].region;
+    }
+    
+    const st = ++stamp;
+    for (const r of regions) mark[r] = st;
+    
+    for (let h = 0; h < qt; h++) {
+      const r = bfsQueue[h];
+      for (let e = reg.adjStart[r]; e < reg.adjStart[r + 1]; e++) {
+        const j = reg.adj[e];
+        const kind = reg.adjKind[e];
+        // 只走陆路(不含海峡、航线)
+        if (kind === AdjKind.Strait || kind === AdjKind.SeaRoute) continue;
+        if (mark[j] !== st || !inRegions.has(j) || piece[j] >= 0) continue;
+        if (wm.iv?.locked(j, t)) continue;
+        
+        piece[j] = piece[r];
+        bfsQueue[qt++] = j;
+      }
+    }
+    
+    // 收集各块的州
+    const groups: number[][] = finalCenters.map(() => []);
+    for (const r of regions) {
+      if (piece[r] >= 0) groups[piece[r]].push(r);
+    }
+    
+    // 过滤太小的块
+    const viable = groups.filter((g) => g.length >= FRAGMENT_MIN_SIZE);
+    return viable.length > 0 ? viable : [];
+  };
+  
   /** 各块陆地上的州(州号升序) */
   const lands: number[][] = [];
   for (let r = 0; r < R; r++) (lands[reg.landmass[r]] ??= []).push(r);
@@ -582,6 +707,50 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
 
   // COLLAPSE_ODDS = 0 的世界没有大崩解:大迁徙打进国都也不崩(migration.ts)
   api.politics.shatter = (P: Polity, k: number, t: number): boolean => (wm.iv?.unites(P.id, t) || !(COLLAPSE_ODDS > 0) ? false : collapse(P, k, t));
+  
+  // 分裂改进:手动解散产生继承国
+  api.politics.fragmentOnDestroy = (pid: number, regions: readonly number[], t: number, ivIndex: number): number => {
+    const { FRAGMENT_MIN_SIZE } = um.pm.knobs.get(UNREST_KNOBS);
+    const P = pm.polities[pid];
+    const tag = pm.ptag[pid];
+    
+    // 识别可行中心
+    const centers = identifyFragmentationCenters(pid, regions, t);
+    if (centers.length === 0) return 0;
+    
+    // 基于连通性分配
+    const viable = fragmentByConnectivity(pid, regions, centers, t, tag, ivIndex);
+    if (viable.length === 0) return 0;
+    
+    const capSid = capitalAt(P, t);
+    const dist = pm.capDist[pid];
+    let successors = 0;
+    
+    // 创建继承国
+    for (const g of viable) {
+      if (g.length < FRAGMENT_MIN_SIZE) continue;
+      
+      const sid = api.politics.biggestCity!(g, t);
+      if (sid < 0) continue;
+      
+      // 找起事州(离原首都最远)
+      let r0 = g[0];
+      let maxDist = dist[r0] ?? 0;
+      for (const r of g) {
+        const d = dist[r] ?? 0;
+        if (d > maxDist) {
+          maxDist = d;
+          r0 = r;
+        }
+      }
+      
+      const sorted = g.slice().sort((a, b) => a - b);
+      api.politics.secede!(pid, sorted, sid, r0, t, 'split', 'collapse');
+      successors++;
+    }
+    
+    return successors;
+  };
 
   const collapse = (P: Polity, k: number, t: number): boolean => {
     const pid = P.id;
@@ -660,7 +829,7 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
     }
     const groups: number[][] = seeds.map(() => []);
     for (const r of rest) if (piece[r] >= 0) groups[piece[r]].push(r);
-    // 怎么崩
+    // 怎么崩:决定继承国的发展度损失程度
     const era = devModelOf(sim)?.era[capR] ?? 0;
     const fl = um.famines.get(pid);
     let famine = 0;
@@ -670,33 +839,55 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
     const wC = 1.2;
     const x = keyed(um.base, tag, k, U_KIND) * (wT + wL + wC);
     const kind = x < wC ? 0 : x < wC + wL ? 1 : 2;
-    if (kind === 2) {
-      // 两样都崩:散出去的州不立国,散回部落地带
-      let n = 0;
-      const out: number[] = [];
-      for (const g of groups) for (const r of g) out.push(r);
-      if (out.length < m * PIECE_MIN) return false;
-      out.sort((a, b) => a - b);
-      sim.record('collapse', { a: pid, b: 2, region: capR, settlement: capSid, war: out.length });
-      for (const r of out) {
-        sim.setOwner(Layer.Polity, r, -1, Ev.Collapse);
-        n++;
-      }
-      um.collapsed.set(pid, t);
-      pol.lastSplit.set(pid, t);
-      return n > 0;
-    }
-    // 中央崩、地方崩:各块以块里人口最多的城为都自立(没有城的块留给原来的国家)
+    
+    // 分裂改进:基于可行中心分配领土(所有 kind 统一处理)
+    // 识别散出去的州里的可行中心
+    const allRest: number[] = [];
+    for (const g of groups) allRest.push(...g);
+    const centers = identifyFragmentationCenters(pid, allRest, t);
+    const viable = fragmentByConnectivity(pid, allRest, centers, t, tag, k);
+    
+    // 准备继承国:每块挑人口最多的城为都
     const ready: [number[], number, number][] = [];
-    groups.forEach((g, i) => {
-      if (g.length < PIECE_MIN) return;
+    for (const g of viable) {
       const sid = api.politics.biggestCity!(g, t);
-      if (sid >= 0) ready.push([g.sort((a, b) => a - b), sid, seeds[i]]);
-    });
-    if (ready.length < 2) return false;
+      if (sid < 0) continue; // 没有城的块(极少见)跳过
+      // 找块里离首都最远的州作为起事州(r0)
+      let r0 = g[0];
+      let maxDist = dist[r0];
+      for (const r of g) {
+        if (dist[r] > maxDist) {
+          maxDist = dist[r];
+          r0 = r;
+        }
+      }
+      ready.push([g.sort((a, b) => a - b), sid, r0]);
+    }
+    
+    // 如果没有可行继承国,尝试至少保留核心区域
+    if (ready.length === 0) {
+      // 极端情况:无可行继承国(游牧、人口稀疏、无城)
+      // 散回部落地带,记录 kind=2 供 development.ts 识别
+      const out = allRest.slice().sort((a, b) => a - b);
+      if (out.length > 0) {
+        sim.record('collapse', { a: pid, b: 2, region: capR, settlement: capSid, war: out.length });
+        for (const r of out) {
+          sim.setOwner(Layer.Polity, r, -1, Ev.Collapse);
+        }
+        um.collapsed.set(pid, t);
+        pol.lastSplit.set(pid, t);
+        return true;
+      }
+      return false;
+    }
+    
+    // 记录崩溃和创建继承国
     sim.record('collapse', { a: pid, b: kind, region: capR, settlement: capSid, war: ready.length });
-    for (const [g, sid, r0] of ready) api.politics.secede!(pid, g, sid, r0, t, 'split', 'collapse');
+    for (const [g, sid, r0] of ready) {
+      api.politics.secede!(pid, g, sid, r0, t, 'split', 'collapse');
+    }
     um.collapsed.set(pid, t);
+    pol.lastSplit.set(pid, t);
     return true;
   };
 }

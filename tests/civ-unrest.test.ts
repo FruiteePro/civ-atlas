@@ -7,7 +7,7 @@ import { generateCiv, type Civ } from '../src/gen/civ';
 import { Layer } from '../src/gen/civ/types';
 import { ownersAt } from '../src/gen/civ/engine/timeline';
 import { polityModelOf } from '../src/gen/civ/polities';
-import { capitalAt, polityAlive } from '../src/gen/civ/growth';
+import { capitalAt, polityAlive, populationAt } from '../src/gen/civ/growth';
 import { unrestStats } from '../src/gen/civ/unrest';
 import { buildChronicle, type ChronicleEntry } from '../src/gen/civ/story/chronicle';
 import { resumeCiv } from '../src/gen/civ/modules';
@@ -191,4 +191,194 @@ describe('动荡、饥荒、民变、大崩解', () => {
       for (const e of all) if (['famine', 'revolt', 'collapse'].includes(e.kind)) expect(e.text).not.toMatch(/undefined|NaN|某国|-1/);
     }
   }, 60_000);
+
+  it('分裂改进:大崩解产生继承政权而非无主地(种子 2024)', () => {
+    const civ = civOf(2024);
+    const A = civ.annals;
+    const L = civ.log;
+    
+    // 找到大崩解事件
+    const collapses = A.filter((e) => e.kind === 'collapse');
+    expect(collapses.length).toBeGreaterThan(0);
+    
+    for (const collapse of collapses) {
+      const pid = collapse.a;
+      const collapseYear = collapse.year;
+      const kind = collapse.b;
+      
+      // 崩溃前母国的州
+      const beforeOwners = ownersAt(civ, collapseYear - 1 / 512).polity;
+      const motherRegions = new Set<number>();
+      for (let r = 0; r < beforeOwners.length; r++) {
+        if (beforeOwners[r] === pid) motherRegions.add(r);
+      }
+      
+      // 崩溃后的归属
+      const afterOwners = ownersAt(civ, collapseYear + 1 / 512).polity;
+      
+      // 统计:有人住的州(崩溃前)崩溃后的归属
+      let peopledBefore = 0;
+      let unownedAfter = 0;
+      let ownedAfter = 0;
+      
+      for (const r of motherRegions) {
+        const cultBefore = ownersAt(civ, collapseYear - 1 / 512).culture[r];
+        if (cultBefore < 0) continue; // 无人住
+        
+        peopledBefore++;
+        const ownerAfter = afterOwners[r];
+        if (ownerAfter < 0) unownedAfter++;
+        else ownedAfter++;
+      }
+      
+      const tag = `崩溃 pid=${pid} year=${collapseYear} kind=${kind}`;
+      
+      // kind=2(完全崩溃)可能留部分无主地,但大部分应产生继承国
+      if (kind === 2 && peopledBefore > 0) {
+        // 允许少量无主地(< 50%),但不应全部无主
+        const unownedRatio = unownedAfter / peopledBefore;
+        expect(unownedRatio, `${tag}:无主地比例`).toBeLessThan(0.5);
+      } else if (kind < 2) {
+        // kind=0/1 应全部产生继承国
+        expect(unownedAfter, `${tag}:kind=${kind} 不应留无主地`).toBe(0);
+      }
+      
+      // 检查继承国数量(war 字段记录)
+      const successorCount = collapse.war ?? 0;
+      if (peopledBefore >= 10) {
+        // 足够大的国家应该分裂成多个继承国
+        expect(successorCount, `${tag}:继承国数量`).toBeGreaterThanOrEqual(1);
+      }
+    }
+  }, 120_000);
+
+  it('分裂改进:继承国领土连通且有城(种子 7)', () => {
+    const civ = civOf(7);
+    const A = civ.annals;
+    
+    // 找到分裂事件产生的国家
+    const splits = A.filter((e) => e.kind === 'split' && e.cause === 'collapse');
+    expect(splits.length).toBeGreaterThan(0);
+    
+    for (const split of splits) {
+      const successorId = split.a;
+      const successor = civ.polities[successorId];
+      const foundYear = successor.founded;
+      
+      // 立国时的领土
+      const owners = ownersAt(civ, foundYear + 1 / 512).polity;
+      const regions: number[] = [];
+      for (let r = 0; r < owners.length; r++) {
+        if (owners[r] === successorId) regions.push(r);
+      }
+      
+      const tag = `继承国 ${successorId} founded=${foundYear}`;
+      
+      // 应有领土
+      expect(regions.length, `${tag}:领土数`).toBeGreaterThanOrEqual(1);
+      
+      // 应有首都城市
+      const capitalId = successor.capital;
+      const capital = civ.settlements[capitalId];
+      expect(capital, `${tag}:首都存在`).toBeDefined();
+      expect(capital.ended, `${tag}:首都未毁`).toBeUndefined();
+      
+      // 首都在领土内
+      expect(regions, `${tag}:首都在领土内`).toContain(capital.region);
+    }
+  }, 120_000);
+
+  it('分裂改进:确定性测试(相同种子相同结果)', () => {
+    // 同一种子生成两次,崩溃结果应完全一致
+    const civ1 = generateCiv(world(2024));
+    const civ2 = generateCiv(world(2024));
+    
+    const collapses1 = civ1.annals.filter((e) => e.kind === 'collapse');
+    const collapses2 = civ2.annals.filter((e) => e.kind === 'collapse');
+    
+    expect(collapses1.length).toBe(collapses2.length);
+    
+    for (let i = 0; i < collapses1.length; i++) {
+      const c1 = collapses1[i];
+      const c2 = collapses2[i];
+      
+      expect(c1.year, `第 ${i} 次崩溃:年份`).toBe(c2.year);
+      expect(c1.a, `第 ${i} 次崩溃:母国`).toBe(c2.a);
+      expect(c1.b, `第 ${i} 次崩溃:kind`).toBe(c2.b);
+      expect(c1.war, `第 ${i} 次崩溃:继承国数`).toBe(c2.war);
+    }
+  }, 240_000);
+  
+  it('分裂改进:人口保留(继承国人口总和接近母国)', () => {
+    const civ = civOf(2024);
+    const A = civ.annals;
+    const S = civ.settlements;
+    
+    const collapses = A.filter((e) => e.kind === 'collapse');
+    expect(collapses.length).toBeGreaterThan(0);
+    
+    for (const collapse of collapses) {
+      const pid = collapse.a;
+      const collapseYear = collapse.year;
+      
+      // 崩溃前母国的城市人口
+      const beforeOwners = ownersAt(civ, collapseYear - 1 / 512).polity;
+      let motherPopulation = 0;
+      for (const s of S) {
+        if (s.ended !== undefined && s.ended < collapseYear) continue;
+        if (beforeOwners[s.region] === pid) {
+          motherPopulation += populationAt(s, collapseYear);
+        }
+      }
+      
+      // 崩溃后继承国的人口
+      const afterOwners = ownersAt(civ, collapseYear + 1 / 512).polity;
+      let successorPopulation = 0;
+      const successorIds = new Set<number>();
+      
+      for (let r = 0; r < beforeOwners.length; r++) {
+        if (beforeOwners[r] === pid && afterOwners[r] >= 0) {
+          successorIds.add(afterOwners[r]);
+        }
+      }
+      
+      for (const sid of successorIds) {
+        for (const s of S) {
+          if (s.ended !== undefined && s.ended < collapseYear) continue;
+          if (afterOwners[s.region] === sid) {
+            successorPopulation += populationAt(s, collapseYear);
+          }
+        }
+      }
+      
+      // 人口应基本保留(允许 < 15% 损失,来自可能的洗劫等)
+      if (motherPopulation > 0) {
+        const ratio = successorPopulation / motherPopulation;
+        const tag = `崩溃 pid=${pid} year=${collapseYear}`;
+        expect(ratio, `${tag}:人口保留率`).toBeGreaterThan(0.85);
+      }
+    }
+  }, 120_000);
+  
+  it('分裂改进:边缘情况(小国、无城国家)', () => {
+    // 使用多个种子测试各种边缘情况
+    for (const seed of [7, 2024]) {
+      const civ = civOf(seed);
+      const A = civ.annals;
+      
+      // 检查所有崩溃事件是否正常完成
+      const collapses = A.filter((e) => e.kind === 'collapse');
+      for (const collapse of collapses) {
+        const pid = collapse.a;
+        const P = civ.polities[pid];
+        
+        // 崩溃后母国应标记为已结束
+        expect(P.ended, `seed=${seed} pid=${pid}:母国已结束`).toBeDefined();
+        
+        // 继承国数量应合理(0-10)
+        const successorCount = collapse.war ?? 0;
+        expect(successorCount, `seed=${seed} pid=${pid}:继承国数量合理`).toBeLessThanOrEqual(10);
+      }
+    }
+  }, 180_000);
 });

@@ -610,7 +610,7 @@ export function installInterventions(sim: CivSim, iv: InterventionModel): void {
     if (b === -1 || b === IV_WAIT) rulerAct(sim, pm, a, crownOf(v, t, i));
   };
 
-  /** 灭国:a 此刻亡,国土并入 b 或散成无主(b 列:并入的国家 / −1 散成无主 / −3 a 已亡 / −7 后下的"不许灭"护着它) */
+  /** 灭国:a 此刻亡,国土并入 b 或产生继承国(b 列:并入的国家 / −1 产生继承国 / −2 无可行继承国散成无主 / −3 a 已亡 / −7 后下的"不许灭"护着它) */
   const destroy = (v: DestroyIv, i: number, a: number, t: number) => {
     const sid = capitalAt(pm.polities[a], t);
     const r = S[sid]?.region ?? -1;
@@ -621,11 +621,34 @@ export function installInterventions(sim: CivSim, iv: InterventionModel): void {
     const to = v.b !== undefined ? iv.resolve(v.b) : -1;
     const by = to >= 0 && to !== a && alive(to) ? to : -1;
     const lands = pm.lands[a].slice();
-    sim.record('intervene', { a, b: by, region: r, settlement: sid, war: i, n: lands.length });
-    for (const q of lands) sim.setOwner(Layer.Polity, q, by, Ev.Cede);
+    
+    // 有接收者:直接兼并
+    if (by >= 0) {
+      sim.record('intervene', { a, b: by, region: r, settlement: sid, war: i, n: lands.length });
+      for (const q of lands) sim.setOwner(Layer.Polity, q, by, Ev.Cede);
+      endPolity(pm, a, t);
+      fallen(a, r, t, by);
+      return;
+    }
+    
+    // 无接收者:尝试产生继承国而非散成无主
+    // 复用 unrest.ts 的分裂逻辑(通过 API)
+    if (api.politics.fragmentOnDestroy) {
+      const successors = api.politics.fragmentOnDestroy(a, lands, t, i);
+      if (successors > 0) {
+        sim.record('intervene', { a, b: -1, region: r, settlement: sid, war: i, n: successors });
+        endPolity(pm, a, t);
+        fallen(a, r, t, -1);
+        return;
+      }
+    }
+    
+    // 无可行继承国:散成无主(旧行为兜底)
+    sim.record('intervene', { a, b: -2, region: r, settlement: sid, war: i, n: lands.length });
+    for (const q of lands) sim.setOwner(Layer.Polity, q, -1, Ev.Cede);
     endPolity(pm, a, t);
-    fallen(a, r, t, by);
-    if (by < 0) reopen(sim, pm, lands);
+    fallen(a, r, t, -1);
+    reopen(sim, pm, lands);
   };
 
   /**
