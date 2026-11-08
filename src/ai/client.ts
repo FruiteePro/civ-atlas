@@ -200,11 +200,13 @@ function worldOf(): string | undefined {
 
 /** 调一次 AI。没配置 / 失败抛 AiError(中文说明);成功返回全文。每次调用都记一条记录 */
 export async function aiChat(req: AiRequest, opts: AiCallOptions = {}): Promise<AiResult> {
-  // 根据角色选择provider（干预 vs 故事）
-  const role = req.role ?? 'story'; // 默认为story角色
-  const kind = role === 'story' || role === 'intervention' 
-    ? getProviderForRole(role)
-    : getActiveProvider();
+  // 根据角色选择provider（干预 vs 故事），但mock模式下直接使用mock
+  const activeProvider = getActiveProvider();
+  const kind = activeProvider === 'mock' 
+    ? 'mock'
+    : (req.role === 'story' || req.role === 'intervention')
+      ? getProviderForRole(req.role)
+      : activeProvider;
   const p = kind ? providers.get(kind) : undefined;
   const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0;

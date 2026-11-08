@@ -396,7 +396,8 @@ export async function sendAsk(ctx: AskContext, text: string): Promise<number> {
         return named;
       }
     : undefined;
-  const actx: AssistantContext = { world: ctx.world, civ: ctx.civ, year, edits: basis, lock: ctx.lock, selection: getSelection().sel, simulate };
+  const selection = getSelection();
+  const actx: AssistantContext = { world: ctx.world, civ: ctx.civ, year, edits: basis, lock: ctx.lock, selection: selection?.sel ?? null, simulate };
   const ui = { book: null as AsStep['book'] | null };
   const extraTools = ctx.lock === 'history' ? [] : uiTools(ctx, id, ui);
   const mock = getActiveProvider() === 'mock';
