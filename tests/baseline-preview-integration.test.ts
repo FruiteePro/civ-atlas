@@ -107,11 +107,19 @@ test('validateCurrentPreview: 检测seed变化', async () => {
   expect(result.success).toBe(true);
   
   // seed不变，valid
-  let validation = validateCurrentPreview(context);
+  let validation = validateCurrentPreview({
+    seed: context.seed,
+    year: context.year,
+    edits: context.currentEdits,
+  });
   expect(validation.valid).toBe(true);
   
   // seed改变，invalid
-  validation = validateCurrentPreview({ ...context, seed: 9999 });
+  validation = validateCurrentPreview({
+    seed: 9999,
+    year: context.year,
+    edits: context.currentEdits,
+  });
   expect(validation.valid).toBe(false);
   expect(validation.reason).toContain('过期');
   
