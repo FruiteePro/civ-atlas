@@ -15,16 +15,34 @@ import type { AiProviderKind } from './types';
 
 export type BailianRegion = 'cn' | 'intl';
 
+/** AI角色类型：故事生成 vs 干预建议 */
+export type AiRole = 'story' | 'intervention';
+
+/** 单个AI角色的配置 */
+export interface AiRoleConfig {
+  /** 用哪家provider;null = 继承默认配置 */
+  provider: AiProviderKind | null | 'inherit';
+  deepseek: { model: string; thinking: boolean };
+  bailian: { model: string; region: BailianRegion; thinking: boolean };
+  openai: { baseUrl: string; model: string };
+}
+
 export interface AiSettings {
   /** 「使用 AI 功能」:关掉 = 界面上所有 AI 入口都不显示(只管这个浏览器;写过的史书、名字由来不删) */
   enabled: boolean;
-  /** 用哪家;null = 还没选 */
+  /** 默认provider（legacy兼容+新建时的默认值） */
   provider: AiProviderKind | null;
   /** 在这个浏览器里记住密钥和登录 */
   remember: boolean;
+  
+  /** 故事AI配置（只读历史，生成叙述） */
+  story: AiRoleConfig;
+  /** 干预AI配置（提议验证过的编辑，需用户确认） */
+  intervention: AiRoleConfig;
+  
+  // Legacy fields for migration
   deepseek: { model: string; thinking: boolean };
   bailian: { model: string; region: BailianRegion; thinking: boolean };
-  /** OpenAI 兼容接口:地址、模型名都自己填(OpenAI 官方、中转站、本地模型都走这一个协议) */
   openai: { baseUrl: string; model: string };
 }
 
@@ -38,13 +56,30 @@ export interface AiSecrets {
 /** OpenAI 兼容接口的默认地址(OpenAI 官方;可以改成中转站、本地模型,归一化见 providers/openai.ts) */
 export const DEFAULT_OPENAI_BASE = 'https://api.openai.com/v1';
 
+const DEFAULT_ROLE_CONFIG: AiRoleConfig = {
+  provider: 'inherit',
+  deepseek: { model: 'deepseek-flash', thinking: false },
+  bailian: { model: 'qwen-plus', region: 'cn', thinking: false },
+  openai: { baseUrl: DEFAULT_OPENAI_BASE, model: '' },
+};
+
 export const DEFAULT_AI_SETTINGS: AiSettings = {
   enabled: true,
   provider: null,
   remember: true,
+  
+  // 新增：角色配置
+  story: { ...DEFAULT_ROLE_CONFIG },
+  intervention: { 
+    ...DEFAULT_ROLE_CONFIG,
+    // 干预AI默认使用更强大的模型
+    deepseek: { model: 'deepseek-chat', thinking: true },
+    bailian: { model: 'qwen-max', region: 'cn', thinking: true },
+  },
+  
+  // Legacy fields (兼容旧配置)
   deepseek: { model: 'deepseek-flash', thinking: false },
   bailian: { model: 'qwen-plus', region: 'cn', thinking: false },
-  // 模型名空着:各家模型名都不一样(OpenAI、中转站、本地模型),猜不出来,让用户自己填
   openai: { baseUrl: DEFAULT_OPENAI_BASE, model: '' },
 };
 
@@ -86,17 +121,14 @@ const bool = (v: unknown, d: boolean) => (typeof v === 'boolean' ? v : d);
 /** 接口地址:比别的字段长,放宽到 300 字(中转站、网关的地址可能很长) */
 const url = (v: unknown, d: string) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 300) : d);
 
-/** 读存档里的设置,坏的字段用默认值 */
-export function sanitizeSettings(v: unknown): AiSettings {
-  const d = DEFAULT_AI_SETTINGS;
+function sanitizeRoleConfig(v: unknown, d: AiRoleConfig): AiRoleConfig {
   const o = (v && typeof v === 'object' ? v : {}) as Record<string, any>;
   const ds = (o.deepseek && typeof o.deepseek === 'object' ? o.deepseek : {}) as Record<string, unknown>;
   const bl = (o.bailian && typeof o.bailian === 'object' ? o.bailian : {}) as Record<string, unknown>;
   const oa = (o.openai && typeof o.openai === 'object' ? o.openai : {}) as Record<string, unknown>;
+  
   return {
-    enabled: bool(o.enabled, d.enabled),
-    provider: KINDS.includes(o.provider) ? o.provider : null,
-    remember: bool(o.remember, d.remember),
+    provider: o.provider === 'inherit' || KINDS.includes(o.provider) ? o.provider : 'inherit',
     deepseek: { model: str(ds.model, d.deepseek.model), thinking: bool(ds.thinking, d.deepseek.thinking) },
     bailian: {
       model: str(bl.model, d.bailian.model),
@@ -104,6 +136,58 @@ export function sanitizeSettings(v: unknown): AiSettings {
       thinking: bool(bl.thinking, d.bailian.thinking),
     },
     openai: { baseUrl: url(oa.baseUrl, d.openai.baseUrl), model: str(oa.model, d.openai.model) },
+  };
+}
+
+/** 读存档里的设置,坏的字段用默认值，自动迁移旧格式 */
+export function sanitizeSettings(v: unknown): AiSettings {
+  const d = DEFAULT_AI_SETTINGS;
+  const o = (v && typeof v === 'object' ? v : {}) as Record<string, any>;
+  const ds = (o.deepseek && typeof o.deepseek === 'object' ? o.deepseek : {}) as Record<string, unknown>;
+  const bl = (o.bailian && typeof o.bailian === 'object' ? o.bailian : {}) as Record<string, unknown>;
+  const oa = (o.openai && typeof o.openai === 'object' ? o.openai : {}) as Record<string, unknown>;
+  
+  // Legacy fields
+  const legacyDeepseek = { model: str(ds.model, d.deepseek.model), thinking: bool(ds.thinking, d.deepseek.thinking) };
+  const legacyBailian = {
+    model: str(bl.model, d.bailian.model),
+    region: bl.region === 'intl' ? 'intl' : 'cn' as BailianRegion,
+    thinking: bool(bl.thinking, d.bailian.thinking),
+  };
+  const legacyOpenai = { baseUrl: url(oa.baseUrl, d.openai.baseUrl), model: str(oa.model, d.openai.model) };
+  
+  // Migrate legacy config to role configs if story/intervention not present
+  const hasRoleConfig = o.story || o.intervention;
+  const storyConfig = hasRoleConfig 
+    ? sanitizeRoleConfig(o.story, d.story)
+    : {
+        provider: 'inherit' as const,
+        deepseek: legacyDeepseek,
+        bailian: legacyBailian,
+        openai: legacyOpenai,
+      };
+  
+  const interventionConfig = hasRoleConfig
+    ? sanitizeRoleConfig(o.intervention, d.intervention)
+    : {
+        provider: 'inherit' as const,
+        deepseek: { ...legacyDeepseek, thinking: true }, // 干预默认开思考
+        bailian: { ...legacyBailian, model: legacyBailian.model === 'qwen-plus' ? 'qwen-max' : legacyBailian.model, thinking: true },
+        openai: legacyOpenai,
+      };
+  
+  return {
+    enabled: bool(o.enabled, d.enabled),
+    provider: KINDS.includes(o.provider) ? o.provider : null,
+    remember: bool(o.remember, d.remember),
+    
+    story: storyConfig,
+    intervention: interventionConfig,
+    
+    // Keep legacy fields for compatibility
+    deepseek: legacyDeepseek,
+    bailian: legacyBailian,
+    openai: legacyOpenai,
   };
 }
 
@@ -137,10 +221,12 @@ export function getAiSettings(): AiSettings {
   return settings!;
 }
 
-export function updateAiSettings(patch: Partial<Omit<AiSettings, 'deepseek' | 'bailian' | 'openai'>> & {
+export function updateAiSettings(patch: Partial<Omit<AiSettings, 'deepseek' | 'bailian' | 'openai' | 'story' | 'intervention'>> & {
   deepseek?: Partial<AiSettings['deepseek']>;
   bailian?: Partial<AiSettings['bailian']>;
   openai?: Partial<AiSettings['openai']>;
+  story?: Partial<AiRoleConfig>;
+  intervention?: Partial<AiRoleConfig>;
 }): void {
   const cur = getAiSettings();
   settings = sanitizeSettings({
@@ -149,6 +235,20 @@ export function updateAiSettings(patch: Partial<Omit<AiSettings, 'deepseek' | 'b
     deepseek: { ...cur.deepseek, ...patch.deepseek },
     bailian: { ...cur.bailian, ...patch.bailian },
     openai: { ...cur.openai, ...patch.openai },
+    story: patch.story ? {
+      ...cur.story,
+      ...patch.story,
+      deepseek: { ...cur.story.deepseek, ...patch.story.deepseek },
+      bailian: { ...cur.story.bailian, ...patch.story.bailian },
+      openai: { ...cur.story.openai, ...patch.story.openai },
+    } : cur.story,
+    intervention: patch.intervention ? {
+      ...cur.intervention,
+      ...patch.intervention,
+      deepseek: { ...cur.intervention.deepseek, ...patch.intervention.deepseek },
+      bailian: { ...cur.intervention.bailian, ...patch.intervention.bailian },
+      openai: { ...cur.intervention.openai, ...patch.intervention.openai },
+    } : cur.intervention,
   });
   writeJson(SETTINGS_KEY, settings);
   setAiOn(settings.enabled);
@@ -215,4 +315,42 @@ export function scrubSecrets(text: string): string {
     if (k && k.length >= 6) out = out.split(k).join('***');
   }
   return out.replace(/\bsk-[A-Za-z0-9_-]{6,}/g, 'sk-***');
+}
+
+/** 解析角色配置：如果是'inherit'则返回默认配置 */
+export function resolveRoleConfig(role: AiRole): { 
+  provider: AiProviderKind | null; 
+  deepseek: { model: string; thinking: boolean };
+  bailian: { model: string; region: BailianRegion; thinking: boolean };
+  openai: { baseUrl: string; model: string };
+} {
+  const settings = getAiSettings();
+  const roleConfig = settings[role];
+  
+  // 如果角色配置指定了 'inherit'，使用默认provider配置
+  const effectiveProvider = roleConfig.provider === 'inherit' ? settings.provider : roleConfig.provider;
+  
+  return {
+    provider: effectiveProvider,
+    deepseek: roleConfig.deepseek,
+    bailian: roleConfig.bailian,
+    openai: roleConfig.openai,
+  };
+}
+
+/** 获取特定角色的有效provider */
+export function getProviderForRole(role: AiRole): AiProviderKind | null {
+  return resolveRoleConfig(role).provider;
+}
+
+/** 检查角色是否配置完整 */
+export function isRoleConfigured(role: AiRole): boolean {
+  const resolved = resolveRoleConfig(role);
+  if (!resolved.provider || resolved.provider === 'mock') return resolved.provider === 'mock';
+  
+  // 检查该provider的配置是否完整
+  if (resolved.provider === 'openai' && !resolved.openai.model) return false;
+  
+  const secrets = getSecrets();
+  return !!(secrets as any)[resolved.provider];
 }
