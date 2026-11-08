@@ -27,6 +27,7 @@ import { recordBook } from '../gen/civ/story/records';
 import { MarksPage } from './WorldOverviewMarks';
 import { CountriesPage } from './WorldOverviewCountries';
 import { CulturesPage } from './WorldOverviewCultures';
+import { DiplomacyPage } from './WorldOverviewDiplomacy';
 import { InterventionsPage } from './WorldOverviewInterventions';
 import { OutlinePage, OutlinePhone, useOutlinePickReturn } from './OutlinePage';
 import { closeEdit, getOutlineUi } from './outlineStore';
@@ -67,6 +68,7 @@ export interface WorldOverviewProps {
 const TABS: { id: OverviewTab; name: string }[] = [
   { id: 'countries', name: '国家' },
   { id: 'cultures', name: '民族' },
+  { id: 'diplomacy', name: '外交' },
   { id: 'chronicle', name: '编年史' },
   { id: 'people', name: '人物' },
   { id: 'records', name: '之最' },
@@ -198,12 +200,20 @@ function Cultures({ civ }: { civ: Civ | null }) {
   return <CulturesPage civ={civ} year={year} />;
 }
 
+function Diplomacy({ civ }: { civ: Civ | null }) {
+  const year = useYear(civ);
+  if (!civ) return null;
+  return <DiplomacyPage civ={civ} year={year} />;
+}
+
 function OverviewPage(p: WorldOverviewProps & { tab: OverviewTab }) {
   switch (p.tab) {
     case 'countries':
       return <Countries civ={p.civ} />;
     case 'cultures':
       return <Cultures civ={p.civ} />;
+    case 'diplomacy':
+      return <Diplomacy civ={p.civ} />;
     case 'chronicle':
       return <Chronicle civ={p.civ} />;
     case 'people':

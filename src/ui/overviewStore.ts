@@ -24,9 +24,9 @@
 import { getChronicle, getCivTime, pausePlayback, setChronicle, setCivTime, subscribeChronicle, subscribeCivTime, type ChronicleView, type CivTime } from './civView';
 import { createListeners, createStore } from './createStore';
 
-export type OverviewTab = 'countries' | 'cultures' | 'chronicle' | 'people' | 'records' | 'marks' | 'outline' | 'interventions' | 'genesis';
+export type OverviewTab = 'countries' | 'cultures' | 'diplomacy' | 'chronicle' | 'people' | 'records' | 'marks' | 'outline' | 'interventions' | 'genesis';
 
-export const OVERVIEW_TABS: readonly OverviewTab[] = ['countries', 'cultures', 'chronicle', 'people', 'records', 'marks', 'outline', 'interventions', 'genesis'];
+export const OVERVIEW_TABS: readonly OverviewTab[] = ['countries', 'cultures', 'diplomacy', 'chronicle', 'people', 'records', 'marks', 'outline', 'interventions', 'genesis'];
 
 export interface OverviewState {
   open: boolean;

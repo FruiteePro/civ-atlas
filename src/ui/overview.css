@@ -2228,3 +2228,137 @@ button.ov-kv-row:hover {
   flex: none;
   color: var(--ink-3);
 }
+
+/* ==== 外交页 (WorldOverviewDiplomacy.tsx) ==== */
+.ov-diplomacy {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px;
+}
+
+.ov-empty {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--ink-2);
+}
+
+.ov-empty p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.ov-empty .ov-hint {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+.ov-diplo-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ov-diplo-title {
+  margin: 0;
+  font: 600 16px/1.4 var(--font-sans);
+  color: var(--ink);
+}
+
+.ov-diplo-count {
+  font-weight: 400;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.ov-diplo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ov-diplo-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-small);
+}
+
+.ov-diplo-row[data-kind="war"] {
+  border-left: 3px solid var(--ev-war);
+}
+
+.ov-diplo-row[data-kind="alliance"] {
+  border-left: 3px solid var(--accent);
+}
+
+.ov-diplo-row[data-kind="vassalage"] {
+  border-left: 3px solid var(--ink-3);
+}
+
+.ov-diplo-parties {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.ov-diplo-sep {
+  font-size: 14px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.ov-diplo-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.ov-diplo-foe {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ov-diplo-since {
+  font-variant-numeric: tabular-nums;
+}
+
+.ov-pol {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: none;
+  border: none;
+  border-radius: var(--r-tag);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+  min-width: 0;
+}
+
+.ov-pol:hover {
+  background: var(--hover);
+}
+
+.ov-pol.dead {
+  opacity: 0.6;
+}
+
+.ov-pol-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
