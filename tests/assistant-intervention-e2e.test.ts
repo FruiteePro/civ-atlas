@@ -432,7 +432,7 @@ test('提议确认门：confirm提交修改', () => {
         text: '保护大澜王朝(从第300年起)',
         change: { 
           kind: 'intervention', 
-          v: { op: 'protect', polity: 'polity:c0#0', from: 300 } as any 
+          v: { kind: 'protect', a: 'polity:c0#0', from: 300 } as any 
         },
         year: 300,
       },
