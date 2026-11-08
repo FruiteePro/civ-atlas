@@ -175,10 +175,10 @@ export const UNREST_KNOBS = defineKnobs('unrest', {
   KEEP: [0.25, 0.4] as readonly [number, number],
   PIECE_SIZE: 12,
   PIECE_MIN: 3,
-  /** 分裂改进:每个继承国至少几州;中心城市最小人口(千人);相邻中心距离阈值(州数) */
+  /** 分裂改进:每个继承国至少几州;中心城市最小人口(千人);相邻中心距离阈值(标准路程) */
   FRAGMENT_MIN_SIZE: 3,
-  FRAGMENT_MIN_POP: 15,
-  FRAGMENT_MERGE_DIST: 2,
+  FRAGMENT_MIN_POP: 5,
+  FRAGMENT_MERGE_DIST: 3,
 });
 
 
@@ -613,7 +613,7 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
   ): number[][] => {
     if (centers.length === 0) return [];
     
-    const { FRAGMENT_MIN_SIZE, FRAGMENT_MERGE_DIST } = um.pm.knobs.get(UNREST_KNOBS);
+    const { FRAGMENT_MIN_SIZE, FRAGMENT_MERGE_DIST, SPLIT_REACH } = um.pm.knobs.get(UNREST_KNOBS);
     const inRegions = new Set(regions);
     
     // 按人口和距离首都排序选择中心(人口大、离首都远的优先)
@@ -629,7 +629,7 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
       let tooClose = false;
       for (const fc of finalCenters) {
         const d = Math.abs(c.distance - fc.distance);
-        if (d < FRAGMENT_MERGE_DIST * REACH) {
+        if (d < FRAGMENT_MERGE_DIST * SPLIT_REACH) {
           tooClose = true;
           break;
         }
@@ -760,75 +760,15 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
     const capSid = capitalAt(P, t);
     const capR = pm.settlements[capSid].region;
     const dist = pm.capDist[pid];
+    
     // 留给原来的国家的:离国都最近的几成
     const keepFrac = KEEP[0] + (KEEP[1] - KEEP[0]) * keyed(um.base, tag, k, U_KEEP);
     const byDist = mine.slice().sort((a, b) => dist[a] - dist[b] || reg.seat[a] - reg.seat[b]);
     const keep = new Set<number>(byDist.slice(0, Math.max(1, Math.ceil(N * keepFrac))));
     keep.add(capR);
+    
     // 永久划给它的州(阶段 4 干预)不散出去
     const rest = mine.filter((r) => !keep.has(r) && !wm.iv?.locked(r, t));
-    // 散成几块
-    const m = Math.max(2, Math.min(4, Math.floor(rest.length / PIECE_SIZE + keyed(um.base, tag, k, U_PIECES))));
-    if (rest.length < m * PIECE_MIN) return false;
-    const inRest = new Set(rest);
-    // 不满(离国都远、异族;加一点随机)
-    const grudge = (r: number) =>
-      (dist[r] < Infinity ? Math.min(4, dist[r] / REACH) : 4) + (culture[r] !== P.culture ? 0.7 : 0) + 0.5 * keyed4(um.base, tag, reg.seat[r], k, U_SEED);
-    // 起事的州:第一块挑最不满的,往后挑离已有各块最远(隔的州数;平手看不满)的
-    const seeds: number[] = [];
-    const away = new Float64Array(R).fill(Infinity);
-    const bfs = (src: number) => {
-      const st = ++stamp;
-      let qt = 0;
-      queue[qt++] = src;
-      mark[src] = st;
-      hop[src] = 0;
-      for (let h = 0; h < qt; h++) {
-        const r = queue[h];
-        if (hop[r] < away[r]) away[r] = hop[r];
-        for (let e = reg.adjStart[r]; e < reg.adjStart[r + 1]; e++) {
-          const j = reg.adj[e];
-          if (mark[j] === st || !inRest.has(j) || reg.adjKind[e] === AdjKind.SeaRoute || reg.adjKind[e] === AdjKind.Strait) continue;
-          mark[j] = st;
-          hop[j] = hop[r] + 1;
-          queue[qt++] = j;
-        }
-      }
-    };
-    for (let i = 0; i < m; i++) {
-      let best = -1;
-      let bs = -Infinity;
-      for (const r of rest) {
-        if (seeds.includes(r)) continue;
-        const a = away[r];
-        const s = (i === 0 ? 0 : (a < Infinity ? a : 1000) * 10) + grudge(r);
-        if (s > bs) {
-          bs = s;
-          best = r;
-        }
-      }
-      if (best < 0) break;
-      seeds.push(best);
-      bfs(best);
-    }
-    // 各州归最近的那块(同时从各块往外长,只走陆路;海峡、航线隔着的留给原来的国家)
-    const piece = new Int32Array(R).fill(-1);
-    let qt = 0;
-    for (let i = 0; i < seeds.length; i++) {
-      piece[seeds[i]] = i;
-      queue[qt++] = seeds[i];
-    }
-    for (let h = 0; h < qt; h++) {
-      const r = queue[h];
-      for (let e = reg.adjStart[r]; e < reg.adjStart[r + 1]; e++) {
-        const j = reg.adj[e];
-        if (piece[j] >= 0 || !inRest.has(j) || reg.adjKind[e] === AdjKind.SeaRoute || reg.adjKind[e] === AdjKind.Strait) continue;
-        piece[j] = piece[r];
-        queue[qt++] = j;
-      }
-    }
-    const groups: number[][] = seeds.map(() => []);
-    for (const r of rest) if (piece[r] >= 0) groups[piece[r]].push(r);
     // 怎么崩:决定继承国的发展度损失程度
     const era = devModelOf(sim)?.era[capR] ?? 0;
     const fl = um.famines.get(pid);
@@ -841,11 +781,12 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
     const kind = x < wC ? 0 : x < wC + wL ? 1 : 2;
     
     // 分裂改进:基于可行中心分配领土(所有 kind 统一处理)
+    // 如果散出去的领土太少,无法合理分裂
+    if (rest.length < PIECE_MIN) return false;
+    
     // 识别散出去的州里的可行中心
-    const allRest: number[] = [];
-    for (const g of groups) allRest.push(...g);
-    const centers = identifyFragmentationCenters(pid, allRest, t);
-    const viable = fragmentByConnectivity(pid, allRest, centers, t, tag, k);
+    const centers = identifyFragmentationCenters(pid, rest, t);
+    const viable = fragmentByConnectivity(pid, rest, centers, t, tag, k);
     
     // 准备继承国:每块挑人口最多的城为都
     const ready: [number[], number, number][] = [];
@@ -854,21 +795,22 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
       if (sid < 0) continue; // 没有城的块(极少见)跳过
       // 找块里离首都最远的州作为起事州(r0)
       let r0 = g[0];
-      let maxDist = dist[r0];
+      let maxDist = dist[r0] ?? 0;
       for (const r of g) {
-        if (dist[r] > maxDist) {
-          maxDist = dist[r];
+        const d = dist[r] ?? 0;
+        if (d > maxDist) {
+          maxDist = d;
           r0 = r;
         }
       }
       ready.push([g.sort((a, b) => a - b), sid, r0]);
     }
     
-    // 如果没有可行继承国,尝试至少保留核心区域
+    // 如果没有可行继承国
     if (ready.length === 0) {
       // 极端情况:无可行继承国(游牧、人口稀疏、无城)
       // 散回部落地带,记录 kind=2 供 development.ts 识别
-      const out = allRest.slice().sort((a, b) => a - b);
+      const out = rest.slice().sort((a, b) => a - b);
       if (out.length > 0) {
         sim.record('collapse', { a: pid, b: 2, region: capR, settlement: capSid, war: out.length });
         for (const r of out) {
