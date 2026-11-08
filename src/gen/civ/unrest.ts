@@ -825,7 +825,10 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
     }
     
     // 记录崩溃和创建继承国（母国保留keep区域）
-    sim.record('collapse', { a: pid, b: kind, region: capR, settlement: capSid, war: ready.length });
+    // kind字段: 0=中央崩解无损, 1=省级崩解有损, 2=全部散回部落
+    // 有继承国时不能是kind=2（kind=2专门表示全部散回部落）
+    const actualKind = kind < 2 ? kind : 1; // 强制kind<2当有继承国时
+    sim.record('collapse', { a: pid, b: actualKind, region: capR, settlement: capSid, war: ready.length });
     for (const [g, sid, r0] of ready) {
       api.politics.secede!(pid, g, sid, r0, t, 'split', 'collapse');
     }
