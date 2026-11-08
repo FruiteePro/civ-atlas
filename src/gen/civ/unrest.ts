@@ -613,7 +613,7 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
   ): number[][] => {
     if (centers.length === 0) return [];
     
-    const { FRAGMENT_MIN_SIZE, FRAGMENT_MERGE_DIST, SPLIT_REACH } = um.pm.knobs.get(UNREST_KNOBS);
+    const { FRAGMENT_MIN_SIZE, FRAGMENT_MERGE_DIST, REACH } = um.pm.knobs.get(UNREST_KNOBS);
     const inRegions = new Set(regions);
     
     // 按人口和距离首都排序选择中心(人口大、离首都远的优先)
@@ -629,7 +629,7 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
       let tooClose = false;
       for (const fc of finalCenters) {
         const d = Math.abs(c.distance - fc.distance);
-        if (d < FRAGMENT_MERGE_DIST * SPLIT_REACH) {
+        if (d < FRAGMENT_MERGE_DIST * REACH) {
           tooClose = true;
           break;
         }
