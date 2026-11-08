@@ -39,11 +39,9 @@ let state: PreviewState = {
   status: 'idle',
 };
 
-const listeners: Set<() => void> = new Set();
+const { subscribe, emit, use } = createListeners();
 
-const { subscribe, emit } = createListeners();
-
-export const usePreviewState = subscribe;
+export const usePreviewState = () => use(get);
 
 function get(): PreviewState {
   return state;

@@ -30,6 +30,14 @@ import { yearsSpan } from './WorldOverviewGenesis';
 import { requestFly } from './panelStore';
 import { useSavesVersion } from './saveStore';
 import { closeAssistant } from './astPanel';
+import { 
+  usePreviewState, 
+  generateBaselinePreview, 
+  cancelPreview, 
+  validateCurrentPreview,
+  getPreviewState
+} from './baselinePreviewStore';
+import { safeUndoInterventions, type ComparisonMetrics } from './baselinePreview';
 import {
   applyBlock,
   applyProposal,
@@ -47,6 +55,7 @@ import {
   toggleItem,
   undoProposal,
   useAssistant,
+  getRunner,
   type AsStep,
   type AsTurn,
 } from './assistantStore';
@@ -291,7 +300,7 @@ function Turn({ t, latest, phone, busy, civ, links, previewing }: TurnProps) {
         </div>
       ))}
       {t.names && <Names t={t} />}
-      {done && t.proposal && <Proposal t={t} latest={latest} phone={phone} busy={busy} previewing={previewing} />}
+      {done && t.proposal && <Proposal t={t} latest={latest} phone={phone} busy={busy} previewing={previewing} civ={civ} />}
       {done && !t.proposal && !t.names && <Events text={t.text} civ={civ} links={links} />}
     </div>
   );
@@ -481,9 +490,10 @@ function itemYear(x: { year?: number; op: string }, era: Era | undefined): strin
   return TERRAIN_OPS.includes(x.op) ? '地形' : x.op === 'rename' ? '改名' : '—';
 }
 
-function Proposal({ t, latest, phone, busy, previewing }: { t: AsTurn; latest: boolean; phone: boolean; busy: boolean; previewing: boolean }) {
+function Proposal({ t, latest, phone, busy, previewing, civ }: { t: AsTurn; latest: boolean; phone: boolean; busy: boolean; previewing: boolean; civ: Civ }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [more, setMore] = useState(false);
+  const [showComparison, setShowComparison] = useState(false);
   const st = useAssistant();
   const edits = useEdits();
   const p = t.proposal!;
@@ -498,15 +508,82 @@ function Proposal({ t, latest, phone, busy, previewing }: { t: AsTurn; latest: b
   const loading = previewing && !st.preview?.raw;
   /** 新建世界时:编号对上星球上的圈;执行后是一行"已执行 N 条",手机上也有"不要" */
   const numbered = t.lock === 'history';
+  
+  // Baseline preview state
+  const baselineState = usePreviewState();
+  const runner = getRunner();
+  
   const apply = () => {
     const why = applyProposal(t.id, { busy });
     setMsg(why);
   };
+  
   const preview = () => {
     const why = previewProposal(t.id, { busy });
     setMsg(why);
     // 手机:先收起面板看地图(对话留着,地图上方的提示能执行或回到现在)
     if (!why && phone && !previewing) closeAssistant();
+  };
+  
+  const startBaselinePreview = async () => {
+    if (!runner) {
+      setMsg('试推演 runner 未初始化');
+      return;
+    }
+    
+    setShowComparison(true);
+    
+    const pickedItems = p.items.filter((_, i) => !off.has(i) && p.items[i].change);
+    const proposedInterventions = pickedItems
+      .map(item => item.change)
+      .filter((c): c is Extract<NonNullable<typeof c>, { kind: 'intervention' }> => c?.kind === 'intervention')
+      .map(c => c.v);
+    
+    const context = {
+      seed: civ.seed,
+      year: civ.endYear,
+      horizonYear: civ.endYear + 1000,
+      currentEdits: edits,
+    };
+    
+    const result = await generateBaselinePreview(runner, context, proposedInterventions);
+    if (!result.success) {
+      setMsg(result.error ?? '预览失败');
+    }
+  };
+  
+  const confirmBaselinePreview = () => {
+    // Validate before apply
+    const previewState = getPreviewState();
+    if (!previewState.preview) {
+      setMsg('无预览可确认');
+      return;
+    }
+    
+    const isStale = !validateCurrentPreview({
+      seed: civ.seed,
+      year: civ.endYear,
+      edits: edits,
+    });
+    
+    if (isStale) {
+      setMsg('预览已过期，不能确认');
+      return;
+    }
+    
+    // Apply the proposal
+    const why = applyProposal(t.id, { busy });
+    if (!why) {
+      setShowComparison(false);
+      cancelPreview();
+    }
+    setMsg(why);
+  };
+  
+  const cancelBaselinePreview = () => {
+    setShowComparison(false);
+    cancelPreview();
+    setMsg(null);
   };
   return (
     <>
@@ -554,6 +631,16 @@ function Proposal({ t, latest, phone, busy, previewing }: { t: AsTurn; latest: b
         </div>
       )}
       {p.trial && <TrialResult v={p.trial} phone={phone} partial={off.size > 0 ? [n, okCount] : null} more={more} onMore={() => setMore((m) => !m)} />}
+      {showComparison && (
+        <ComparisonResult
+          metrics={baselineState.comparison}
+          onConfirm={confirmBaselinePreview}
+          onCancel={cancelBaselinePreview}
+          loading={baselineState.status === 'generating-baseline' || baselineState.status === 'generating-intervention'}
+          error={baselineState.error}
+          stale={!validateCurrentPreview({ seed: civ.seed, year: civ.endYear, edits })}
+        />
+      )}
       {t.applied && numbered ? (
         <div className="ast-grp">
           <div className="ast-row ast-applied">
@@ -581,11 +668,20 @@ function Proposal({ t, latest, phone, busy, previewing }: { t: AsTurn; latest: b
       ) : t.dismissed ? (
         <div className="ast-under">没有执行</div>
       ) : (
-        okCount > 0 && (
+        okCount > 0 && !showComparison && (
           <>
             <div className="ast-acts">
               <button className="ast-btn primary" data-act="ast-apply" disabled={block !== null} onClick={apply}>
                 执行{n ? ` ${n} 条` : ''}
+              </button>
+              <button 
+                className="ast-btn" 
+                data-act="ast-baseline-preview" 
+                disabled={pblock !== null || !runner}
+                onClick={startBaselinePreview}
+              >
+                {!phone && <Icon name="search" size={15} />}
+                对比预览
               </button>
               {previewable(t) && (
                 <button className={`ast-btn${previewing ? ' on' : ''}`} data-act="ast-preview" disabled={!previewing && pblock !== null} onClick={preview}>
@@ -604,6 +700,128 @@ function Proposal({ t, latest, phone, busy, previewing }: { t: AsTurn; latest: b
         )
       )}
     </>
+  );
+}
+
+/** Baseline vs Intervention 对比结果 */
+function ComparisonResult({ metrics, onConfirm, onCancel, loading, error, stale }: { 
+  metrics: ComparisonMetrics | null;
+  onConfirm: () => void;
+  onCancel: () => void;
+  loading: boolean;
+  error?: string;
+  stale: boolean;
+}) {
+  const era = useEra();
+  
+  if (loading) {
+    return (
+      <div className="ast-grp">
+        <div className="ast-row">
+          <span className="tx">
+            <b>正在对比 baseline 和 intervention...</b>
+          </span>
+        </div>
+      </div>
+    );
+  }
+  
+  if (error) {
+    return (
+      <div className="ast-grp">
+        <div className="ast-row">
+          <span className="tx" style={{ color: 'var(--red)' }}>
+            <b>预览失败：{error}</b>
+          </span>
+        </div>
+      </div>
+    );
+  }
+  
+  if (!metrics) return null;
+  
+  const { affectedPolities, newPolities, lostPolities } = metrics;
+  const totalChanges = affectedPolities.length + newPolities.length + lostPolities.length;
+  
+  if (totalChanges === 0) {
+    return (
+      <div className="ast-grp">
+        <div className="ast-row">
+          <span className="tx">
+            <b>预览结果：没有变化</b>
+          </span>
+        </div>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="ast-grp">
+      {stale && (
+        <div className="ast-note" style={{ color: 'var(--yellow)' }}>
+          ⚠️ 预览已过期（世界配置已改变），请重新预览
+        </div>
+      )}
+      <div className="ast-sec">
+        <span>预览对比（baseline → intervention）</span>
+      </div>
+      {affectedPolities.length > 0 && (
+        <div className="ast-row">
+          <span className="tx">
+            <b>受影响国家 ({affectedPolities.length})</b>
+            <small>
+              {affectedPolities.map(p => {
+                const parts = [];
+                if (p.change === 'survived') parts.push('存活');
+                else if (p.change === 'fell_later') {
+                  const delay = (p.intervention.ended ?? 0) - (p.baseline.ended ?? 0);
+                  parts.push(`延迟 ${delay} 年灭亡`);
+                } else if (p.change === 'fell_earlier') {
+                  const earlier = (p.baseline.ended ?? 0) - (p.intervention.ended ?? 0);
+                  parts.push(`提前 ${earlier} 年灭亡`);
+                } else if (p.change === 'grew') {
+                  const gained = (p.intervention.size ?? 0) - (p.baseline.size ?? 0);
+                  parts.push(`+${gained} 领土`);
+                } else if (p.change === 'shrank') {
+                  const lost = (p.baseline.size ?? 0) - (p.intervention.size ?? 0);
+                  parts.push(`-${lost} 领土`);
+                }
+                return `${p.name}: ${parts.join(', ')}`;
+              }).join('; ')}
+            </small>
+          </span>
+        </div>
+      )}
+      {newPolities.length > 0 && (
+        <div className="ast-row">
+          <span className="tx">
+            <b>新出现国家 ({newPolities.length})</b>
+            <small>{newPolities.map(p => p.name).join(', ')}</small>
+          </span>
+        </div>
+      )}
+      {lostPolities.length > 0 && (
+        <div className="ast-row">
+          <span className="tx">
+            <b>消失的国家 ({lostPolities.length})</b>
+            <small>{lostPolities.map(p => p.name).join(', ')}</small>
+          </span>
+        </div>
+      )}
+      <div className="ast-acts">
+        <button 
+          className="ast-btn primary" 
+          onClick={onConfirm}
+          disabled={stale}
+          title={stale ? '世界已改变，不能确认过期预览' : '确认并执行'}
+        >
+          确认执行
+        </button>
+        <button className="ast-btn text" onClick={onCancel}>
+          取消预览
+        </button>
+      </div>
+    </div>
   );
 }
 

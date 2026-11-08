@@ -320,6 +320,9 @@ let runner: TrialRunner | null = null;
 export function setTrialRunner(f: TrialRunner | null) {
   runner = f;
 }
+export function getRunner(): TrialRunner | null {
+  return runner;
+}
 
 /** 试推演出来的历史(套了改名的 → 没套的),确认单附带的那一次留下来给"先在地图上看看" */
 const rawOf = new WeakMap<Civ, Civ>();
