@@ -103,6 +103,57 @@ export interface AssistantContext {
   simulate?: (edits: WorldEdits, signal?: AbortSignal) => Promise<Civ>;
 }
 
+/** 验证选中对象的ID和年份是否有效 */
+export function validateSelection(ctx: AssistantContext): {
+  valid: boolean;
+  reason?: string;
+  object?: { id: number; name: string; kind: string };
+} {
+  if (!ctx.selection) {
+    return { valid: false, reason: '未选中任何对象' };
+  }
+  
+  const { kind, id } = ctx.selection;
+  const { civ, year } = ctx;
+  
+  if (kind === 'polity') {
+    const pol = civ.polities[id];
+    if (!pol) {
+      return { valid: false, reason: `国家 ID ${id} 不存在` };
+    }
+    if (pol.founded > year) {
+      return { valid: false, reason: `${pol.name}在${pol.founded}年才建立，当前年份${year}年该国尚未存在` };
+    }
+    if (pol.ended !== undefined && pol.ended <= year) {
+      return { valid: false, reason: `${pol.name}已于${pol.ended}年灭亡，当前年份${year}年该国已不存在` };
+    }
+    return { valid: true, object: { id, name: pol.name, kind: 'polity' } };
+  }
+  
+  if (kind === 'settlement') {
+    const settlement = civ.settlements[id];
+    if (!settlement) {
+      return { valid: false, reason: `城市 ID ${id} 不存在` };
+    }
+    if (settlement.founded > year) {
+      return { valid: false, reason: `${settlement.name}在${settlement.founded}年才建立` };
+    }
+    if (settlement.ended !== undefined && settlement.ended <= year) {
+      return { valid: false, reason: `${settlement.name}已于${settlement.ended}年废弃` };
+    }
+    return { valid: true, object: { id, name: settlement.name, kind: 'settlement' } };
+  }
+  
+  if (kind === 'region') {
+    if (id < 0 || id >= civ.world.mesh.n) {
+      return { valid: false, reason: `州 ID ${id} 超出范围` };
+    }
+    return { valid: true, object: { id, name: `州${id}`, kind: 'region' } };
+  }
+  
+  return { valid: false, reason: `不支持的对象类型: ${kind}` };
+}
+
 /** 一次试推演 */
 export interface AssistantTrial {
   /** 第几次(从 1 数;propose_edits 顺带的 = 0) */
