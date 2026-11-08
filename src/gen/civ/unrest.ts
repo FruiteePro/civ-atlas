@@ -64,7 +64,7 @@ import { AdjKind, Layer, type Civ, type Polity, type Year } from './types';
 import { biomeColumn } from '../biomes';
 import { fexp, keyed, keyed4, subSeed } from './engine/rand';
 import { BOOKED_AT_START, bookChain, quantize, type CivSim } from './engine/sim';
-import { polityModelOf, type PolityModel } from './polities';
+import { endPolity, polityModelOf, type PolityModel } from './polities';
 import { warModelOf, type War, type WarModel } from './wars';
 import { politicsModelOf, type PoliticsModel } from './politics';
 import { devModelOf } from './development';
@@ -572,7 +572,6 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
   }
   
   const identifyFragmentationCenters = (pid: number, regions: readonly number[], t: number): FragmentationCenter[] => {
-    const { FRAGMENT_MIN_POP } = um.pm.knobs.get(UNREST_KNOBS);
     const P = pm.polities[pid];
     const dist = pm.capDist[pid];
     const centers: FragmentationCenter[] = [];
@@ -584,8 +583,8 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
       if (s.ended !== undefined) continue; // 城已毁
       if (wm.iv?.locked(r, t)) continue; // 永久锁定的州
       
+      // 简化：只要有城即可，不限制人口（原始逻辑也不看人口）
       const pop = populationAt(s, t) / 1000; // 千人
-      if (pop < FRAGMENT_MIN_POP) continue; // 人口不足
       
       centers.push({
         region: r,
@@ -809,13 +808,14 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
     // 如果没有可行继承国
     if (ready.length === 0) {
       // 极端情况:无可行继承国(游牧、人口稀疏、无城)
-      // 散回部落地带,记录 kind=2 供 development.ts 识别
-      const out = rest.slice().sort((a, b) => a - b);
-      if (out.length > 0) {
-        sim.record('collapse', { a: pid, b: 2, region: capR, settlement: capSid, war: out.length });
-        for (const r of out) {
+      // 全部散回部落地带（包括keep区域），记录 kind=2 供 development.ts 识别
+      const allOut = mine.slice().sort((a, b) => a - b);
+      if (allOut.length > 0) {
+        sim.record('collapse', { a: pid, b: 2, region: capR, settlement: capSid, war: allOut.length });
+        for (const r of allOut) {
           sim.setOwner(Layer.Polity, r, -1, Ev.Collapse);
         }
+        endPolity(pm, pid, t);
         um.collapsed.set(pid, t);
         pol.lastSplit.set(pid, t);
         return true;
@@ -823,7 +823,7 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
       return false;
     }
     
-    // 记录崩溃和创建继承国
+    // 记录崩溃和创建继承国（母国保留keep区域）
     sim.record('collapse', { a: pid, b: kind, region: capR, settlement: capSid, war: ready.length });
     for (const [g, sid, r0] of ready) {
       api.politics.secede!(pid, g, sid, r0, t, 'split', 'collapse');
