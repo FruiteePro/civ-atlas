@@ -354,3 +354,10 @@ export function isRoleConfigured(role: AiRole): boolean {
   const secrets = getSecrets();
   return !!(secrets as any)[resolved.provider];
 }
+
+/** 更新特定角色的配置 */
+export function updateRoleConfig(role: AiRole, patch: Partial<AiRoleConfig>): void {
+  const update: any = {};
+  update[role] = patch;
+  updateAiSettings(update as any);
+}
