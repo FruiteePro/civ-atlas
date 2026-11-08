@@ -1084,8 +1084,10 @@ export async function runAssistant(ctx: AssistantContext, history: readonly Assi
   // 判断角色：尊重显式指定的role，不仅基于selection自动切换
   // selection存在不代表用户要编辑 - 可能只是选中国家写故事
   // 只有用户表达明确修改意图的关键词时才启用intervention
-  const hasEditIntent = /修改|改|保护|结盟|宣战|立国|迁都|禁止|划州|让.*存活|让.*灭亡|不许|阻止/.test(w);
-  const role = opts.role ?? (hasEditIntent ? 'intervention' : 'story');
+  // 匹配明确的编辑意图词汇，包括"让...撑"等改变历史的表达
+  // 特殊情况：lock==='history'时是地形编辑模式，始终用intervention角色
+  const hasEditIntent = /修改|改|保护|结盟|宣战|立国|迁都|禁止|划州|让.*存活|让.*灭亡|让.*撑|不许|阻止|能不能让|帮.*改|想让|放.*山|挖.*湖|造/.test(w);
+  const role = opts.role ?? (ctx.lock === 'history' || hasEditIntent ? 'intervention' : 'story');
   
   const tools = [...assistantTools(ctx, state, role), ...(opts.extraTools ?? [])];
   

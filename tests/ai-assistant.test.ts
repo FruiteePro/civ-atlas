@@ -217,10 +217,6 @@ describe('助手面板', () => {
   it('问一句:查资料、在地图上打开它,回话;每一步一行、下面一句结果', async () => {
     const id = await sendAsk(ctx(), `${pickName0}为什么会亡？`);
     const t = turn(id);
-    if (t.status === 'error') {
-      console.log('ERROR:', t.error);
-      console.log('TEXT:', t.text);
-    }
     expect(t).toMatchObject({ status: 'done', ask: `${pickName0}为什么会亡？`, year: Y, lock: 'terrain' });
     expect(t.text).toMatch(/^【测试用假 AI】/);
     expect(t.steps.map((s) => s.label)).toEqual([`查国家：${pickName0}`, `在地图上打开${pickName0}`]);
