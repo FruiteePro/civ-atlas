@@ -24,7 +24,6 @@ import { createPortal } from 'react-dom';
 import { Icon } from './icons';
 import { PRIVACY_URL, TERMS_URL } from './links';
 import { closeAiSettings } from './AiSettings';
-import { refreshOfficialAccount } from '../ai/providers/official';
 import { ServerError } from '../account/server';
 import { fetchAuthOptions, getSession, login, onAccountDisabled, pendingInvite, sendCode, useSession, type AuthOptions } from '../account/session';
 import { showToast } from './toastStore';
@@ -388,7 +387,6 @@ function LoginDialog({ phone, onClose }: { phone: boolean; onClose: () => void }
     setErr(null);
     try {
       await login(email, code, showInvite ? invite : undefined);
-      void refreshOfficialAccount();
       onClose();
     } catch (e) {
       const c = codeOf(e);

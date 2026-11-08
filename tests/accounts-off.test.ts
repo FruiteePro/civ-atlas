@@ -1,6 +1,5 @@
 /**
  * 只开作品墙(VITE_ACCOUNTS=off):配了服务器也不发账号那些请求、界面按没登录算;作品墙照服务器说的出。
- * 账号开着时,我们的 AI 照服务器登录窗选项里的 features.ai 出。
  * 服务器用开发假服务器(不开端口),顺带看它的作品墙接口和网页对得上。
  */
 import { createHash } from 'node:crypto';
@@ -10,7 +9,6 @@ import { accountServer, call, serverBase, setAccountsForTest, setServerForTest }
 import { _resetSessionForTest, currentAccount, fetchAuthOptions, getSession, logout, onAuthOptionsChange } from '../src/account/session';
 import { fetchFile, fetchWorkFile } from '../src/account/fullWorlds';
 import { coverUrl, fetchWork, getGallery, isWorkGone, loadGallery, reportWork, resetGalleryForTest } from '../src/account/gallery';
-import { checkOfficialAi, officialProvider, officialServer, refreshOfficialAccount } from '../src/ai/providers/official';
 import { decodePresetHash } from '../src/ui/presetLink';
 import { decodeRulesHash } from '../src/gen/civ/ruleShare';
 import { openWorldFile, readWorldContent } from '../src/gen/worldFile';
@@ -78,13 +76,11 @@ afterEach(() => {
 describe('账号关着', () => {
   beforeEach(() => setAccountsForTest(false));
 
-  it('账号那些和没配服务器一样:不算登录着、没有我们的 AI,一个账号请求都不发', async () => {
+  it('账号那些和没配服务器一样:不算登录着,一个账号请求都不发', async () => {
     expect(serverBase()).toBe(BASE);
     expect(accountServer()).toBeNull();
     expect(getSession()?.token).toBe('fake-old');
     expect(currentAccount()).toBeNull();
-    expect(officialServer()).toBeNull();
-    expect(officialProvider.offered?.()).toBe(false);
     expect((await fetchAuthOptions()).inviteOnly).toBe(false);
     await expect(call('/v1/me', { token: 'fake-old' })).rejects.toMatchObject({ code: 'not-configured' });
     await expect(fetchFile('/v1/s/Abcd1234/full')).rejects.toMatchObject({ code: 'not-configured' });
@@ -163,60 +159,25 @@ describe('账号关着', () => {
 });
 
 describe('账号开着(默认)', () => {
-  it('配了服务器:留着的登录照旧算数;服务器说开着我们的 AI 才有', async () => {
+  it('配了服务器:留着的登录照旧算数', async () => {
     expect(accountServer()).toBe(BASE);
     expect(currentAccount()?.token).toBe('fake-old');
-    expect(officialServer()).toBeNull();
     expect((await fetchAuthOptions()).features).toEqual({ ai: true, submit: true, submitWorld: true, submitPlugin: true, pluginTerms: 1, phoneRequired: false });
-    expect(officialServer()).toBe(BASE);
-    expect(officialProvider.offered?.()).toBe(true);
   });
 
-  it('服务器说我们的 AI 关着:不露,也不去查积分', async () => {
-    await fake.handle(new Request(`${BASE}/v1/dev/ai`, { method: 'POST', body: JSON.stringify({ off: true }) }));
-    expect((await fetchAuthOptions()).features).toMatchObject({ ai: false });
-    expect(officialServer()).toBeNull();
-    expect(officialProvider.offered?.()).toBe(false);
-    expect(officialProvider.status().reason).toContain('内测');
-    await refreshOfficialAccount();
-    expect(paths).not.toContain('/v1/me');
-  });
 
-  it('服务器没说(没有 features、没有这个接口):当关', async () => {
+  it('登录窗选项:没有 features、没有这个接口时按默认(都关)', async () => {
     const answer = (body: unknown, status = 200) => vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })));
     answer({ accountKinds: ['email'], inviteOnly: true, codeTtlSec: 600 });
     expect((await fetchAuthOptions()).inviteOnly).toBe(true);
-    expect(officialServer()).toBeNull();
 
     _resetSessionForTest();
     answer({ accountKinds: ['email'], inviteOnly: true, codeTtlSec: 600, features: { ai: 'yes' } });
     await fetchAuthOptions();
-    expect(officialServer()).toBeNull();
 
     _resetSessionForTest();
     answer({ error: { code: 'bad-request', message: '没有这个接口' } }, 404);
     expect((await fetchAuthOptions()).features).toEqual({ ai: false, submit: false, submitWorld: false, submitPlugin: false, pluginTerms: null, phoneRequired: false });
-    expect(officialServer()).toBeNull();
   });
 
-  it('问不到(连不上):当关;打开账号窗、AI 设置时再问,问到开着就露出来,问到了就不再问', async () => {
-    const real = globalThis.fetch;
-    const down = vi.fn(async () => {
-      throw new TypeError('Failed to fetch');
-    });
-    vi.stubGlobal('fetch', down);
-    await refreshOfficialAccount();
-    expect(down).toHaveBeenCalledTimes(1);
-    expect(officialServer()).toBeNull();
-    const seen: boolean[] = [];
-    const off = onAuthOptionsChange(() => seen.push(officialServer() !== null));
-    vi.stubGlobal('fetch', real);
-    await checkOfficialAi();
-    off();
-    expect(officialServer()).toBe(BASE);
-    expect(seen).toEqual([true]);
-    paths.length = 0;
-    await checkOfficialAi();
-    expect(paths).toEqual([]);
-  });
 });

@@ -7,8 +7,6 @@ import { Icon } from './icons';
 import { copyText } from './clipboard';
 import { currentWorld, isStored, keepWorld, listWorlds, loadWorld, notify, useSavesVersion } from './saveStore';
 import { openAiSettings } from './AiSettings';
-import { officialServer, refreshOfficialAccount, useOfficialAccount } from '../ai/providers/official';
-import { useAiOn } from '../ai/client';
 import { notesKnown, notesReady } from '../ai/library';
 import { deleteAccount, displayName, getSession, knownAuthOptions, sendCode, useSession } from '../account/session';
 import { ServerError } from '../account/server';
@@ -90,8 +88,6 @@ function PhoneRow({ bound, banned }: { bound: PhoneInfo | null | undefined; bann
 
 function AccountDialog({ phone, to, onClose }: { phone: boolean; to?: 'submissions'; onClose: () => void }) {
   const s = useSession()!;
-  const acct = useOfficialAccount();
-  const aiOn = useAiOn();
   useSavesVersion();
   const [trashList, setTrashList] = useState<TrashEntry[] | null>(null);
   const [shares, setShares] = useState<ShareInfo[] | null>(null);
@@ -124,7 +120,6 @@ function AccountDialog({ phone, to, onClose }: { phone: boolean; to?: 'submissio
       })
       .catch(() => live && setShares([]));
     void refreshMe().catch(() => {});
-    void refreshOfficialAccount();
     return () => {
       live = false;
     };
@@ -172,23 +167,6 @@ function AccountDialog({ phone, to, onClose }: { phone: boolean; to?: 'submissio
             <Icon name="chevron" size={14} className="chev" />
           </button>
           {phoneOn && <PhoneRow bound={bound} banned={!!ban} />}
-          {aiOn && officialServer() && (
-            <button
-              className="acct-gr"
-              data-act="open-credits"
-              onClick={() => {
-                onClose();
-                openAiSettings('settings');
-              }}
-            >
-              <Icon name="sparkle" size={19} />
-              <span className="main">
-                <b>AI 积分</b>
-              </span>
-              <span className="side">{acct.credits !== undefined ? `剩 ${acct.credits}` : ''}</span>
-              <Icon name="chevron" size={14} className="chev" />
-            </button>
-          )}
         </div>
         <MySubmissions phone={phone} scrollTo={to === 'submissions'} />
         {fo && (
@@ -563,7 +541,6 @@ function LogoutDialog({ phone, onClose, onBack }: { phone: boolean; onClose: () 
 
 function DeleteDialog({ phone, onClose, onBack }: { phone: boolean; onClose: () => void; onBack: () => void }) {
   const s = useSession()!;
-  const aiOn = useAiOn();
   /** 作品墙上还有几件这个账号投的(注销不会跟着撤下);没开投稿、问不到 = 0 */
   const [live, setLive] = useState(0);
   useEffect(() => {
@@ -611,7 +588,7 @@ function DeleteDialog({ phone, onClose, onBack }: { phone: boolean; onClose: () 
     <Dialog phone={phone} label="注销账号？" width={440} onClose={busy ? undefined : onBack} testId="delete-dialog" head={<div className="acct-head"><h2>注销账号？</h2></div>}>
       <div className="acct-body" style={{ gap: 10 }}>
         <p className="acct-lead" style={{ marginBottom: 4 }}>
-          账号里的世界（连同最近删除）、分享出去的链接、还没审完的投稿{aiOn && officialServer() ? '和 AI 积分' : ''}都会删掉，不能恢复。这台设备上的世界不动。
+          账号里的世界（连同最近删除）、分享出去的链接、还没审完的投稿都会删掉，不能恢复。这台设备上的世界不动。
         </p>
         {live > 0 && (
           <div className="acct-callout sub-warn" data-testid="delete-live-works">

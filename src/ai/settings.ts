@@ -2,7 +2,7 @@
  * AI 设置与密钥的本地存储(阶段 5)。只存在用户自己的浏览器里,不上传。
  *
  *   设置(用不用 AI、用哪家、模型、地域、深度思考、记不记密钥)→ localStorage 'civ-atlas:ai-settings'
- *   密钥(DeepSeek / 百炼的 API 密钥、我们 AI 的登录令牌)→
+ *   密钥(DeepSeek / 百炼 / OpenAI 兼容接口的 API 密钥)→
  *       "记住密钥"开着:localStorage 'civ-atlas:ai-secrets'(下次打开还在)
  *       关着:只在内存里(这次打开的页面有效,刷新 / 关掉就忘),同时把存过的删掉
  *
@@ -24,14 +24,19 @@ export interface AiSettings {
   remember: boolean;
   deepseek: { model: string; thinking: boolean };
   bailian: { model: string; region: BailianRegion; thinking: boolean };
+  /** OpenAI 兼容接口:地址、模型名都自己填(OpenAI 官方、中转站、本地模型都走这一个协议) */
+  openai: { baseUrl: string; model: string };
 }
 
-/** 存密钥的格子:两家的 API 密钥 + 我们的 AI 的登录令牌 */
+/** 存密钥的格子:各家的 API 密钥(DeepSeek、百炼、OpenAI 兼容接口) */
 export interface AiSecrets {
   deepseek?: string;
   bailian?: string;
-  official?: { token: string; account?: string };
+  openai?: string;
 }
+
+/** OpenAI 兼容接口的默认地址(OpenAI 官方;可以改成中转站、本地模型,归一化见 providers/openai.ts) */
+export const DEFAULT_OPENAI_BASE = 'https://api.openai.com/v1';
 
 export const DEFAULT_AI_SETTINGS: AiSettings = {
   enabled: true,
@@ -39,11 +44,13 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
   remember: true,
   deepseek: { model: 'deepseek-flash', thinking: false },
   bailian: { model: 'qwen-plus', region: 'cn', thinking: false },
+  // 模型名空着:各家模型名都不一样(OpenAI、中转站、本地模型),猜不出来,让用户自己填
+  openai: { baseUrl: DEFAULT_OPENAI_BASE, model: '' },
 };
 
 const SETTINGS_KEY = 'civ-atlas:ai-settings';
 const SECRETS_KEY = 'civ-atlas:ai-secrets';
-const KINDS: AiProviderKind[] = ['official', 'deepseek', 'bailian', 'mock'];
+const KINDS: AiProviderKind[] = ['deepseek', 'bailian', 'openai', 'mock'];
 
 function storage(): Storage | null {
   try {
@@ -76,12 +83,16 @@ function writeJson(key: string, v: unknown | null) {
 const str = (v: unknown, d: string) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 120) : d);
 const bool = (v: unknown, d: boolean) => (typeof v === 'boolean' ? v : d);
 
+/** 接口地址:比别的字段长,放宽到 300 字(中转站、网关的地址可能很长) */
+const url = (v: unknown, d: string) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 300) : d);
+
 /** 读存档里的设置,坏的字段用默认值 */
 export function sanitizeSettings(v: unknown): AiSettings {
   const d = DEFAULT_AI_SETTINGS;
   const o = (v && typeof v === 'object' ? v : {}) as Record<string, any>;
   const ds = (o.deepseek && typeof o.deepseek === 'object' ? o.deepseek : {}) as Record<string, unknown>;
   const bl = (o.bailian && typeof o.bailian === 'object' ? o.bailian : {}) as Record<string, unknown>;
+  const oa = (o.openai && typeof o.openai === 'object' ? o.openai : {}) as Record<string, unknown>;
   return {
     enabled: bool(o.enabled, d.enabled),
     provider: KINDS.includes(o.provider) ? o.provider : null,
@@ -92,6 +103,7 @@ export function sanitizeSettings(v: unknown): AiSettings {
       region: bl.region === 'intl' ? 'intl' : 'cn',
       thinking: bool(bl.thinking, d.bailian.thinking),
     },
+    openai: { baseUrl: url(oa.baseUrl, d.openai.baseUrl), model: str(oa.model, d.openai.model) },
   };
 }
 
@@ -100,9 +112,6 @@ function sanitizeSecrets(v: unknown): AiSecrets {
   const out: AiSecrets = {};
   if (typeof o.deepseek === 'string' && o.deepseek) out.deepseek = o.deepseek;
   if (typeof o.bailian === 'string' && o.bailian) out.bailian = o.bailian;
-  if (o.official && typeof o.official.token === 'string' && o.official.token) {
-    out.official = { token: o.official.token, account: typeof o.official.account === 'string' ? o.official.account : undefined };
-  }
   return out;
 }
 
@@ -128,9 +137,10 @@ export function getAiSettings(): AiSettings {
   return settings!;
 }
 
-export function updateAiSettings(patch: Partial<Omit<AiSettings, 'deepseek' | 'bailian'>> & {
+export function updateAiSettings(patch: Partial<Omit<AiSettings, 'deepseek' | 'bailian' | 'openai'>> & {
   deepseek?: Partial<AiSettings['deepseek']>;
   bailian?: Partial<AiSettings['bailian']>;
+  openai?: Partial<AiSettings['openai']>;
 }): void {
   const cur = getAiSettings();
   settings = sanitizeSettings({
@@ -138,6 +148,7 @@ export function updateAiSettings(patch: Partial<Omit<AiSettings, 'deepseek' | 'b
     ...patch,
     deepseek: { ...cur.deepseek, ...patch.deepseek },
     bailian: { ...cur.bailian, ...patch.bailian },
+    openai: { ...cur.openai, ...patch.openai },
   });
   writeJson(SETTINGS_KEY, settings);
   setAiOn(settings.enabled);
@@ -145,7 +156,7 @@ export function updateAiSettings(patch: Partial<Omit<AiSettings, 'deepseek' | 'b
   emit();
 }
 
-const hasAny = (s: AiSecrets) => !!(s.deepseek || s.bailian || s.official);
+const hasAny = (s: AiSecrets) => !!(s.deepseek || s.bailian || s.openai);
 
 export function getSecrets(): Readonly<AiSecrets> {
   load();
@@ -200,7 +211,7 @@ export function resetAiSettingsForTest(): void {
 export function scrubSecrets(text: string): string {
   let out = text;
   const s = secrets ?? {};
-  for (const k of [s.deepseek, s.bailian, s.official?.token]) {
+  for (const k of [s.deepseek, s.bailian, s.openai]) {
     if (k && k.length >= 6) out = out.split(k).join('***');
   }
   return out.replace(/\bsk-[A-Za-z0-9_-]{6,}/g, 'sk-***');

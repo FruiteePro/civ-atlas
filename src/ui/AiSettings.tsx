@@ -5,8 +5,6 @@
  *   openAiSettings(tab?)  打开它(成书窗口的"AI 设置"、提示条的"去设置"、别的面板要打开 AI 设置时都用这个)
  *   AiSettingsHost        窗口本身,App 里一直挂着(所以不管从哪儿打开都在)
  *
- *   我们的 AI(积分):登录网站账号后按次扣积分(登录窗和「我的世界」那个是同一个,AccountDialogs.tsx);
- *                   服务器还没上线时显示"还在内测,暂未开放"(src/ai/providers/official.ts)
  *   DeepSeek / 阿里云百炼:用户自己的 API 密钥,只存在这个浏览器里,请求直接从浏览器发给那一家
  *   测试用假 AI:开发时、或网址带 ai=mock 时才出现(不联网)
  *
@@ -16,12 +14,10 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { aiChat, getActiveProvider, setAiSettingsOpener, useAiOn, useAiStatus } from '../ai/client';
 import { AiError, type AiProviderKind } from '../ai/types';
-import { chooseProvider, cleanKey, getAiSettings, getSecrets, setAiEnabled, setSecret, updateAiSettings, useAiSettingsVersion } from '../ai/settings';
+import { chooseProvider, cleanKey, DEFAULT_OPENAI_BASE, getAiSettings, getSecrets, setAiEnabled, setSecret, updateAiSettings, useAiSettingsVersion } from '../ai/settings';
 import { DEEPSEEK_MODELS } from '../ai/providers/deepseek';
 import { BAILIAN_MODELS, BAILIAN_REGIONS } from '../ai/providers/bailian';
-import { checkOfficialAi, officialServer, refreshOfficialAccount, useOfficialAccount } from '../ai/providers/official';
-import { openAccount, openLogin } from './AccountDialogs';
-import { Icon } from './icons';
+import { OPENAI_MODELS, openaiChatUrl } from '../ai/providers/openai';
 import { mockSelectable } from '../ai/setup';
 import { useCallLog } from '../ai/callLog';
 import { AiCallLog } from './AiCallLog';
@@ -88,7 +84,6 @@ function useEscape(f: () => void) {
 
 function AiDialog({ tab, onTab, onClose }: { tab: Tab; onTab: (t: Tab) => void; onClose: () => void }) {
   useEscape(onClose);
-  useEffect(() => void checkOfficialAi(), []);
   const log = useCallLog();
   return createPortal(
     <div className="ai-dialog-bg" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -141,32 +136,29 @@ interface Choice {
 }
 
 const CHOICES: Choice[] = [
-  { kind: 'official', name: '我们的 AI', desc: '登录后按次扣积分' },
   { kind: 'deepseek', name: 'DeepSeek', desc: '用自己的 API 密钥,由 DeepSeek 计费' },
   { kind: 'bailian', name: '阿里云百炼', desc: '用自己的 API 密钥,由阿里云计费' },
+  { kind: 'openai', name: 'OpenAI 兼容', desc: '自己填地址、模型名和密钥:可接 OpenAI、中转站、本地模型' },
   { kind: 'mock', name: '测试用假 AI', desc: '回一段假话,检查界面用' },
 ];
 
 function SettingsTab() {
   useAiSettingsVersion();
   useAiStatus();
-  const acct = useOfficialAccount();
   const s = getAiSettings();
   const sec = getSecrets();
   const active = getActiveProvider();
-  const server = officialServer();
   const forced = mockForced();
   const choices = CHOICES.filter((c) => c.kind !== 'mock' || mockSelectable());
 
   const badge = (k: AiProviderKind): { text: string; cls?: string } => {
-    if (k === 'official') {
-      if (!server) return { text: '内测中,暂未开放', cls: 'off' };
-      if (!acct.loggedIn) return { text: '未登录' };
-      if (acct.credits === undefined) return { text: '已登录', cls: 'ok' };
-      return { text: `余额 ${acct.credits} 积分`, cls: acct.credits > 0 ? 'ok' : 'warn' };
-    }
     if (k === 'deepseek') return sec.deepseek ? { text: '已填密钥', cls: 'ok' } : { text: '未填密钥' };
     if (k === 'bailian') return sec.bailian ? { text: '已填密钥', cls: 'ok' } : { text: '未填密钥' };
+    if (k === 'openai') {
+      if (!sec.openai) return { text: '未填密钥' };
+      if (!openaiChatUrl(s.openai.baseUrl)) return { text: '地址不对', cls: 'warn' };
+      return { text: '已填密钥', cls: 'ok' };
+    }
     return { text: forced ? '网址带 ai=mock,强制使用' : '不联网', cls: forced ? 'ok' : undefined };
   };
 
@@ -175,7 +167,7 @@ function SettingsTab() {
       <div className="ai-choices" role="radiogroup" aria-label="用哪家 AI">
         {choices.map((c) => {
           const b = badge(c.kind);
-          const disabled = (c.kind === 'official' && !server) || (forced && c.kind !== 'mock');
+          const disabled = forced && c.kind !== 'mock';
           return (
             <button
               key={c.kind}
@@ -228,16 +220,12 @@ function SettingsTab() {
           <TestRow disabled={!sec.bailian} sig={`bailian|${s.bailian.region}|${s.bailian.model}|${s.bailian.thinking}|${sec.bailian?.length ?? 0}`} />
         </div>
       )}
-      {active === 'official' && (
-        <div className="ai-detail" data-detail="official">
-          {!server ? (
-            <p className="ai-note">内测中,暂未开放;可以先用自己的 DeepSeek 或百炼密钥</p>
-          ) : acct.loggedIn ? (
-            <OfficialAccountView />
-          ) : (
-            <SignInRow />
-          )}
-          {server && acct.loggedIn && <TestRow disabled={false} sig={`official|${acct.account}`} />}
+      {active === 'openai' && (
+        <div className="ai-detail" data-detail="openai">
+          <BaseUrlField value={s.openai.baseUrl} onChange={(baseUrl) => updateAiSettings({ openai: { baseUrl } })} />
+          <KeyField slot="openai" where={<span>服务商的文档或控制台</span>} />
+          <ModelField value={s.openai.model} presets={OPENAI_MODELS} placeholder="以服务商的文档为准,比如 gpt-4o-mini" onChange={(model) => updateAiSettings({ openai: { model } })} />
+          <TestRow disabled={!sec.openai} sig={`openai|${s.openai.baseUrl}|${s.openai.model}|${sec.openai?.length ?? 0}`} />
         </div>
       )}
       {active === 'mock' && (
@@ -261,7 +249,49 @@ function SettingsTab() {
   );
 }
 
-function KeyField({ slot, where }: { slot: 'deepseek' | 'bailian'; where: React.ReactNode }) {
+/**
+ * OpenAI 兼容接口的地址:OpenAI 官方、中转站、本地模型都填这里。输入途中不落盘(免得把半截地址存进去),
+ * 清空后失焦回到默认地址。认哪几种写法见 ai/providers/openai.ts 的 openaiChatUrl —— 末尾的 /chat/completions 不用写。
+ */
+function BaseUrlField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [v, setV] = useState(value);
+  return (
+    <>
+      <div className="ai-row">
+        <label className="ai-label" htmlFor="ai-openai-base">
+          接口地址
+        </label>
+        <input
+          id="ai-openai-base"
+          className="ai-input ai-model"
+          type="url"
+          inputMode="url"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder={DEFAULT_OPENAI_BASE}
+          value={v}
+          onChange={(e) => {
+            setV(e.target.value);
+            const t = e.target.value.trim();
+            if (t) onChange(t);
+          }}
+          onBlur={() => {
+            const t = v.trim();
+            if (!t) {
+              setV(DEFAULT_OPENAI_BASE);
+              onChange(DEFAULT_OPENAI_BASE);
+            }
+          }}
+        />
+      </div>
+      <p className="ai-note sub">
+        默认 {DEFAULT_OPENAI_BASE};换中转站、本地模型(Ollama 之类)填它的地址,末尾的 /chat/completions 不用写
+      </p>
+    </>
+  );
+}
+
+function KeyField({ slot, where }: { slot: 'deepseek' | 'bailian' | 'openai'; where: React.ReactNode }) {
   const saved = getSecrets()[slot] ?? '';
   const [v, setV] = useState(saved);
   const [show, setShow] = useState(false);
@@ -437,50 +467,3 @@ function TestRow({ disabled, sig }: { disabled: boolean; sig: string }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// 我们的 AI:登录 / 账户
-
-/** 没登录:一个「登录」按钮,弹出和「我的世界」同一个登录窗 */
-function SignInRow() {
-  return (
-    <div className="ai-login">
-      <div className="ai-row">
-        <label className="ai-label">账号</label>
-        <span className="ai-val" style={{ color: 'var(--ink-2)' }}>
-          没登录
-        </span>
-        <button className="ai-mini primary ai-signin" data-act="ai-login" onClick={() => openLogin()}>
-          <Icon name="personc" size={16} />
-          登录
-        </button>
-      </div>
-      <p className="ai-note sub">用邮箱收验证码就能登录。</p>
-    </div>
-  );
-}
-
-function OfficialAccountView() {
-  const acct = useOfficialAccount();
-  return (
-    <div className="ai-account">
-      <div className="ai-row">
-        <label className="ai-label">账号</label>
-        <span className="ai-val">{acct.name && acct.name !== acct.account ? `${acct.name}(${acct.account})` : acct.account}</span>
-        <button className="ai-mini" data-act="ai-account" onClick={() => openAccount()}>
-          账号
-        </button>
-      </div>
-      <div className="ai-row">
-        <label className="ai-label">积分余额</label>
-        <span className="ai-val ai-credits" data-testid="ai-credits">
-          {acct.credits !== undefined ? <b>{acct.credits}</b> : '—'} 积分
-        </span>
-        <button className="ai-mini" disabled={acct.checking} onClick={() => void refreshOfficialAccount()}>
-          {acct.checking ? '查询中……' : '刷新'}
-        </button>
-      </div>
-      {acct.pricing && <p className="ai-note sub">{acct.pricing}</p>}
-      {acct.error && <p className="ai-note err">{acct.error}</p>}
-    </div>
-  );
-}

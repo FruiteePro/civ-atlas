@@ -3,13 +3,13 @@
  * 不直接碰服务商;用哪家、密钥、调用记录都由 AI 接入层(src/ai/)管。
  *
  * 设计原则:
- * - 两种用法:① 用我们提供的 AI,按次消耗"积分"(需要单独的服务器,尚未开放);② 使用者填自己的 AI 密钥(DeepSeek 官网、阿里云百炼)
- * - 使用者自己的 API 密钥只存在自己的浏览器里,不上传到我们的服务器;请求由网页直接发给模型厂商(两家的接口都允许网页跨域调用)
+ * - 使用者填自己的 AI 密钥:DeepSeek、阿里云百炼,或任何 OpenAI 兼容接口(OpenAI 官方、中转站、本地模型)
+ * - API 密钥只存在自己的浏览器里,不上传到任何服务器;请求由网页直接发给模型厂商(这些接口都允许网页跨域调用)
  * - 每次调用都留记录,记录只存在本地
  */
 
-/** official = 我们提供的 AI(积分);deepseek = DeepSeek 官网 API;bailian = 阿里云百炼;mock = 测试用的假 AI(不联网,冒烟 / 单测用) */
-export type AiProviderKind = 'official' | 'deepseek' | 'bailian' | 'mock';
+/** deepseek = DeepSeek 官网 API;bailian = 阿里云百炼;openai = OpenAI 兼容接口(地址、模型名自己填);mock = 测试用的假 AI(不联网,冒烟 / 单测用) */
+export type AiProviderKind = 'deepseek' | 'bailian' | 'openai' | 'mock';
 
 export interface AiMessage {
   /** tool = 工具执行的结果(回给模型看) */

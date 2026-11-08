@@ -16,7 +16,6 @@
  *   POST /v1/account/delete { code }                  → 204(先给自己的邮箱发验证码)
  */
 import { useSyncExternalStore } from 'react';
-import { getSecrets, setSecret } from '../ai/settings';
 import { ServerError, accountServer, call, setAuthLostHandler } from './server';
 
 export interface AccountUser {
@@ -82,8 +81,6 @@ function write(s: Session | null) {
   if (tokenOf(s) !== tokenOf(session)) swaps++;
   session = s;
   persist(s);
-  // 以前单独为"我们的 AI"登录的令牌还留着的:不再用了
-  if (getSecrets().official) setSecret('official', undefined);
   emit();
 }
 
@@ -96,10 +93,6 @@ function load(): Session | null {
   } catch {
     s = null;
   }
-  // 以前单独为"我们的 AI"登录的令牌(存在 AI 密钥里)不挪过来当网站账号:登录网站账号就会把世界同步进账号,
-  // 这得用户自己在登录窗里登录才算,不能打开网页就悄悄开始同步。作废掉,AI 要用就重新登录。
-  // 可能正在渲染,AI 设置那边的清除放到之后做(不在渲染中途通知别的组件)
-  if (getSecrets().official) queueMicrotask(() => setSecret('official', undefined));
   session = s;
   return s;
 }

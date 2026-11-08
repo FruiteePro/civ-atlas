@@ -1,5 +1,5 @@
 /**
- * AI 接入层:流式解析、DeepSeek / 百炼 / 我们的 AI 三个服务商(全部用假 fetch,不联网)。
+ * AI 接入层:流式解析、DeepSeek / 百炼 / OpenAI 兼容三个服务商(全部用假 fetch,不联网)。
  */
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { SseParser, readSse } from '../src/ai/sse';
@@ -10,17 +10,8 @@ import { getCallLog } from '../src/ai/callLog';
 import { compatBody, compatChat } from '../src/ai/providers/compat';
 import { DEEPSEEK_URL } from '../src/ai/providers/deepseek';
 import { BAILIAN_URLS } from '../src/ai/providers/bailian';
-import {
-  getOfficialAccount,
-  loginOfficial,
-  logoutOfficial,
-  refreshOfficialAccount,
-  sendLoginCode,
-  setOfficialServerForTest,
-} from '../src/ai/providers/official';
+import { openaiChatUrl } from '../src/ai/providers/openai';
 import { AiError, type AiRequest } from '../src/ai/types';
-import { createFakeAiServer, FAKE_CODE } from '../scripts/lib/fakeAiServer';
-import { getSession } from '../src/account/session';
 
 const KEY = 'sk-test-secret-0123456789';
 
@@ -319,190 +310,68 @@ describe('阿里云百炼(假 fetch)', () => {
   });
 });
 
-describe('我们的 AI(开发假服务器,假 fetch 直连,不开端口)', () => {
-  it('没配置服务器地址:不可用,说明"还在内测"', () => {
-    setOfficialServerForTest(null);
-    chooseProvider('official');
-    const s = getAiStatus();
-    expect(s.ready).toBe(false);
-    expect(s.reason).toContain('内测');
+describe('OpenAI 兼容(自己填地址,假 fetch)', () => {
+  it('地址归一化:只填域名补 /v1、尾部斜杠、完整地址、本地模型,认不出来返回 null', () => {
+    expect(openaiChatUrl('')).toBe('https://api.openai.com/v1/chat/completions');
+    expect(openaiChatUrl('https://api.openai.com')).toBe('https://api.openai.com/v1/chat/completions');
+    expect(openaiChatUrl('api.openai.com')).toBe('https://api.openai.com/v1/chat/completions');
+    expect(openaiChatUrl('https://api.openai.com/v1/')).toBe('https://api.openai.com/v1/chat/completions');
+    expect(openaiChatUrl('https://api.openai.com/v1/chat/completions')).toBe('https://api.openai.com/v1/chat/completions');
+    expect(openaiChatUrl('https://gw.example.com/openai/v1')).toBe('https://gw.example.com/openai/v1/chat/completions');
+    expect(openaiChatUrl('http://localhost:11434')).toBe('http://localhost:11434/v1/chat/completions');
+    expect(openaiChatUrl('ftp://x')).toBeNull();
   });
 
-  it('没选 AI 时的说明:我们的 AI 开放了才提它', () => {
-    chooseProvider(null);
-    setOfficialServerForTest(null);
-    expect(getAiStatus().reason).toBe('还没有设置 AI:可以填上自己的 DeepSeek / 阿里云百炼密钥');
-    setOfficialServerForTest('http://fake-ai.test');
-    expect(getAiStatus().reason).toBe('还没有设置 AI:可以用我们提供的 AI(消耗积分),或填上自己的 DeepSeek / 阿里云百炼密钥');
-    setOfficialServerForTest(undefined);
+  it('只发给填的地址;密钥只在请求头里;模型名原样;不传思考开关;流式拼出全文', async () => {
+    setSecret('openai', KEY);
+    chooseProvider('openai');
+    updateAiSettings({ openai: { baseUrl: 'https://gw.example.com/v1', model: 'my-model' } });
+    const calls = fakeFetch(() => sseResponse(sseBody([
+        { id: 'x', model: 'my-model', choices: [{ index: 0, delta: { content: '大昌' } }] },
+        { id: 'x', model: 'my-model', choices: [{ index: 0, delta: { content: '兴于碧溪谷。' } }] },
+        { id: 'x', choices: [], usage: { prompt_tokens: 9, completion_tokens: 5 } },
+      ])));
+    const r = await aiChat(REQ);
+    expect(r.text).toBe('大昌兴于碧溪谷。');
+    expect(r.provider).toBe('openai');
+    expect(r.model).toBe('my-model');
+    expect(r.usage).toEqual({ inputTokens: 9, outputTokens: 5 });
+    expect(calls[0].url).toBe('https://gw.example.com/v1/chat/completions');
+    expect(calls[0].url).not.toContain(KEY);
+    expect(calls[0].headers.authorization).toBe(`Bearer ${KEY}`);
+    expect(calls[0].body).toMatchObject({ model: 'my-model', stream: true, stream_options: { include_usage: true } });
+    expect(calls[0].body.thinking).toBeUndefined();
+    expect(JSON.stringify(getCallLog().calls[0])).not.toContain(KEY);
   });
 
-  it('登录 → 看积分 → 调用扣积分 → 积分不够报错 → 令牌失效要重新登录', async () => {
-    const fake = createFakeAiServer({ startCredits: 7, chunkDelayMs: 0 });
-    const BASE = 'http://fake-ai.test';
-    const seen: string[] = [];
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (u: string, init?: RequestInit) => {
-        seen.push(String(u));
-        return fake.handle(new Request(String(u), init));
-      }),
-    );
-    setOfficialServerForTest(BASE);
-    chooseProvider('official');
-    expect(getAiStatus().reason).toContain('登录');
+  it('没填密钥 / 没填模型名 / 地址不对:不可用,中文说明;调用直接失败', async () => {
+    chooseProvider('openai');
+    updateAiSettings({ openai: { baseUrl: 'https://gw.example.com/v1', model: 'my-model' } });
+    setSecret('openai', undefined);
+    expect(getAiStatus()).toMatchObject({ ready: false, reason: expect.stringContaining('密钥') });
+
+    setSecret('openai', KEY);
+    updateAiSettings({ openai: { model: '' } });
+    fakeFetch(() => sseResponse(sseBody([chunk('x')])));
+    await expect(aiChat(REQ)).rejects.toMatchObject({ code: 'not-configured', message: expect.stringContaining('模型名') });
+
+    updateAiSettings({ openai: { model: 'my-model', baseUrl: 'ftp://x' } });
+    expect(getAiStatus().reason).toContain('地址');
     await expect(aiChat(REQ)).rejects.toMatchObject({ code: 'not-configured' });
+  });
 
-    const sent = await sendLoginCode('writer@example.com');
-    expect(sent.devCode).toBe(FAKE_CODE);
-    await expect(loginOfficial('writer@example.com', '000000')).rejects.toMatchObject({ code: 'auth' });
-    await loginOfficial('writer@example.com', FAKE_CODE);
-    await refreshOfficialAccount();
-    expect(getOfficialAccount()).toMatchObject({ loggedIn: true, account: 'writer@example.com', credits: 7 });
-    expect(getAiStatus().ready).toBe(true);
-
-    const deltas: string[] = [];
-    const r = await aiChat(REQ, { onDelta: (c) => deltas.push(c) });
-    expect(r.provider).toBe('official');
-    expect(r.credits).toBe(3);
-    expect(r.model).toBe('fake-ai-1');
-    expect(deltas.join('')).toBe(r.text);
-    expect(r.usage?.outputTokens).toBe(r.text.length);
-    expect(getOfficialAccount().credits).toBe(4);
-    expect(getCallLog().calls[0]).toMatchObject({ ok: true, provider: 'official', credits: 3 });
-
-    await aiChat(REQ);
-    expect(getOfficialAccount().credits).toBe(1);
+  it('密钥不对(401)→ auth,中文说明', async () => {
+    setSecret('openai', KEY);
+    chooseProvider('openai');
+    updateAiSettings({ openai: { baseUrl: 'https://gw.example.com/v1', model: 'my-model' } });
+    fakeFetch(() => errResponse(401, { message: `Incorrect API key provided: ${KEY}`, code: 'invalid_api_key' }));
     const e = (await aiChat(REQ).catch((x) => x)) as AiError;
-    expect(e.code).toBe('quota');
-    expect(e.message).toContain('积分不够');
-    expect(getOfficialAccount().credits).toBe(1);
-    expect(getCallLog().calls[0]).toMatchObject({ ok: false, error: { code: 'quota' } });
-
-    // 请求只发给我们的服务器
-    expect(seen.every((u) => u.startsWith(BASE))).toBe(true);
-
-    // 服务器那边令牌作废 → 401 → 本地清掉令牌,请用户重新登录
-    await logoutOfficial();
-    expect(getOfficialAccount().loggedIn).toBe(false);
-    await loginOfficial('writer@example.com', FAKE_CODE);
-    // 让服务器忘掉所有令牌:换一个新的假服务器
-    const fake2 = createFakeAiServer({ chunkDelayMs: 0 });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (u: string, init?: RequestInit) => fake2.handle(new Request(String(u), init))),
-    );
-    await expect(aiChat(REQ)).rejects.toMatchObject({ code: 'auth' });
-    expect(getOfficialAccount().loggedIn).toBe(false);
-    expect(getAiStatus().ready).toBe(false);
-    setOfficialServerForTest(undefined);
-  });
-
-  it('退出后换了账号:旧账号晚回来的 401 不把新登录踢掉', async () => {
-    const fake = createFakeAiServer({ chunkDelayMs: 0 });
-    let hold: Promise<void> | null = null;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (u: string, init?: RequestInit) => {
-        const req = new Request(String(u), init);
-        if (hold && new URL(req.url).pathname === '/v1/chat') {
-          const h = hold;
-          hold = null;
-          await h;
-        }
-        return fake.handle(req);
-      }),
-    );
-    setOfficialServerForTest('http://fake-ai.test');
-    chooseProvider('official');
-    await loginOfficial('writer@example.com', FAKE_CODE);
-    let release!: () => void;
-    hold = new Promise<void>((r) => (release = r));
-    const late = aiChat(REQ).catch((e: unknown) => e);
-    await logoutOfficial();
-    await loginOfficial('other@example.com', FAKE_CODE);
-    release();
-    expect(await late).toMatchObject({ code: 'auth' });
-    expect(getOfficialAccount()).toMatchObject({ loggedIn: true, account: 'other@example.com' });
-    expect(getAiStatus().ready).toBe(true);
-    await logoutOfficial();
-    setOfficialServerForTest(undefined);
-  });
-
-  it('写的工夫换了账号:原来那个账号写的不交给新账号', async () => {
-    const fake = createFakeAiServer({ chunkDelayMs: 0 });
-    let hold: Promise<void> | null = null;
-    let reached!: () => void;
-    const hit = new Promise<void>((r) => (reached = r));
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (u: string, init?: RequestInit) => {
-        const req = new Request(String(u), init);
-        const res = await fake.handle(req);
-        // 服务器写好了、回话还在路上
-        if (hold && new URL(req.url).pathname === '/v1/chat') {
-          const h = hold;
-          hold = null;
-          reached();
-          await h;
-        }
-        return res;
-      }),
-    );
-    setOfficialServerForTest('http://fake-ai.test');
-    chooseProvider('official');
-    await loginOfficial('writer@example.com', FAKE_CODE);
-    let release!: () => void;
-    hold = new Promise<void>((r) => (release = r));
-    const late = aiChat(REQ).catch((e: unknown) => e);
-    await hit;
-    // 不退出就换成另一个账号(另一个标签页里登录的;原来的令牌在服务器上还有效)
-    await loginOfficial('other@example.com', FAKE_CODE);
-    release();
-    expect(await late).toMatchObject({ code: 'auth' });
-    expect(getOfficialAccount()).toMatchObject({ loggedIn: true, account: 'other@example.com' });
-    await logoutOfficial();
-    setOfficialServerForTest(undefined);
-  });
-
-  it('退出后换了账号:旧账号晚回来的账号资料不会套到新登录上', async () => {
-    const fake = createFakeAiServer({ chunkDelayMs: 0 });
-    let hold: Promise<void> | null = null;
-    let reached!: () => void;
-    const hit = new Promise<void>((r) => (reached = r));
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (u: string, init?: RequestInit) => {
-        const req = new Request(String(u), init);
-        const res = await fake.handle(req);
-        // 服务器回了话、还在路上
-        if (hold && new URL(req.url).pathname === '/v1/me') {
-          const h = hold;
-          hold = null;
-          reached();
-          await h;
-        }
-        return res;
-      }),
-    );
-    setOfficialServerForTest('http://fake-ai.test');
-    chooseProvider('official');
-    let release!: () => void;
-    hold = new Promise<void>((r) => (release = r));
-    // 登录后顺手查一次积分:这一次晚回来
-    await loginOfficial('writer@example.com', FAKE_CODE);
-    await hit;
-    await logoutOfficial();
-    await loginOfficial('other@example.com', FAKE_CODE);
-    await refreshOfficialAccount();
-    release();
-    await new Promise((r) => setTimeout(r, 0));
-    expect(getSession()?.user.account).toBe('other@example.com');
-    expect(getOfficialAccount()).toMatchObject({ loggedIn: true, account: 'other@example.com' });
-    await logoutOfficial();
-    setOfficialServerForTest(undefined);
+    expect(e.code).toBe('auth');
+    expect(e.message).toContain('OpenAI 兼容接口');
+    expect(e.message).not.toContain(KEY);
   });
 });
+
 
 describe('工具调用(助手用,假 fetch)', () => {
   const TOOLS: AiRequest['tools'] = [
@@ -598,30 +467,33 @@ describe('工具调用(助手用,假 fetch)', () => {
     expect(e.code).toBe('bad-response');
   });
 
-  it('我们的 AI:tools、toolChoice、带工具调用的消息原样转给服务器;done.tool_calls 读回', async () => {
-    const fake = createFakeAiServer({ chunkDelayMs: 0 });
-    const BASE = 'http://fake-ai.test';
-    const bodies: any[] = [];
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (u: string, init?: RequestInit) => {
-        if (String(u).endsWith('/v1/chat') && init?.body) bodies.push(JSON.parse(String(init.body)));
-        return fake.handle(new Request(String(u), init));
-      }),
+  it('OpenAI 兼容:tools、tool_choice、带工具调用的消息原样发出去;读回 tool_calls;不传思考字段', async () => {
+    setSecret('openai', KEY);
+    chooseProvider('openai');
+    updateAiSettings({ openai: { baseUrl: 'https://gw.example.com/v1/', model: 'my-model' } });
+    const calls = fakeFetch(() =>
+      sseResponse(
+        sseBody([
+          { id: 'x', choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: 'call_a', function: { name: 'country', arguments: '{"country":"P3"}' } }] } }] },
+          { id: 'x', choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] },
+        ]),
+      ),
     );
-    setOfficialServerForTest(BASE);
-    chooseProvider('official');
-    await loginOfficial('writer@example.com', FAKE_CODE);
     const r = await aiChat({ ...ROUND2, messages: ROUND2.messages.slice(0, 2) });
-    expect(r.toolCalls).toEqual([{ id: 'call_fake_0', name: 'country', args: '{}' }]);
-    expect(bodies[0].tools).toEqual(TOOLS!.map((t) => ({ type: 'function', function: t })));
-    expect(bodies[0].toolChoice).toBe('auto');
+    expect(r.toolCalls).toEqual([{ id: 'call_a', name: 'country', args: '{"country":"P3"}' }]);
+    expect(calls[0].url).toBe('https://gw.example.com/v1/chat/completions');
+    expect(calls[0].headers.authorization).toBe(`Bearer ${KEY}`);
+    expect(calls[0].body).toMatchObject({ model: 'my-model', stream: true });
+    expect(calls[0].body.tools).toEqual(TOOLS!.map((t) => ({ type: 'function', function: t })));
+    expect(calls[0].body.tool_choice).toBe('auto');
+    // 不传思考开关:各家兼容实现的写法不一样,乱传会 400
+    expect(calls[0].body.thinking).toBeUndefined();
+    expect(calls[0].body.enable_thinking).toBeUndefined();
+
+    const calls2 = fakeFetch(() => sseResponse(sseBody([chunk('好的')])));
     const r2 = await aiChat(ROUND2);
-    expect(r2.toolCalls).toBeUndefined();
-    expect(r2.text).toContain('助手');
-    expect(bodies[1].messages[2].tool_calls[0]).toEqual({ id: 'call_a', type: 'function', function: { name: 'country', arguments: '{"country":"P3"}' } });
-    expect(bodies[1].messages[3]).toEqual({ role: 'tool', tool_call_id: 'call_a', content: 'P3 大昌王朝 · 第 812—3000 年' });
-    await logoutOfficial();
-    setOfficialServerForTest(undefined);
+    expect(r2.text).toBe('好的');
+    expect(calls2[0].body.messages[2].tool_calls[0]).toEqual({ id: 'call_a', type: 'function', function: { name: 'country', arguments: '{"country":"P3"}' } });
+    expect(calls2[0].body.messages[3]).toEqual({ role: 'tool', tool_call_id: 'call_a', content: 'P3 大昌王朝 · 第 812—3000 年' });
   });
 });
