@@ -1081,11 +1081,11 @@ export async function runAssistant(ctx: AssistantContext, history: readonly Assi
   const plain = (t: string) => you(plainIds(t, ctx));
   const onEvent = opts.onEvent;
   
-  // 判断角色：根据请求上下文选择，默认story
-  // 如果selection存在且有效，自动切换为intervention
-  const selectionInfo = ctx.selection ? validateSelection(ctx) : null;
-  const shouldUseIntervention = selectionInfo?.valid || opts.role === 'intervention';
-  const role = shouldUseIntervention ? 'intervention' : 'story';
+  // 判断角色：尊重显式指定的role，不仅基于selection自动切换
+  // selection存在不代表用户要编辑 - 可能只是选中国家写故事
+  // 只有用户表达明确修改意图的关键词时才启用intervention
+  const hasEditIntent = /修改|改|保护|结盟|宣战|立国|迁都|禁止|划州|让.*存活|让.*灭亡|不许|阻止/.test(w);
+  const role = opts.role ?? (hasEditIntent ? 'intervention' : 'story');
   
   const tools = [...assistantTools(ctx, state, role), ...(opts.extraTools ?? [])];
   
