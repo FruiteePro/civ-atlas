@@ -1,9 +1,8 @@
 /**
  * 推演插件接口第 1 版(gen/civ/simApi.ts):能力名和影响口、命令的名字定下来;只照接口写的两个插件(tests/lib/simV1Plugins.ts)
- * 种子 7、2024 默认参数推 3000 年推得完、历史看得出效果,结果钉住。
- * 改了官方推演(同一种子的历史变了)这里的钉子跟着变:PRINT_PINS=1 跑一遍,照打出来的换掉 PINS
+ * 种子 7、2024 默认参数推 3000 年推得完、历史看得出效果,结果钉住(钉子在 tests/lib/simV1Pins.ts,打成插件包的示例也对它)。
+ * 改了官方推演(同一种子的历史变了)这里的钉子跟着变:PRINT_PINS=1 跑一遍,照打出来的换掉 V1_PINS
  */
-import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_PARAMS, generateWorld, type World } from '../src/gen/world';
 import { generateCiv, startContinue, type Civ } from '../src/gen/civ';
@@ -17,9 +16,7 @@ import { segRegime } from '../src/gen/civ/regime';
 import { faithRoot, stateFaithAt } from '../src/gen/civ/religion';
 import { civDiff } from '../scripts/lib/resumeFuzz';
 import { WEARY, faithEffect, parliamentary, weariness } from './lib/simV1Plugins';
-
-const SEEDS = [7, 2024] as const;
-type Seed = (typeof SEEDS)[number];
+import { V1_PINS, V1_SEEDS as SEEDS, simDigest as digest, type V1Seed as Seed } from './lib/simV1Pins';
 
 const worlds = new Map<number, World>();
 const worldOf = (seed: number) => {
@@ -33,12 +30,6 @@ const baseOf = (seed: number) => {
   if (!c) bases.set(seed, (c = generateCiv(worldOf(seed))));
   return c;
 };
-
-/** 推出来的历史的指纹:史事、归属、干预、插件写的编年史和状态 */
-function digest(civ: Civ): string {
-  const x = packValue({ annals: civ.annals, polity: civ.polity, culture: civ.culture, interventions: civ.interventions ?? [], chronicle: civ.simChronicle ?? [], plugins: civ.simPlugins ?? [] });
-  return createHash('sha256').update(x).digest('hex').slice(0, 16);
-}
 
 const by = (civ: Civ, id: string) => (civ.interventions ?? []).filter((v) => v.plugin === id);
 
@@ -88,30 +79,21 @@ function faithMix(civ: Civ) {
   return out;
 }
 
-const PINS: Record<Seed, { weariness: unknown; faith: unknown }> = {
-  7: {
-    weariness: { before: { wars: 90, meanYears: 7.25, long: 28 }, after: { wars: 39, meanYears: 3.96, long: 3 }, treaties: 23, digest: '57d64d61ff100c94' },
-    faith: { before: { wars: 100, farWars: 27, pacts: 3, samePacts: 0 }, after: { wars: 109, farWars: 47, pacts: 8, samePacts: 4 }, declare: 0, ally: 2, digest: '576a425e9055be22' },
-  },
-  2024: {
-    weariness: { before: { wars: 8, meanYears: 4.22, long: 0 }, after: { wars: 7, meanYears: 2.8, long: 0 }, treaties: 3, digest: 'c9bfc1aa61958641' },
-    faith: { before: { wars: 94, farWars: 17, pacts: 1, samePacts: 0 }, after: { wars: 148, farWars: 82, pacts: 13, samePacts: 8 }, declare: 2, ally: 8, digest: '724181989f1f7336' },
-  },
-};
-
 function pin(seed: Seed, which: 'weariness' | 'faith', got: unknown) {
   if (process.env.PRINT_PINS) console.log(`${seed} ${which}: ${JSON.stringify(got)}`);
-  expect(got).toEqual(PINS[seed][which]);
+  expect(got).toEqual(V1_PINS[seed][which]);
 }
 
 describe('接口第 1 版:名字定下来', () => {
-  it('七样 sim.*@1 能力合规矩;网站还跑不了推演插件(清单 role 不认 sim),这几样都不进 PLUGIN_CAPS', () => {
+  it('七样 sim.*@1 能力合规矩;网站认推演插件(清单 role 认 sim)时都进 PLUGIN_CAPS,会改推演怎么走的两样归权限框上显眼的那一行', () => {
     const caps = Object.keys(SIM_CAPS);
     expect(caps.sort()).toEqual(['sim.chronicle@1', 'sim.commands@1', 'sim.events@1', 'sim.influence@1', 'sim.read@1', 'sim.state@1', 'sim.tables@1']);
     for (const c of caps) expect(CAP_NAME.test(c), c).toBe(true);
     const runnable = PLUGIN_ROLES.includes('sim');
     for (const c of caps) expect(PLUGIN_CAPS.has(c), `${c} 和 role sim 一起开`).toBe(runnable);
     expect(Object.entries(SIM_CAPS).filter(([, v]) => v.steer).map(([k]) => k).sort()).toEqual(['sim.commands@1', 'sim.influence@1']);
+    if (runnable) for (const [c, v] of Object.entries(SIM_CAPS)) expect(PLUGIN_CAPS.get(c), c).toBe(v.steer ? 'simSteer' : 'sim');
+    expect([...PLUGIN_CAPS.keys()].filter((c) => c.startsWith('sim.')).sort()).toEqual(runnable ? caps.sort() : []);
   });
 
   it('影响口的名字和官方登记的一样;命令的种类和收命令的那一口一样', () => {

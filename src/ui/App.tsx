@@ -289,6 +289,8 @@ import {
   type WallView,
   type WorkFor,
 } from './world/worldTarget';
+import { simsOf } from './world/simNow';
+import { SimAskHost } from './world/SimAskHost';
 
 type Replay = { w: number; h: number; frames: Uint8ClampedArray[]; mya: number[]; idx: number };
 
@@ -1159,7 +1161,7 @@ function AppBody({ fromHome }: { fromHome?: HomeStart }) {
   // ---- 存档(阶段 4):自动存、自动恢复、读档;建好的世界推完以后把结果(原件)存进浏览器(./world/useWorldSave.ts) ----
   useAutoSave();
   // 世界仓库(./worldStore.ts)要知道用的人是不是在推演(转存旧世界时让路),要关页面时叫线程把等着的内容打好
-  useEffect(() => setWorldStoreSim({ busy: () => sim.busy > 0, packNow: () => sim.tell({ type: 'packNow', id: reqId.current }), packParts: (ask) => sim.packParts({ ...ask, id: reqId.current }) }), []);
+  useEffect(() => setWorldStoreSim({ busy: () => sim.busy > 0, packNow: () => sim.tell({ type: 'packNow', id: reqId.current }), packParts: (ask) => sim.packParts({ ...ask, id: reqId.current }), sims: () => simsOf(currentWorld()?.id) }), []);
   // AI(阶段 5):登记服务商、恢复设置、调用记录存本地
   useEffect(() => setupAi(), []);
   // 「使用 AI 功能」关了:助手停下、回到现在、收起;正在写的史书停下(写到一半的不存),写史书的窗口、阅读页关上
@@ -2890,7 +2892,7 @@ function AppBody({ fromHome }: { fromHome?: HomeStart }) {
         {data && world && <DirectorCaption phone={narrow} civ={civ} hidden={directorOff || stepQuiet} />}
         {/* 开发者模式载入的插件:左边一块小卡(重新载入、日志) */}
         {pluginsUiOn() && data && world && <PluginDevSlot phone={narrow} world={data.world} civ={realCiv} raw={shownRaw} api={markApi} />}
-        {pluginsUiOn() && data && world && <PluginSavedSlot worldId={worldId} cells={data.world.mesh.n} />}
+        {pluginsUiOn() && data && world && <PluginSavedSlot worldId={worldId} cells={data.world.mesh.n} civ={shownRaw} />}
         {/* 再推 N 年:电脑是「再推」上面的弹层,手机推的时候胶囊上面一张小卡片 */}
         {data && world && civ && !narrow && <ExtendPop end={civ.endYear} hidden={!extendShown} />}
         {data && world && narrow && <ExtendDock hidden={!extendShown} />}
@@ -2931,6 +2933,7 @@ function AppBody({ fromHome }: { fromHome?: HomeStart }) {
       <AiSettingsHost />
       <AccountHost phone={narrow} />
       {pluginsUiOn() && <PluginsHost phone={narrow} />}
+      {pluginsUiOn() && <SimAskHost phone={narrow} />}
       {pluginsUiOn() && <PluginAskSlot phone={narrow} />}
       {pluginsUiOn() && data && world && <ToolsHost phone={narrow} world={data.world} root={baseData?.world ?? data.world} civ={civ} raw={shownRaw} api={markApi} stage={stageRef} active={toolable} />}
       <FrozenAsk phone={narrow} />

@@ -56,6 +56,22 @@ export function newVersionOf(p: InstalledPlugin): WallLatest | null {
   return newerOnWall(p, latest?.items[p.id], (sum) => verdictOf(sum, p.id).reviewed);
 }
 
+/** 作品墙上各插件现在那一版还没取过:取一次(本机没装插件时 checkPlugins 不取) */
+export async function wallOnce(): Promise<void> {
+  if (latest || !serverBase()) return;
+  try {
+    noteWall((await fetchGallery()).plugins);
+  } catch {
+    /* 取不到:当作品墙上没有 */
+  }
+}
+
+/** 作品墙上现在那一版就是这一份(按指纹):作品编号;没有、不是这一版 = null */
+export function wallWorkOf(id: string, sum: string): string | null {
+  const l = latest?.items[id];
+  return l && l.sum === sum ? l.work : null;
+}
+
 /** 组件里跟着作品墙上的新版、停用名单变而重画 */
 export const subscribeWall = changed.subscribe;
 export const useWallRev = (): Latest | null => changed.use(() => latest);
@@ -141,6 +157,7 @@ export function wallFile(work: string, sum?: string): Promise<{ bytes: Uint8Arra
       if (bytes.length > PLUGIN_MAX_BYTES) throw new ServerError(200, 'bad-response', '插件文件太大');
       const opened = await openPluginFile(bytes);
       if (sum && opened.sum !== sum) throw new ServerError(200, 'bad-response', '作品墙上这个插件刚换了版本，关掉再打开试试');
+      if (opened.manifest.role === 'sim') await (await import('../../plugin/simCheck')).checkSimFully(bytes);
       return { bytes, opened };
     })();
     files.set(key, got);

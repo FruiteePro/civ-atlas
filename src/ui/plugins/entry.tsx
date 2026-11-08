@@ -4,6 +4,7 @@ import { createStore } from '../createStore';
 import { MenuItem } from '../PopMenu';
 import { showToast } from '../toastStore';
 import { toolCard, toolRunning, toolsMenu, type ToolsProps } from './toolsState';
+import type { SimPickProps } from './SimPick';
 
 const open = createStore(false);
 
@@ -64,8 +65,17 @@ function WindowMissing() {
 
 const PluginWindow = lazy(() => import('./PluginWindow').catch(() => ({ default: WindowMissing as unknown as typeof import('./PluginWindow').default })));
 
+const WallPlugin = lazy(() => import('./GalleryPlugins').then((m) => ({ default: m.PluginWorkDialog })));
+const wallLook = createStore<string | null>(null);
+
+/** 打开作品墙上这个插件的那一页(从那里装);作品编号 */
+export function openWallPlugin(work: string): void {
+  wallLook.set(work);
+}
+
 export function PluginsHost({ phone }: { phone: boolean }) {
   const shown = open.use();
+  const look = wallLook.use();
   // 装着的插件联网时和作品墙对一对:有新版、被网站停用了
   useEffect(() => {
     import('./galleryWatch').then(
@@ -73,10 +83,11 @@ export function PluginsHost({ phone }: { phone: boolean }) {
       () => {},
     );
   }, []);
-  if (!shown) return null;
+  if (!shown && !look) return null;
   return (
     <Suspense fallback={null}>
-      <PluginWindow phone={phone} onClose={closePlugins} />
+      {look && <WallPlugin id={look} phone={phone} onClose={() => wallLook.set(null)} />}
+      {shown && <PluginWindow phone={phone} onClose={closePlugins} />}
     </Suspense>
   );
 }
@@ -132,6 +143,17 @@ export function ToolsHost(p: ToolsProps) {
   return (
     <Suspense fallback={null}>
       <ToolsLayer {...p} />
+    </Suspense>
+  );
+}
+
+const SimPickPage = lazy(() => import('./SimPick').then((m) => ({ default: m.SimPick })));
+
+/** 新建世界里选推演插件的那一页(点了才下载) */
+export function SimPickHost(p: SimPickProps) {
+  return (
+    <Suspense fallback={null}>
+      <SimPickPage {...p} />
     </Suspense>
   );
 }
