@@ -14,6 +14,7 @@ import { recordDiag } from '../diag/log';
 import { diagDoing } from '../diag/watch';
 import { worldKey } from '../gen/savefile';
 import { currentWorld } from '../ui/saveStore';
+import { getProviderForRole } from './settings';
 import { AiError, type AiCallOptions, type AiCallRecord, type AiProviderKind, type AiRequest, type AiResult, type AiToolCall } from './types';
 
 export interface AiProviderStatus {
@@ -199,7 +200,11 @@ function worldOf(): string | undefined {
 
 /** 调一次 AI。没配置 / 失败抛 AiError(中文说明);成功返回全文。每次调用都记一条记录 */
 export async function aiChat(req: AiRequest, opts: AiCallOptions = {}): Promise<AiResult> {
-  const kind = getActiveProvider();
+  // 根据角色选择provider（干预 vs 故事）
+  const role = req.role ?? 'story'; // 默认为story角色
+  const kind = role === 'story' || role === 'intervention' 
+    ? getProviderForRole(role)
+    : getActiveProvider();
   const p = kind ? providers.get(kind) : undefined;
   const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0;

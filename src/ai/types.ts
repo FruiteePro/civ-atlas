@@ -39,10 +39,12 @@ export interface AiToolCall {
 }
 
 export interface AiRequest {
-  /** 功能名,记进调用记录:'史书' | '释名' | '起名' | '连接测试' */
+  /** 功能名,记进调用记录:'史书' | '释名' | '起名' | '连接测试' | '助手' */
   feature: string;
   /** 这次调用的简短说明,记进调用记录(如"大昌 · 第 1200—1500 年") */
   title?: string;
+  /** AI角色：story=只读历史叙述, intervention=提议编辑（需确认） */
+  role?: 'story' | 'intervention';
   messages: AiMessage[];
   temperature?: number;
   maxTokens?: number;
