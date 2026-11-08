@@ -812,18 +812,16 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
     if (ready.length === 0) {
       // 极端情况:无可行继承国(游牧、人口稀疏、无城)
       // 全部散回部落地带（包括keep区域），记录 kind=2 供 development.ts 识别
+      // 无可行中心，全部散回部落或国家解体
       const allOut = mine.slice().sort((a, b) => a - b);
-      if (allOut.length > 0) {
-        sim.record('collapse', { a: pid, b: 2, region: capR, settlement: capSid, war: allOut.length });
-        for (const r of allOut) {
-          sim.setOwner(Layer.Polity, r, -1, Ev.Collapse);
-        }
-        endPolity(pm, pid, t);
-        um.collapsed.set(pid, t);
-        pol.lastSplit.set(pid, t);
-        return true;
+      sim.record('collapse', { a: pid, b: 2, region: capR, settlement: capSid, war: allOut.length });
+      for (const r of allOut) {
+        sim.setOwner(Layer.Polity, r, -1, Ev.Collapse);
       }
-      return false;
+      endPolity(pm, pid, t);
+      um.collapsed.set(pid, t);
+      pol.lastSplit.set(pid, t);
+      return true;
     }
     
     // 记录崩溃和创建继承国（母国保留keep区域）
