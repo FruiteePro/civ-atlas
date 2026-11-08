@@ -210,10 +210,14 @@ export const ASSISTANT_SYSTEM = [
   '4. 命令只能定下条件(保护、结盟、宣战……),不能直接规定谁打赢、哪年发生什么,后果由推演展开。试了几次都做不到时照实说,列出最接近的一种。',
   '   说做不到的理由,只写查到的资料、试推演和核对里真出现过的结果;没试过的办法不要说试过,也不要说"所有办法都试过",可以说还有哪几种没试。' +
     '作者说了不要用的办法,不要再列进确认单。',
-  '5. 说完一件事就停:列了确认单以后,用两三句话说结论,照试推演的数字说:作者关心的国家结果怎样;别的国家里变化最大的一两个(副作用,比如谁变小了、谁没亡、谁亡得更早);' +
+  '5. 解释修改的效果时,区分"直接效果"和"不确定后果":',
+  '   - 直接效果:干预命令本身规定的(如"保护"命令使该国免受征服、"结盟"命令使两国成为盟友)',
+  '   - 不确定后果:推演展开后才知道的(如国土变大、存续更久、影响邻国)。这些后果只能说试推演里观察到的数字,不要编造具体原因。',
+  '   只根据查到的资料和试推演结果解释,不要推测"可能是因为XX"。如果试推演里某国变强了,就说"试推演里变强到X州",不要说"因为YY所以变强"。',
+  '6. 说完一件事就停:列了确认单以后,用两三句话说结论,照试推演的数字说:作者关心的国家结果怎样;别的国家里变化最大的一两个(副作用,比如谁变小了、谁没亡、谁亡得更早);' +
     '确认单上不合格的条目执行不了,要说出来,不要说成可行;做不到的部分说一句。确认单要作者点了执行才生效:说"会""打算",不要说"已经改了""已放置"。不要再问作者要不要执行。',
   '   要列确认单就调用 propose_edits,不要只在话里写"列出确认单"。',
-  '6. 回给作者的话说名字,不说编号(P3、C12、L0 这些只在工具里用),也不说 protect、found 这些英文种类名和 country、chronicle、situation、people、land 这些工具名;' +
+  '7. 回给作者的话说名字,不说编号(P3、C12、L0 这些只在工具里用),也不说 protect、found 这些英文种类名和 country、chronicle、situation、people、land 这些工具名;' +
     '全部用中文,简短,不用 Markdown 标题和表格。',
   '   直接称作者为"你",不要说"作者"。做不到的部分只说真做不到的;列进确认单的修改不要再说成做不到。',
   '',
@@ -628,6 +632,8 @@ export interface AssistantOptions {
   extraTools?: AgentTool[];
   /** 确认单列好了(之后最后那句话没说完、出错或停下,界面照样能把确认单留下) */
   onProposal?: (p: AssistantProposal) => void;
+  /** 明确指定角色（否则根据selection自动判断）*/
+  role?: 'story' | 'intervention';
 }
 
 /** 这次对话的试推演和确认单 */
@@ -646,6 +652,7 @@ const attached = (items: readonly RewriteItem[]) => items.some((it) => it.change
 export function assistantTools(
   ctx: AssistantContext,
   state: AssistantState,
+  role?: 'story' | 'intervention',
 ): AgentTool[] {
   const { civ } = ctx;
   const rctx: RewriteContext = { world: ctx.world, civ, year: ctx.year, edits: ctx.edits, lock: ctx.lock };
@@ -1001,7 +1008,15 @@ export function assistantTools(
   };
 
   // 还在新建:只能改地形,地形不能试推演(给了试推演,模型会先绕一圈再忘了列单)
-  return [country, chronicle, situation, people, land, ...(ctx.lock === 'history' ? [] : [tryEdits]), propose];
+  // story角色只能查询，不能提议修改
+  const readOnly = [country, chronicle, situation, people, land];
+  const interventionTools = ctx.lock === 'history' ? [] : [tryEdits];
+  
+  if (role === 'story') {
+    return readOnly;
+  }
+  
+  return [...readOnly, ...interventionTools, propose];
 }
 
 /** 列完确认单以后交代 AI 怎么收尾:回答要和作者看到的确认单对得上(说主角的结果,也说副作用和执行不了的) */
@@ -1064,14 +1079,19 @@ export async function runAssistant(ctx: AssistantContext, history: readonly Assi
   const you = (t: string) => (!kept ? t : keep ? t.split(keep).map((x, i) => (i % 2 ? x : x.replace(/作者/g, '你'))).join('') : t.replace(/作者/g, '你'));
   const plain = (t: string) => you(plainIds(t, ctx));
   const onEvent = opts.onEvent;
-  // 判断角色：有干预工具用intervention，否则用story
-  const tools = [...assistantTools(ctx, state), ...(opts.extraTools ?? [])];
-  const hasInterventionTools = tools.some(t => t.def.name === 'propose_edits' || t.def.name === 'try_edits');
+  
+  // 判断角色：根据请求上下文选择，默认story
+  // 如果selection存在且有效，自动切换为intervention
+  const selectionInfo = ctx.selection ? validateSelection(ctx) : null;
+  const shouldUseIntervention = selectionInfo?.valid || opts.role === 'intervention';
+  const role = shouldUseIntervention ? 'intervention' : 'story';
+  
+  const tools = [...assistantTools(ctx, state, role), ...(opts.extraTools ?? [])];
   
   const out = await runAgent({
     feature: ASSISTANT_FEATURE,
     title: [...w].length > 24 ? `${[...w].slice(0, 24).join('')}…` : w,
-    role: hasInterventionTools ? 'intervention' : 'story',
+    role,
     messages: assistantMessages(ctx, history, w),
     tools,
     maxRounds: opts.maxRounds,
