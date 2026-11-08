@@ -94,6 +94,8 @@ export interface AssistantContext {
   edits: WorldEdits;
   /** 锁住了哪一样(见 RewriteLock) */
   lock?: RewriteLock;
+  /** 地图上选中的对象（国家/城市/州等，用于干预上下文） */
+  selection?: { kind: string; id: number } | null;
   /**
    * 按这份修改在后台把历史重推一遍(不动作者的世界),返回套上改名的历史。
    * 只会给出干预和改名变了的修改(地形不变);不给 = 不能试推演

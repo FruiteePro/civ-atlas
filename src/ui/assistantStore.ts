@@ -61,7 +61,7 @@ import { askHistory, commitEdits, getEdits, historyDiffers, revertEdits, setName
 import { currentSave, currentWorld } from './saveStore';
 import { sameHistory, worldMark, type WorldMark } from './worldStore';
 import { recipeKey, recipeOfSave } from '../gen/snapshot';
-import { setCivTime, setSelection, type MapSelection } from './civView';
+import { getSelection, setCivTime, setSelection, type MapSelection } from './civView';
 import { requestFly } from './panelStore';
 import { showToast } from './toastStore';
 import { noteRewrite } from './rewriteStore';
@@ -393,7 +393,7 @@ export async function sendAsk(ctx: AskContext, text: string): Promise<number> {
         return named;
       }
     : undefined;
-  const actx: AssistantContext = { world: ctx.world, civ: ctx.civ, year, edits: basis, lock: ctx.lock, simulate };
+  const actx: AssistantContext = { world: ctx.world, civ: ctx.civ, year, edits: basis, lock: ctx.lock, selection: getSelection().sel, simulate };
   const ui = { book: null as AsStep['book'] | null };
   const extraTools = ctx.lock === 'history' ? [] : uiTools(ctx, id, ui);
   const mock = getActiveProvider() === 'mock';
