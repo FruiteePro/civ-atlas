@@ -157,3 +157,30 @@ test('generateBaselinePreview: abort signal取消生成', async () => {
   expect(result.error).toBe('Aborted');
   expect(isPreviewReady()).toBe(false);
 });
+
+
+test('validateCurrentPreview 返回对象恒为 truthy，必须读 .valid', async () => {
+  cancelPreview();
+  const baseline = mockCiv([{ id: 0, name: '甲' }]);
+  const intervention = mockCiv([{ id: 0, name: '甲' }]);
+  const runner = async () => intervention;
+  const edits: WorldEdits = { names: {}, interventions: [], terrain: [] };
+  await generateBaselinePreview(
+    runner as any,
+    { seed: 7, year: 500, horizonYear: 1500, currentEdits: edits },
+    [],
+  );
+
+  const stale = validateCurrentPreview({ seed: 999, year: 500, edits });
+  // 返回值是对象：!!result 永远为 true，旧写法 !validateCurrentPreview(...) 会把过期误判成未过期
+  expect(typeof stale).toBe('object');
+  expect(!!stale).toBe(true);
+  expect(!stale).toBe(false);
+  expect(stale.valid).toBe(false);
+
+  const ok = validateCurrentPreview({ seed: 7, year: 500, edits });
+  expect(!!ok).toBe(true);
+  expect(ok.valid).toBe(true);
+
+  cancelPreview();
+});
