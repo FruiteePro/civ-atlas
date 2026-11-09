@@ -27,6 +27,14 @@ export function fragmentModeLabel(mode: FragmentMode): string {
   return mode === 'powers' ? '割据分治' : mode === 'shatter' ? '碎裂' : '分崩';
 }
 
+/** 灭国 / 大崩解页「怎么崩」选项(名 + 一句说明;与 fragmentModeLabel 用词一致) */
+export const FRAGMENT_MODE_UI: readonly { key: FragmentModeChoice; name: string; desc: string }[] = [
+  { key: 'auto', name: '自动', desc: '按中央强弱与割据多少判定' },
+  { key: 'powers', name: '割据分治', desc: '切成少数几大块，如北魏→东西魏' },
+  { key: 'mixed', name: '分崩', desc: '三到六块，大小不均' },
+  { key: 'shatter', name: '碎裂', desc: '裂成许多小国，如西晋之后' },
+];
+
 /** 各模式切分默认(shatter 与 UNREST_KNOBS.FRAGMENT_* 对齐:0.25 / 2) */
 export const FRAGMENT_MODE_PARAMS: Record<
   FragmentMode,

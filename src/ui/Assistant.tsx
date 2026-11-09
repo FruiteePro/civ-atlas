@@ -726,27 +726,27 @@ function ComparisonResult({ metrics, onConfirm, onCancel, loading, error, stale 
   error?: string;
   stale: boolean;
 }) {
-  const era = useEra();
   
   if (loading) {
     return (
       <div className="ast-grp">
         <div className="ast-row">
           <span className="tx">
-            <b>正在对比 baseline 和 intervention...</b>
+            <b>正在对比原推演与干预后的结果…</b>
           </span>
         </div>
       </div>
     );
   }
-  
+
   if (error) {
     return (
       <div className="ast-grp">
         <div className="ast-row">
-          <span className="tx" style={{ color: 'var(--red)' }}>
-            <b>预览失败：{error}</b>
-          </span>
+          <div className="ast-cant">
+            <b>预览失败</b>
+            {error}
+          </div>
         </div>
       </div>
     );
@@ -771,13 +771,9 @@ function ComparisonResult({ metrics, onConfirm, onCancel, loading, error, stale 
   
   return (
     <div className="ast-grp">
-      {stale && (
-        <div className="ast-note" style={{ color: 'var(--yellow)' }}>
-          ⚠️ 预览已过期（世界配置已改变），请重新预览
-        </div>
-      )}
+      {stale && <div className="ast-cant">预览已过期（世界配置已改变），请重新预览</div>}
       <div className="ast-sec">
-        <span>预览对比（baseline → intervention）</span>
+        <span>预览对比（原推演 → 干预后）</span>
       </div>
       {affectedPolities.length > 0 && (
         <div className="ast-row">

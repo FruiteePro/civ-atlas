@@ -236,3 +236,15 @@
 .as-radio.on {
   border: 5px solid var(--accent);
 }
+
+/* 灭国 / 大崩解:「怎么崩」嵌在 cp-form 里,不要再缩进一圈 */
+.cp-form .cp-cmds {
+  margin: 0;
+}
+/* 目标块数:窄输入,别套成年份大字 */
+.cpanel .cp-field input.iv-pieces {
+  flex: none;
+  width: 4.5em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
