@@ -636,9 +636,13 @@ export function installInterventions(sim: CivSim, iv: InterventionModel): void {
     if (api.politics.fragmentOnDestroy) {
       const successors = api.politics.fragmentOnDestroy(a, lands, t, i);
       if (successors > 0) {
+        // 继承国切出去后,亡国不得继续占州:剩余州散成无主,邻国照 reopen 预约
+        const leftover = pm.lands[a].slice();
         sim.record('intervene', { a, b: -1, region: r, settlement: sid, war: i, n: successors });
+        for (const q of leftover) sim.setOwner(Layer.Polity, q, -1, Ev.Cede);
         endPolity(pm, a, t);
         fallen(a, r, t, -1);
+        if (leftover.length) reopen(sim, pm, leftover);
         return;
       }
     }
