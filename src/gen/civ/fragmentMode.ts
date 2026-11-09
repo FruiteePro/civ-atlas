@@ -131,10 +131,13 @@ export function assessFragment(input: FragmentAssessInput): FragmentAssessment {
   const params = FRAGMENT_MODE_PARAMS[mode];
   let targetPieces: number;
   if (mode === 'powers') {
-    targetPieces = Math.min(params.pieces[1], Math.max(params.pieces[0], activeLords >= 3 ? 3 : activeLords >= 2 ? 3 : 2));
+    // 2–4;国土大(≥80)时至少 3
+    const floor = N >= 80 ? 3 : activeLords >= 2 ? 3 : 2;
+    targetPieces = Math.min(params.pieces[1], Math.max(params.pieces[0], floor));
   } else if (mode === 'shatter') {
-    targetPieces = Math.min(params.pieces[1], Math.max(params.pieces[0], Math.round(N / 12)));
+    targetPieces = Math.min(params.pieces[1], Math.max(params.pieces[0], Math.round(N / 8)));
   } else {
+    // mixed 3–6
     targetPieces = Math.min(params.pieces[1], Math.max(params.pieces[0], Math.round(N / 25)));
   }
   const minSize = Math.max(params.minSizeBase, Math.floor(N * params.minSizeFrac));
