@@ -21,6 +21,7 @@
  *       强国的边远处照样可能打不过近处的小国 —— 被夺去的州过些年又被夺回来,前线有来有回
  *     同一对国家议和后 TRUCE 年内不再开战;对方已经同时在打 MAX_WARS 场仗的不去凑;
  *     分裂 / 复国出来的国家(politics.ts)立国 NEWBORN 年内没人对它宣战(站稳期)。
+ *     大崩解 / 灭国切出的继承国:母国另有 COLLAPSE_TRUCE 年不得对它宣战(也不计收复失地);作者「禁止母国收复」则永久。
  *     议和了还会再打:一场仗议和时净丢了州的一方记恨赢它的那一国,GRUDGE_YEARS 年内看邻国时对它的赔率 × GRUDGE;
  *       停战期满后再过 REVENGE_LOOK 里随机的几年,替输的一方多看一眼邻国(复仇之战;随机数按 REVENGE_K + 战争编号取,不接着预约)。
  *       讨伐民变、宗室争位的内战不记恨。
@@ -133,6 +134,8 @@ export const WARS_KNOBS = defineKnobs('wars', {
   PREY_ODDS: 2.5,
   /** 分裂 / 复国出来的国家(Polity.parent),这么多年内别国不对它宣战(站稳期;原先 60 年,缩短以后强国吞并得快些) */
   NEWBORN: 30,
+  /** 大崩解 / 灭国切出的继承国:母国这么多年内不得对它宣战(也不计收复失地) */
+  COLLAPSE_TRUCE: 100,
   /** 迁都后这么多年内新国都攻不下(不会几年里一迁再迁) */
   CAPITAL_GRACE: 20,
   /** 丢了国都后剩下不到这么多州的国家撑不下去,残部归攻方、亡国 */
@@ -321,6 +324,14 @@ export interface WarModel {
   iv?: InterventionModel;
   /** 邦交(diplomacy.ts 挂上):结着的盟、宗藩之分在这里查 */
   dm?: DiplomacyModel;
+  /**
+   * 大崩解 / 灭国切出的继承国(child → 分出年份)。
+   * 母国内 COLLAPSE_TRUCE 年不得对它宣战;收复失地也不计。
+   * 作者勾「禁止母国收复」的进 noReclaim(永久)。
+   */
+  collapseChild: Map<number, Year>;
+  /** 禁止母国收复:继承国 id → 母国 id(永久,作者干预) */
+  noReclaim: Map<number, number>;
   // 别的子系统挂给战争、战争提供给别人的回调(攻城、立约、钱粮、动荡……)不在这里,在具名接口表 civ/api.ts 的 war 那一组
 }
 
@@ -384,6 +395,8 @@ function newModel(pm: PolityModel): WarModel {
     rest: new Map(),
     truce: new Map(),
     grudge: new Map(),
+    collapseChild: new Map(),
+    noReclaim: new Map(),
   };
 }
 
@@ -433,7 +446,7 @@ export function warModelOf(sim: CivSim): WarModel | undefined {
 
 /** 登记战争的事件处理和监听(installPolities 之后调用) */
 export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarModel = newModel(pm)): WarModel {
-  const { PROJECT, KIN_ATTACK, HOME_DEF, CAPITAL_DEF, PROTECT_DEF, P_MAX, P_MIN, CAPITAL_GRACE, PROTECT_KEEP, HOLD, DEFENSE, REGAIN, RES_TARGET, MAX_CUT, MIN_STATE, CEDE_I, SURRENDER_SHARE, SURRENDER_POWER, ALLY_JOIN, TWO_FRONTS, REST, BROKE_CUT, PURSE_0, PLUNDER_FLOOR, TRUCE, NEWBORN, MAX_WARS, CRUSH, WAR_ODDS, LOCAL_EXP, BORDER_FULL, FOREIGN, REVANCHE, PREY, PREY_ODDS, GRUDGE_YEARS, GRUDGE, RES_WANT, RES_MAX, RICH, DIVERT, DIVERT_U, DIVERT_STEP, CHAOS_YEARS, PREY_UNREST, PREY_CALM, PREY_HIGH, WEAK_PREY, BLIGHT_MIN, BLIGHT_PREY, BLIGHT_FULL, LORD_PREY, LORD_PREY_MAX, STAND, STAND_DAYS, STAND_SLAIN, STAND_TAKEN, WINTER_T, WINTER_ALWAYS, WINTER_JITTER, BREAK_MAX, BREAK, COUNTER, STALL, BROKE_LENGTH, BROKE_PEACE, REVOLT_LENGTH, CRUSH_GOAL, CEDE } = wm.k;
+  const { PROJECT, KIN_ATTACK, HOME_DEF, CAPITAL_DEF, PROTECT_DEF, P_MAX, P_MIN, CAPITAL_GRACE, PROTECT_KEEP, HOLD, DEFENSE, REGAIN, RES_TARGET, MAX_CUT, MIN_STATE, CEDE_I, SURRENDER_SHARE, SURRENDER_POWER, ALLY_JOIN, TWO_FRONTS, REST, BROKE_CUT, PURSE_0, PLUNDER_FLOOR, TRUCE, NEWBORN, COLLAPSE_TRUCE, MAX_WARS, CRUSH, WAR_ODDS, LOCAL_EXP, BORDER_FULL, FOREIGN, REVANCHE, PREY, PREY_ODDS, GRUDGE_YEARS, GRUDGE, RES_WANT, RES_MAX, RICH, DIVERT, DIVERT_U, DIVERT_STEP, CHAOS_YEARS, PREY_UNREST, PREY_CALM, PREY_HIGH, WEAK_PREY, BLIGHT_MIN, BLIGHT_PREY, BLIGHT_FULL, LORD_PREY, LORD_PREY_MAX, STAND, STAND_DAYS, STAND_SLAIN, STAND_TAKEN, WINTER_T, WINTER_ALWAYS, WINTER_JITTER, BREAK_MAX, BREAK, COUNTER, STALL, BROKE_LENGTH, BROKE_PEACE, REVOLT_LENGTH, CRUSH_GOAL, CEDE } = wm.k;
   const { FOE_ODDS, FRIEND_JOIN } = pm.knobs.get(POLICY_KNOBS);
   const { ADULT } = pm.knobs.get(REGENTS_KNOBS);
   const api = civApi(sim);
@@ -803,8 +816,18 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     // 接壤的邻国:边界长短(州与州相邻的对数)、边境上对方的州(和最好打的那条边);邻国手里有几州是从本国夺去的(收复失地)
     const border = new Map<number, number>();
     const front = new Map<number, Map<number, number>>();
-    /** 邻国 q 手里有几州是从本国夺去的(收复失地;只扫 q 的国土) */
+    /** 邻国 q 是不是本国大崩解切出的、还在禁收复期内(或作者永久禁止) */
+    const collapseProtected = (q: number) => {
+      const from = wm.collapseChild.get(q);
+      if (from === undefined) return false;
+      const Q = pm.polities[q];
+      if (Q.parent !== p) return false;
+      if (wm.noReclaim.get(q) === p) return true;
+      return t - from < COLLAPSE_TRUCE;
+    };
+    /** 邻国 q 手里有几州是从本国夺去的(收复失地;只扫 q 的国土);禁收复期内对崩解子女不计 */
     const claims = (q: number) => {
+      if (collapseProtected(q)) return 0;
       let n = 0;
       for (const r of pm.lands[q]) if (wm.prev[r] === p) n++;
       return n;
@@ -847,6 +870,8 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
       if (Q.ended !== undefined || t - (wm.truce.get(pairKey(p, q)) ?? -Infinity) < TRUCE) continue;
       // 分裂 / 复国出来的国家有 NEWBORN 年的站稳期:不会一出生就被吞掉
       if (Q.parent !== undefined && t - Q.founded < NEWBORN) continue;
+      // 大崩解切出的继承国:母国内 COLLAPSE_TRUCE 年(或作者禁止收复)不得宣战
+      if (collapseProtected(q)) continue;
       const qw = warsOf(q);
       if (qw.length >= MAX_WARS || qw.some((v) => v.a === p || v.b === p)) continue;
       // 阶段 4 干预:不打盟国;不许灭的国家只剩几州时没什么可打的
@@ -1180,6 +1205,8 @@ export function resumeWars(sim: CivSim, world: World, civ: Civ): void {
     if (e.kind === 'war') {
       wm.wars[e.war] = { id: e.war, a: e.a, b: e.b, start: e.year, takes: [] };
       if (e.cause === 'quell' || e.cause === 'heir' || e.cause === 'trek') civil.add(e.war);
+    } else if (e.kind === 'split' && e.cause === 'collapse') {
+      wm.collapseChild.set(e.a, e.year);
     } else if (e.kind === 'conquer' && e.war >= 0) wm.wars[e.war]?.takes.push({ year: e.year, region: e.region, by: e.a });
     else if (e.kind === 'peace') {
       const w = wm.wars[e.war];
