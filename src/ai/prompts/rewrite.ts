@@ -668,6 +668,8 @@ export const REWRITE_OPS = [
   '- cede 把一州划给 country:用 region 指定州,或用 city 指定"这座城所在的州";permanent: true = 之后谁也夺不走',
   '- found 在一州立一个新国家(用 region 或 city 指定;材料里没列那一带的州时用 at = [经度, 纬度],会挑离它最近、那一年有人住的一州,不要自己编 R 编号;州要住得了人,那一年还没人住的会有一支新民族来这里落脚);' +
     '可给 name = 国名,只写名字本身,不带"国""王国""王朝"之类的国号。作者没说年份时不要在最后几年立国(新国家来不及长大),挑一个早几百年、那一带有人住的年份',
+  '- destroy 灭国 country:那一年亡国。给 other = 并入哪一国;不给 other = 按模式裂成继承国(切不出的州散成无主)。可给 mode = auto/powers/mixed/shatter(默认 auto)、pieces = 目标块数(软目标)',
+  '- collapse 大崩解 country:强制大崩解,核心留下、其余裂成继承国(国家不亡)。可给 mode、pieces,同 destroy',
   '命令下了就一直有效(给了 until 的到那一年为止)。后果由推演自己展开:你只能下命令,不能直接规定谁打赢、谁灭谁、哪年发生什么。',
   '',
   '### 改名:立即生效,历史不变',
@@ -690,6 +692,7 @@ export const REWRITE_TIPS = [
   '- "让它多撑 N 年":从原本亡国前约 30 年起 protect,until = 原本亡国那年 + N。超过历史的最后一年就写最后一年,并告诉作者历史只推演到那一年、实际多撑了几年。',
   '- "让它撑下去""别让它亡":常见的有三种办法:protect 保护它;halt 禁止要吞它的那国扩张;ally 和强邻结盟。作者不让用其中一种,就试另外几种。',
   '- "国土别变大""别扩张":和 protect 同一年起加 halt,until 也一样;不要从立国起禁,那会把之前的整段历史也改掉。',
+  '- "让它大崩解""东西魏式分裂":用 collapse(核心留下);要亡国再裂 = destroy 不给 other。mode=powers 少切几大块,shatter 碎裂。',
   '- 在海上加岛:小岛用 volcano;大岛用 raise 画一段(两三个点连成一条,或几个点围一圈)。落点要在开阔的海面上,离现有的陆地比新岛的半径远几百公里,不然会和那块陆地连成一片;' +
     '核对结果里会写落点离最近的陆地多远,太近就挪。',
 ].join('\n');
@@ -923,6 +926,8 @@ const OP_ALIAS: Record<string, string> = {
   迁都: 'move',
   划州: 'cede',
   立国: 'found',
+  灭国: 'destroy',
+  大崩解: 'collapse',
   改名: 'rename',
   火山: 'volcano',
   湖: 'lake',
@@ -945,6 +950,8 @@ const OP_WORDS: Record<string, string> = {
   move: '迁都',
   cede: '划州',
   found: '立国',
+  destroy: '灭国',
+  collapse: '大崩解',
   rename: '改名',
   volcano: '火山',
   lake: '湖',
@@ -1097,6 +1104,8 @@ class Checker {
       case 'move':
       case 'cede':
       case 'found':
+      case 'destroy':
+      case 'collapse':
         return this.command(op, o);
       case 'rename':
         return this.rename(o);
@@ -1218,6 +1227,27 @@ class Checker {
         if (own.polity[s.region] !== A.id) return fail(text, `第 ${from} 年${s.name}不在${A.name}的国土里`);
         if (capitalAt(P[A.id], from) === s.id) return fail(text, `${s.name}那一年本来就是国都`);
         v = { kind, a, city: settlementKey(civ, s.id), from };
+      } else if (kind === 'destroy' || kind === 'collapse') {
+        const modeRaw = typeof o.mode === 'string' ? o.mode : undefined;
+        const mode = modeRaw === 'auto' || modeRaw === 'powers' || modeRaw === 'mixed' || modeRaw === 'shatter' ? modeRaw : undefined;
+        const piecesRaw = typeof o.pieces === 'number' && Number.isFinite(o.pieces) ? Math.min(12, Math.max(2, Math.round(o.pieces))) : undefined;
+        const modeTxt = mode && mode !== 'auto' ? `(${mode === 'powers' ? '割据分治' : mode === 'shatter' ? '碎裂' : '分崩'})` : mode === 'auto' ? '(自动)' : '';
+        if (kind === 'collapse') {
+          text = `${A.name}:大崩解${modeTxt}`;
+          v = { kind: 'collapse', a, from, ...(mode ? { mode } : {}), ...(piecesRaw !== undefined ? { pieces: piecesRaw } : {}) };
+        } else {
+          const other = o.other ?? o.b ?? o.target ?? o['对方'];
+          if (other !== undefined && other !== null && other !== '') {
+            const B = pol(other, '并入的国家');
+            if (typeof B === 'string') return fail(`${A.name}灭国`, B);
+            if (B.id === A.id) return fail(`${A.name}灭国`, '不能并入自己');
+            text = `${A.name}亡,国土并入${B.name}`;
+            v = { kind: 'destroy', a, from, b: polityKey(civ, B.id) };
+          } else {
+            text = `${A.name}亡,按模式裂成继承国${modeTxt}`;
+            v = { kind: 'destroy', a, from, ...(mode ? { mode } : {}), ...(piecesRaw !== undefined ? { pieces: piecesRaw } : {}) };
+          }
+        }
       } else {
         const R = regionOf();
         if (typeof R === 'string') return fail(`划州给${A.name}`, R);
