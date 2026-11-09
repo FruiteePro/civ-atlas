@@ -139,6 +139,9 @@ export const WARS_KNOBS = defineKnobs('wars', {
   /** 大崩解当年母国国力倍数;之后 COLLAPSE_WEAK_YEARS 年内线性回到 1(有心无力) */
   COLLAPSE_WEAK: 0.5,
   COLLAPSE_WEAK_YEARS: 40,
+  /** 崩解继承国立国防御倍数;COLLAPSE_VIGOR_YEARS 年内线性回到 1;期内无割据、出兵满额 */
+  COLLAPSE_VIGOR: 1.5,
+  COLLAPSE_VIGOR_YEARS: 40,
   /** 迁都后这么多年内新国都攻不下(不会几年里一迁再迁) */
   CAPITAL_GRACE: 20,
   /** 丢了国都后剩下不到这么多州的国家撑不下去,残部归攻方、亡国 */
@@ -373,6 +376,14 @@ export function collapseWeakFactor(from: Year | undefined, t: number, weak: numb
   return weak + (1 - weak) * (age / years);
 }
 
+/** 崩解继承国立国防御倍数:当年 vigor,years 年内线性回到 1;非继承国 = 1 */
+export function collapseVigorFactor(founded: Year | undefined, isCollapseChild: boolean, t: number, vigor: number, years: number): number {
+  if (!isCollapseChild || founded === undefined || years <= 0) return 1;
+  const age = t - founded;
+  if (age < 0 || age >= years) return 1;
+  return vigor + (1 - vigor) * (age / years);
+}
+
 /** 国家 p 第 k 次看邻国的时刻 */
 function checkTime(wm: WarModel, p: number, k: number): number {
   const P = wm.pm.polities[p];
@@ -468,7 +479,7 @@ export function warModelOf(sim: CivSim): WarModel | undefined {
 
 /** 登记战争的事件处理和监听(installPolities 之后调用) */
 export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarModel = newModel(pm)): WarModel {
-  const { PROJECT, KIN_ATTACK, HOME_DEF, CAPITAL_DEF, PROTECT_DEF, P_MAX, P_MIN, CAPITAL_GRACE, PROTECT_KEEP, HOLD, DEFENSE, REGAIN, RES_TARGET, MAX_CUT, MIN_STATE, CEDE_I, SURRENDER_SHARE, SURRENDER_POWER, ALLY_JOIN, TWO_FRONTS, REST, BROKE_CUT, PURSE_0, PLUNDER_FLOOR, TRUCE, NEWBORN, COLLAPSE_TRUCE, COLLAPSE_WEAK, COLLAPSE_WEAK_YEARS, MAX_WARS, CRUSH, WAR_ODDS, LOCAL_EXP, BORDER_FULL, FOREIGN, REVANCHE, PREY, PREY_ODDS, GRUDGE_YEARS, GRUDGE, RES_WANT, RES_MAX, RICH, DIVERT, DIVERT_U, DIVERT_STEP, CHAOS_YEARS, PREY_UNREST, PREY_CALM, PREY_HIGH, WEAK_PREY, BLIGHT_MIN, BLIGHT_PREY, BLIGHT_FULL, LORD_PREY, LORD_PREY_MAX, STAND, STAND_DAYS, STAND_SLAIN, STAND_TAKEN, WINTER_T, WINTER_ALWAYS, WINTER_JITTER, BREAK_MAX, BREAK, COUNTER, STALL, BROKE_LENGTH, BROKE_PEACE, REVOLT_LENGTH, CRUSH_GOAL, CEDE } = wm.k;
+  const { PROJECT, KIN_ATTACK, HOME_DEF, CAPITAL_DEF, PROTECT_DEF, P_MAX, P_MIN, CAPITAL_GRACE, PROTECT_KEEP, HOLD, DEFENSE, REGAIN, RES_TARGET, MAX_CUT, MIN_STATE, CEDE_I, SURRENDER_SHARE, SURRENDER_POWER, ALLY_JOIN, TWO_FRONTS, REST, BROKE_CUT, PURSE_0, PLUNDER_FLOOR, TRUCE, NEWBORN, COLLAPSE_TRUCE, COLLAPSE_WEAK, COLLAPSE_WEAK_YEARS, COLLAPSE_VIGOR, COLLAPSE_VIGOR_YEARS, MAX_WARS, CRUSH, WAR_ODDS, LOCAL_EXP, BORDER_FULL, FOREIGN, REVANCHE, PREY, PREY_ODDS, GRUDGE_YEARS, GRUDGE, RES_WANT, RES_MAX, RICH, DIVERT, DIVERT_U, DIVERT_STEP, CHAOS_YEARS, PREY_UNREST, PREY_CALM, PREY_HIGH, WEAK_PREY, BLIGHT_MIN, BLIGHT_PREY, BLIGHT_FULL, LORD_PREY, LORD_PREY_MAX, STAND, STAND_DAYS, STAND_SLAIN, STAND_TAKEN, WINTER_T, WINTER_ALWAYS, WINTER_JITTER, BREAK_MAX, BREAK, COUNTER, STALL, BROKE_LENGTH, BROKE_PEACE, REVOLT_LENGTH, CRUSH_GOAL, CEDE } = wm.k;
   const { FOE_ODDS, FRIEND_JOIN } = pm.knobs.get(POLICY_KNOBS);
   const { ADULT } = pm.knobs.get(REGENTS_KNOBS);
   const api = civApi(sim);
@@ -553,6 +564,11 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     if (culture[r] === Y.culture) sy *= HOME_DEF;
     if (pm.settlements[capitalAt(Y, t)].region === r) sy *= CAPITAL_DEF;
     if (wm.iv?.protects(y, t)) sy *= PROTECT_DEF; // 阶段 4 干预"不许灭":守得格外牢
+    // 崩解继承国立国初期:国土守得更牢
+    {
+      const vig = collapseVigorFactor(Y.founded, wm.collapseChild.has(y), t, COLLAPSE_VIGOR, COLLAPSE_VIGOR_YEARS);
+      if (vig !== 1) sy *= vig;
+    }
     const a2 = sx * sx;
     const d2 = sy * sy;
     const p = a2 + d2 > 0 ? a2 / (a2 + d2) : 0.5;

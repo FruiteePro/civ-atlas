@@ -52,7 +52,7 @@ import { fexp, keyed, keyed4, subSeed } from './engine/rand';
 import { type CivSim } from './engine/sim';
 import { polityModelOf, powerScaleOf, unrestShiftOf, type PolityModel } from './polities';
 import { POLICY_KNOBS } from './policy';
-import { warModelOf, type War, type WarModel } from './wars';
+import { WARS_KNOBS, collapseVigorFactor, warModelOf, type War, type WarModel } from './wars';
 import { politicsModelOf, type PoliticsModel } from './politics';
 import { Cap, CAP_COUNT, cityPopulationsAt, devModelOf, eraLevel, type DevModel } from './development';
 import { ERA_COL, Practice, RAIL_RECLAIM, WIRE_LORD, hasPractice, practiceMask } from './practices';
@@ -558,7 +558,14 @@ function hook(sim: CivSim, seed: number, lords: Warlord[], saved: TablesState | 
     lords.push({ p, region: r, city: pm.cityOf[r], start: t, defied: -Infinity });
     sim.record('warlord', { a: p, region: r, settlement: pm.cityOf[r], war: domainOf(lords[lords.length - 1], t).length });
   };
+  /** 崩解继承国立国初期:不出割据、出兵满额 */
+  const vigorYoung = (p: number, t: number): boolean => {
+    const { COLLAPSE_VIGOR, COLLAPSE_VIGOR_YEARS } = pm.knobs.get(WARS_KNOBS);
+    const P = pm.polities[p];
+    return collapseVigorFactor(P?.founded, wm.collapseChild.has(p), t, COLLAPSE_VIGOR, COLLAPSE_VIGOR_YEARS) > 1;
+  };
   const canRaise = (p: number, r: number, t: number): boolean => {
+    if (vigorYoung(p, t)) return false;
     const s = pm.cityOf[r];
     return s >= 0 && pm.settlements[s].ended === undefined && owner[r] === p && r !== capRegion(pm.polities[p], t) && lordsOf(p, t).length < MAX_LORDS;
   };
@@ -575,6 +582,7 @@ function hook(sim: CivSim, seed: number, lords: Warlord[], saved: TablesState | 
 
   // ---- 打仗:出兵的几成、抗命 ----
   api.war.levy = (p, t) => {
+    if (vigorYoung(p, t)) return () => 1; // 立国初期满额出兵
     const lordsN = mark(p, t);
     return (r: number) => (lordsN && inLord(r) ? 0 : Math.min(1, raw(p, r, t) + LEVY_0));
   };
@@ -623,6 +631,7 @@ function hook(sim: CivSim, seed: number, lords: Warlord[], saved: TablesState | 
       }
     }
     if (pm.size[p] < MIN_SIZE || t - P.founded < MIN_AGE || ls.length >= MAX_LORDS) return false;
+    if (vigorYoung(p, t)) return false; // 崩解继承国立国初期不割据
     if (wm.iv?.unites(p, t)) return false; // 阶段 4 干预"禁止分裂":也不割据
     // 挑管得最松、有城的那州
     stamp++;

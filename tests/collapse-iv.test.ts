@@ -12,7 +12,7 @@ import { fragmentModeFromOpt } from '../src/gen/civ/fragmentMode';
 import { capitalAt } from '../src/gen/civ/growth';
 import { resumeCiv } from '../src/gen/civ/modules';
 import { polityModelOf } from '../src/gen/civ/polities';
-import { collapseTruceYears, collapseWeakFactor, warModelOf } from '../src/gen/civ/wars';
+import { collapseTruceYears, collapseWeakFactor, collapseVigorFactor, warModelOf } from '../src/gen/civ/wars';
 import { newIvDoneText } from '../src/ui/newIvInfo';
 import { nameAt } from '../src/ui/Interventions';
 
@@ -108,6 +108,16 @@ describe('post-collapse truce', () => {
   }, 180_000);
 });
 
+
+
+describe('successor founding vigor', () => {
+  it('collapseVigorFactor: 1.5 at founding, 1 after 40y; non-child stays 1', () => {
+    expect(collapseVigorFactor(1000, true, 1000, 1.5, 40)).toBe(1.5);
+    expect(collapseVigorFactor(1000, true, 1040, 1.5, 40)).toBe(1);
+    expect(collapseVigorFactor(1000, true, 1020, 1.5, 40)).toBeCloseTo(1.25, 5);
+    expect(collapseVigorFactor(1000, false, 1000, 1.5, 40)).toBe(1);
+  });
+});
 
 describe('post-collapse parent weakness', () => {
   it('collapseWeakFactor: 0.5 at year 0, 1 after 40y, linear mid', () => {
