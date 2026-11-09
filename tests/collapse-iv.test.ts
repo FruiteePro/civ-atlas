@@ -111,6 +111,15 @@ describe('post-collapse truce', () => {
 
 
 
+
+describe('sibling alliance priority', () => {
+  it('diplomacy knobs expose earlier check and pact bonus for collapse siblings', async () => {
+    const { DIPLOMACY_KNOBS } = await import('../src/gen/civ/diplomacy');
+    expect(DIPLOMACY_KNOBS.values.SIB_DIP_FIRST).toBeLessThan(DIPLOMACY_KNOBS.values.DIP_FIRST);
+    expect(DIPLOMACY_KNOBS.values.SIB_PACT).toBeGreaterThan(1);
+  });
+});
+
 describe('shared collapse family claims', () => {
   it('collapseClaimStrength: full to 100y, zero by 200y', () => {
     expect(collapseClaimStrength(0, 100, 200)).toBe(1);

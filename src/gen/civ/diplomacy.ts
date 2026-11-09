@@ -65,6 +65,9 @@ export const DIPLOMACY_KNOBS = defineKnobs('diplomacy', {
   /** 立国后多少年开始看邦交;之后每隔多少年看一次(每段里 20%–80% 处随机一个时刻) */
   DIP_FIRST: 50,
   DIP_EVERY: 40,
+  /** 崩解继承国更早开始看邦交;与同家族、共惧同一强邻结盟时分数/赔率 × SIB_PACT */
+  SIB_DIP_FIRST: 20,
+  SIB_PACT: 2,
   /** 强邻:国力是自己的这么多倍以上(正在交兵的不论强弱都算) */
   THREAT: 1.5,
   /** 称臣:强邻国力是自己的这么多倍以上、自己不超过这么多州才考虑;赔率 × (倍数 ÷ SUBMIT_RATIO)^SUBMIT_EXP × 强邻的扩张性 */
@@ -182,6 +185,8 @@ export class DiplomacyModel {
   /** 这次推演的那套数里邦交这张表 */
   readonly k: DiplomacyKnobs;
   readonly base: number;
+  /** 战争模型(installDiplomacy 挂上;崩解家族结盟用) */
+  wm?: import('./wars').WarModel;
   /** 结着的盟 */
   pacts: Pact[] = [];
   /** 藩属 → 宗主 */
@@ -303,9 +308,10 @@ export function diplomacyModelOf(sim: CivSim): DiplomacyModel | undefined {
 
 /** 国家 p 第 k 次看邦交的时刻 */
 function checkTime(dm: DiplomacyModel, p: number, k: number): number {
-  const { DIP_FIRST, DIP_EVERY } = dm.k;
+  const { DIP_FIRST, DIP_EVERY, SIB_DIP_FIRST } = dm.k;
   const P = dm.pm.polities[p];
-  return P.founded + DIP_FIRST + DIP_EVERY * (k + 0.2 + 0.6 * keyed(dm.base, dm.pm.ptag[p], k, U_CHECK_T));
+  const first = dm.wm?.collapseChild.has(p) ? SIB_DIP_FIRST : DIP_FIRST;
+  return P.founded + first + DIP_EVERY * (k + 0.2 + 0.6 * keyed(dm.base, dm.pm.ptag[p], k, U_CHECK_T));
 }
 
 // ---------------------------------------------------------------------------
@@ -315,12 +321,13 @@ function checkTime(dm: DiplomacyModel, p: number, k: number): number {
 export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyModel = new DiplomacyModel(pm, civApi(sim).diplomacy)): DiplomacyModel {
   const { KIN_PACT, KIN_JOIN } = pm.knobs.get(MARRIAGES_KNOBS);
   const { FRIEND_PACT, FRIEND_JOIN } = pm.knobs.get(POLICY_KNOBS);
-  const { MAX_WARS, WEAK_YEARS, WEAK_LOSS, DEFECT_MIN, DEFECT_ODDS, DEFECT_K, DEFECT_R0, DEFECT_FAR, DEFECT_FOREIGN, PUNISH, ABSORB_AGE, ABSORB_MAX, ABSORB_RATIO, ABSORB_SETTLE, ABSORB_ODDS, ABSORB_FOREIGN, LAPSE_AGE, LAPSE_RATIO, LAPSE_P, THREAT, SUBMIT_RATIO, SUBMIT_MAX, RESUBMIT_REST, SUBMIT_ODDS, SUBMIT_EXP, MAX_PACTS, PACT_REST, PACT_MIN_POWER, PACT_FEAR, PACT_COWAR, PACT_ODDS, PACT_JOIN, RESCUE, SUE_RATIO, SUE_LEFT, SUE_MIN, SUE_FRAC, SUE_ACCEPT, SUE_KIN, SUE_FOREIGN, SUE_CRUSH, SUE_UNIFY, SUE_FAR, SUE_OFFER } = dm.k;
+  const { MAX_WARS, WEAK_YEARS, WEAK_LOSS, DEFECT_MIN, DEFECT_ODDS, DEFECT_K, DEFECT_R0, DEFECT_FAR, DEFECT_FOREIGN, PUNISH, ABSORB_AGE, ABSORB_MAX, ABSORB_RATIO, ABSORB_SETTLE, ABSORB_ODDS, ABSORB_FOREIGN, LAPSE_AGE, LAPSE_RATIO, LAPSE_P, THREAT, SUBMIT_RATIO, SUBMIT_MAX, RESUBMIT_REST, SUBMIT_ODDS, SUBMIT_EXP, MAX_PACTS, PACT_REST, PACT_MIN_POWER, PACT_FEAR, PACT_COWAR, PACT_ODDS, PACT_JOIN, RESCUE, SUE_RATIO, SUE_LEFT, SUE_MIN, SUE_FRAC, SUE_ACCEPT, SUE_KIN, SUE_FOREIGN, SUE_CRUSH, SUE_UNIFY, SUE_FAR, SUE_OFFER, SIB_PACT } = dm.k;
   const api = civApi(sim);
   const wm = warModelOf(sim);
   if (!wm) throw new Error('installDiplomacy:先 installWars');
   models.set(sim, dm);
   wm.dm = dm;
+  dm.wm = wm;
   const T = pm.terrain;
   const reg = T.regions;
   const owner = sim.owners[Layer.Polity];
@@ -518,6 +525,12 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
       if (pol && picks(pm, pol.friends, z)) score *= FRIEND_PACT;
       // 结着亲的先找(marriage.ts)
       if (api.diplomacy.bond) score *= 1 + (KIN_PACT - 1) * api.diplomacy.bond(p, z, t);
+      // 同一次大崩解的继承国、共惧同一强邻:优先结盟
+      const fi = wm.familyOf.get(p);
+      if (fi !== undefined && wm.familyOf.get(z) === fi) {
+        const [zf] = mainThreat(z, t, pz);
+        if (zf === f) score *= SIB_PACT;
+      }
       if (score > bestScore) {
         bestScore = score;
         best = z;
@@ -525,7 +538,14 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
       }
     }
     if (best < 0) return false;
-    const odds = PACT_ODDS * Math.sqrt(Math.max(ratio, 1) / THREAT) * (cowar ? PACT_COWAR : 1);
+    let odds = PACT_ODDS * Math.sqrt(Math.max(ratio, 1) / THREAT) * (cowar ? PACT_COWAR : 1);
+    {
+      const fi = wm.familyOf.get(p);
+      if (fi !== undefined && wm.familyOf.get(best) === fi) {
+        const [bf] = mainThreat(best, t, powerOf(best, t));
+        if (bf === f) odds *= SIB_PACT;
+      }
+    }
     if (keyed4(dm.base, pm.ptag[p], pm.ptag[best], k, U_PACT) >= odds / (1 + odds)) return false;
     const sid = capitalAt(pm.polities[p], t);
     record('alliance', { a: p, b: best, region: pm.settlements[sid].region, settlement: sid, foe: f });
