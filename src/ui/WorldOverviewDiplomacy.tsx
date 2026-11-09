@@ -10,7 +10,7 @@
 import { useMemo } from 'react';
 import type { Civ } from '../gen/civ/types';
 import { polityAlive, polityName } from '../gen/readers/openQuery';
-import { polityTies, type PolityTies } from '../gen/civ/diplomacy';
+import { relationsAt } from '../gen/civ/diplomacy';
 import { setCivTime, setSelection } from './civView';
 import { closeOverview } from './overviewStore';
 import { PolityFlag } from './Flag';
@@ -45,32 +45,15 @@ interface Vassalage {
   since: number; // 建立年份
 }
 
-/** 从史事中提取当前年份的外交关系 */
-function extractDiplomacy(civ: Civ, year: number): { alliances: Alliance[]; wars: War[]; vassalages: Vassalage[] } {
-  const alliances: Alliance[] = [];
-  const wars: War[] = [];
-  const vassalages: Vassalage[] = [];
-  
-  // 提取联盟（alliance事件，未被unally断盟）
-  const unallied = new Set<string>();
-  for (const e of civ.annals) {
-    if (e.year > year) break;
-    if (e.kind === 'unally') {
-      unallied.add(`${Math.min(e.a, e.b)}-${Math.max(e.a, e.b)}`);
-    }
-  }
-  
-  for (const e of civ.annals) {
-    if (e.year > year) break;
-    if (e.kind === 'alliance') {
-      const key = `${Math.min(e.a, e.b)}-${Math.max(e.a, e.b)}`;
-      if (!unallied.has(key) && polityAlive(civ.polities[e.a], year) && polityAlive(civ.polities[e.b], year)) {
-        alliances.push({ a: e.a, b: e.b, since: e.year, foe: e.foe ?? -1 });
-      }
-    }
-  }
-  
+/** 从史事中提取当前年份的外交关系（盟/藩对齐 relationsAt 的顺序语义） */
+export function extractDiplomacy(civ: Civ, year: number): { alliances: Alliance[]; wars: War[]; vassalages: Vassalage[] } {
+  // 盟约、宗藩：复用引擎同款顺序扫描（结→断→再结、submit→defect 都正确）
+  const { liege, pacts } = relationsAt(civ, year);
+  const alliances: Alliance[] = pacts.map((p) => ({ a: p.a, b: p.b, since: p.since, foe: p.foe }));
+  const vassalages: Vassalage[] = [...liege].map(([vassal, x]) => ({ lord: x.liege, vassal, since: x.since }));
+
   // 提取战争（war事件，未结束）
+  const wars: War[] = [];
   const warMap = new Map<number, War>();
   for (const e of civ.annals) {
     if (e.year > year) break;
@@ -83,26 +66,7 @@ function extractDiplomacy(civ: Civ, year: number): { alliances: Alliance[]; wars
     // TODO: 战争结束事件（peace等）应该移除战争
   }
   wars.push(...warMap.values());
-  
-  // 提取宗藩关系（submit事件，未被defect断绝）
-  const defected = new Set<string>();
-  for (const e of civ.annals) {
-    if (e.year > year) break;
-    if (e.kind === 'defect') {
-      defected.add(`${e.b}-${e.a}`); // b脱离a
-    }
-  }
-  
-  for (const e of civ.annals) {
-    if (e.year > year) break;
-    if (e.kind === 'submit') {
-      const key = `${e.a}-${e.b}`; // a臣服于b
-      if (!defected.has(key) && polityAlive(civ.polities[e.a], year) && polityAlive(civ.polities[e.b], year)) {
-        vassalages.push({ lord: e.b, vassal: e.a, since: e.year });
-      }
-    }
-  }
-  
+
   return { alliances, wars, vassalages };
 }
 
