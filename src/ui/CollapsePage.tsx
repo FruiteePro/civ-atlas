@@ -38,6 +38,7 @@ export function CollapsePage({ civ, id, year, from }: { civ: Civ; id: number; ye
   const shown = nameAt(p, year);
   const [fragMode, setFragMode] = useState<FragmentModeChoice>('auto');
   const [pieces, setPieces] = useState('');
+  const [noReclaim, setNoReclaim] = useState(false);
   const life = useNationLife(['collapse'], id);
 
   const why = (() => {
@@ -58,8 +59,13 @@ export function CollapsePage({ civ, id, year, from }: { civ: Civ; id: number; ye
       from: y,
       mode: fragMode,
       ...(piecesN !== undefined && Number.isFinite(piecesN) ? { pieces: piecesN } : {}),
+      ...(noReclaim ? { noReclaim: true } : {}),
     };
-    const err = queueIntervention(v, `${shown}:大崩解（${fragLabel}）`, { self: id, target: null, shown });
+    const err = queueIntervention(
+      v,
+      `${shown}:大崩解（${fragLabel}${noReclaim ? '，禁收复' : ''}）`,
+      { self: id, target: null, shown },
+    );
     if (err) return setMsg(err);
     closeCmdPage();
   };
@@ -120,9 +126,19 @@ export function CollapsePage({ civ, id, year, from }: { civ: Civ; id: number; ye
               style={{ width: 64 }}
             />
           </label>
+          <label className="cp-note" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input
+              type="checkbox"
+              data-act="collapse-no-reclaim"
+              checked={noReclaim}
+              onChange={(e) => (setNoReclaim(e.target.checked), clear())}
+            />
+            <span>禁止母国收复（永久不许对继承国开战夺回）</span>
+          </label>
           <span className="cp-note">
             {name} 按「{fragLabel}」崩解
-            {pieces.trim() ? `（尽量靠近 ${pieces} 块）` : ''}；国都一带留给原来的国家，其余自立。
+            {pieces.trim() ? `（尽量靠近 ${pieces} 块）` : ''}；国都一带留给原来的国家，其余自立
+            {noReclaim ? '；禁止母国收复' : ''}。
           </span>
         </div>
         <div className="iv-sum" data-collapse="sum">

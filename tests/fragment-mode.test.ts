@@ -91,6 +91,10 @@ describe('fragmentMode assessment', () => {
     expect(fragmentModeFromOpt(FRAGMENT_MODE_OPT.mixed)).toBe('mixed');
     expect(fragmentModeFromOpt(FRAGMENT_MODE_OPT.shatter)).toBe('shatter');
     expect(fragmentModeFromOpt(undefined)).toBeUndefined();
+    // bit 4 = 禁止母国收复,低 2 位仍是模式
+    expect(fragmentModeFromOpt(FRAGMENT_MODE_OPT.powers | 4)).toBe('powers');
+    expect(fragmentModeFromOpt(FRAGMENT_MODE_OPT.mixed | 4)).toBe('mixed');
+    expect(fragmentModeFromOpt(FRAGMENT_MODE_OPT.shatter | 4)).toBe('shatter');
   });
 });
 

@@ -1,11 +1,13 @@
 /**
  * 作者「大崩解」干预:核心留下,其余裂成继承国;mode / pieces。
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_PARAMS, generateWorld } from '../src/gen/world';
 import { generateCiv } from '../src/gen/civ';
 import { ownersAt } from '../src/gen/civ/engine/timeline';
-import { polityKey, type Intervention } from '../src/gen/edits';
+import { cleanIntervention, polityKey, type Intervention } from '../src/gen/edits';
 import { fragmentModeFromOpt } from '../src/gen/civ/fragmentMode';
 import { capitalAt } from '../src/gen/civ/growth';
 import { newIvDoneText } from '../src/ui/newIvInfo';
@@ -78,5 +80,54 @@ describe('post-collapse truce', () => {
       (e) => e.kind === 'war' && e.year < T + 100 && e.a === id && kids.has(e.b) && e.cause === 'claim',
     );
     expect(early, `claim wars before +100: ${early.map((e) => e.year)}`).toHaveLength(0);
+  }, 180_000);
+});
+
+describe('forbid parent reclaim (noReclaim)', () => {
+  it('cleanIntervention + UI data path keep noReclaim', () => {
+    const raw = { kind: 'collapse', a: 'polity:c1#0', from: 1600, mode: 'shatter', noReclaim: true };
+    const v = cleanIntervention(raw)!;
+    expect(v.kind).toBe('collapse');
+    if (v.kind !== 'collapse') return;
+    expect(v.noReclaim).toBe(true);
+    const d = cleanIntervention({ kind: 'destroy', a: 'polity:c1#0', from: 1600, mode: 'mixed', pieces: 4, noReclaim: true })!;
+    expect(d.kind).toBe('destroy');
+    if (d.kind !== 'destroy') return;
+    expect(d.noReclaim).toBe(true);
+    expect(d.mode).toBe('mixed');
+    expect(d.pieces).toBe(4);
+    // UI 勾选控件挂在 Collapse / Destroy 页
+    const collapseSrc = readFileSync(join(__dirname, '../src/ui/CollapsePage.tsx'), 'utf8');
+    const destroySrc = readFileSync(join(__dirname, '../src/ui/DestroyPage.tsx'), 'utf8');
+    expect(collapseSrc).toContain('data-act="collapse-no-reclaim"');
+    expect(collapseSrc).toContain('禁止母国收复');
+    expect(destroySrc).toContain('data-act="destroy-no-reclaim"');
+    expect(destroySrc).toContain('禁止母国收复');
+  });
+
+  it('seed7 collapse noReclaim: opt bit 4 set; parent never claim-wars children', () => {
+    const world = generateWorld({ ...DEFAULT_PARAMS, seed: 7 });
+    const base = generateCiv(world);
+    const T = 1600;
+    const sizes = new Map<number, number>();
+    for (const o of ownersAt(base, T).polity) if (o >= 0) sizes.set(o, (sizes.get(o) ?? 0) + 1);
+    const id = [...sizes.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    const iv: Intervention = { kind: 'collapse', a: polityKey(base, id), from: T, mode: 'shatter', noReclaim: true };
+    // 跑过 +100 年,确认禁收复是永久的(不是只禁 100 年)
+    const civ = generateCiv(world, { interventions: [iv], endYear: T + 150 });
+    const e = civ.annals.find((x) => x.kind === 'intervene' && x.war === 0)!;
+    expect([-8, -2]).toContain(e.b);
+    if (e.b === -8) {
+      expect((e.opt ?? 0) & 4).toBe(4);
+      expect(fragmentModeFromOpt(e.opt)).toBeTruthy();
+      const kids = new Set(
+        civ.annals.filter((x) => x.kind === 'split' && x.cause === 'collapse' && x.b === id && Math.abs(x.year - T) < 0.01).map((x) => x.a),
+      );
+      expect(kids.size).toBeGreaterThan(0);
+      const claims = civ.annals.filter(
+        (x) => x.kind === 'war' && x.a === id && kids.has(x.b) && x.cause === 'claim',
+      );
+      expect(claims, `claim wars despite noReclaim: ${claims.map((x) => x.year)}`).toHaveLength(0);
+    }
   }, 180_000);
 });
