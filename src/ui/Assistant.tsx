@@ -564,7 +564,7 @@ function Proposal({ t, latest, phone, busy, previewing, civ }: { t: AsTurn; late
       seed: civ.seed,
       year: civ.endYear,
       edits: edits,
-    });
+    }).valid;
     
     if (isStale) {
       setMsg('预览已过期，不能确认');
@@ -638,7 +638,7 @@ function Proposal({ t, latest, phone, busy, previewing, civ }: { t: AsTurn; late
           onCancel={cancelBaselinePreview}
           loading={baselineState.status === 'generating-baseline' || baselineState.status === 'generating-intervention'}
           error={baselineState.error}
-          stale={!validateCurrentPreview({ seed: civ.seed, year: civ.endYear, edits })}
+          stale={!validateCurrentPreview({ seed: civ.seed, year: civ.endYear, edits }).valid}
         />
       )}
       {t.applied && numbered ? (
