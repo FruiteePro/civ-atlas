@@ -177,8 +177,12 @@ export function AssistantPanel({ phone, world, raster, civ, raw, lock, busy }: A
               className={`ast-mode${st.intervene ? ' on' : ''}`}
               role="switch"
               aria-checked={st.intervene}
-              aria-label="干预"
-              title={st.intervene ? '干预开着：可提议修改世界' : '讲故事：只问答，不改世界'}
+              aria-label={st.intervene ? '干预开着' : '讲故事'}
+              title={
+                st.intervene
+                  ? '干预开着：助手可提议灭国、大崩解、改疆域等，你确认后才改世界'
+                  : '讲故事：只问答、解说历史，不提议改世界。点一下打开干预'
+              }
               data-act="ast-intervene"
               onClick={() => setInterveneMode(!st.intervene)}
             >
