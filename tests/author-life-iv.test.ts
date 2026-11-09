@@ -29,7 +29,7 @@ const SU: AuthorCharacter = { id: 2, name: '苏晚', color: 'purple', born: 2402
 
 describe('国家的事记在作者人物名下(干预的 author)', () => {
   it('只认结盟、立约、划中立地、迁都、划州、灭国、立国、方针、天灾、大迁徙(连同不许迁);别的种类、不合格的编号去掉', () => {
-    expect([...AUTHOR_IV_KINDS].sort()).toEqual(['ally', 'cede', 'destroy', 'disaster', 'found', 'move', 'neutral', 'policy', 'stay', 'treaty', 'trek']);
+    expect([...AUTHOR_IV_KINDS].sort()).toEqual(['ally', 'cede', 'collapse', 'destroy', 'disaster', 'found', 'move', 'neutral', 'policy', 'stay', 'treaty', 'trek']);
     const ally = { kind: 'ally', a: 'polity:c1#0', b: 'polity:c2#0', from: 1500, author: 3 };
     expect(cleanIntervention(ally)).toBe(ally);
     expect(cleanIntervention({ ...ally, author: 0 })).toEqual({ kind: 'ally', a: 'polity:c1#0', b: 'polity:c2#0', from: 1500 });

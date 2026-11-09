@@ -49,10 +49,9 @@
  *     (超过 HEG_0 的部分,再占 HEG_SPAN 加满 HEG_W),称霸一块大陆的国家迟早散架,过些年再被邻国、新兴的国家收拾起来。
  *     崩的时候先做局势评估(fragmentMode.ts 的 assessFragment:中央强弱 centerStrength、割据集中度 magnateConcentration),
  *     选出模式 powers 割据分治 / mixed 分崩 / shatter 碎裂(也可由灭国干预指定;auto 走同一评估)。
- *     国都一带(按离国都的路程,留国土的几成随模式 keep 表)留给原来的国家,其余按模式切块:
- *       powers:以最强 1–3 个割据座(+必要时远方大城)为种子,2–4 大块,合并距大;
- *       mixed:中等块数与合并距;
- *       shatter:多中心、小合并距(FRAGMENT_MERGE_DIST / FRAGMENT_MIN_SIZE 作 shatter 默认)。
+ *     自然崩解 / 作者大崩解:整国按模式切成 k 块(FPS 选中心 + 多源 BFS),国都所在那一块留给原国,其余自立;
+ *     灭国无接收者:整国切块、无核心。powers 2–4 大块(国土大时至少 3)、mixed 3–6、shatter ~N/8;
+ *     子块小于 minSize 的并进邻近大块;真正够不着 / 无城的才散为无主,整国散回部落只作末路。
  *     各块以块里人口最多的城为都自立(记 split,cause = collapse;故都是同族亡国国都的算复国)。
  *     史事 collapse 的 opt = 模式(0 powers / 1 mixed / 2 shatter),war = 散出去几块。
  *     三种崩法(记在 collapse 的 b;与模式独立,管发展度损失):
@@ -621,8 +620,8 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
   };
 
   /**
-   * 按模式参数基于中心和连通性分配领土。
-   * preferredSeats:割据座优先入选;maxCenters:软目标块数(合并后尽量靠近)。
+   * 显式 k 中心(割据座优先 + 最远点采样) + 多源 BFS 切块。
+   * 小于 minSize 的碎块并进邻近大块;够不着的州留给调用方处理。
    */
   const fragmentByConnectivity = (
     pid: number,
@@ -631,54 +630,81 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
     t: number,
     opts: { mergeDist: number; minSize: number; maxCenters: number; preferredSeats?: readonly number[] },
   ): number[][] => {
-    if (centers.length === 0) return [];
+    if (centers.length === 0 || regions.length === 0) return [];
     const inRegions = new Set(regions);
     const preferred = new Set(opts.preferredSeats ?? []);
     const score = (c: FragmentationCenter) => (c.lord ? 1e6 : 0) + c.population + c.distance * 10;
+    const k = Math.max(1, Math.min(opts.maxCenters, centers.length));
 
-    // 先放割据座,再按人口/远近补足候选(多留一点供合并筛)
-    const sorted = centers.slice().sort((a, b) => score(b) - score(a) || a.region - b.region);
-    const picked: FragmentationCenter[] = [];
-    const take = (c: FragmentationCenter) => {
-      if (picked.some((x) => x.region === c.region)) return;
-      picked.push(c);
-    };
-    for (const c of sorted) if (preferred.has(c.region) || c.lord) take(c);
-    for (const c of sorted) {
-      if (picked.length >= Math.max(opts.maxCenters * 3, opts.maxCenters + 2)) break;
-      take(c);
-    }
-    if (!picked.length) return [];
-
-    // 合并过近的中心;割据座尽量保留
-    const finalCenters: FragmentationCenter[] = [];
-    for (const c of picked) {
-      let tooClose = false;
-      for (let i = 0; i < finalCenters.length; i++) {
-        const fc = finalCenters[i];
-        const avgDist = (c.distance + fc.distance) / 2;
-        if (avgDist <= 0) continue;
-        const relDiff = Math.abs(c.distance - fc.distance) / avgDist;
-        if (relDiff >= opts.mergeDist) continue;
-        tooClose = true;
-        // 新来的是割据座而旧的不是 → 替换
-        if (c.lord && !fc.lord) finalCenters[i] = c;
-        break;
+    const hopDist = (src: number): Int32Array => {
+      const d = new Int32Array(R).fill(-1);
+      let qt = 0;
+      const q = new Int32Array(R);
+      d[src] = 0;
+      q[qt++] = src;
+      const st = ++stamp;
+      for (const r of regions) mark[r] = st;
+      for (let h = 0; h < qt; h++) {
+        const r = q[h];
+        for (let e = reg.adjStart[r]; e < reg.adjStart[r + 1]; e++) {
+          const j = reg.adj[e];
+          const kind = reg.adjKind[e];
+          if (kind === AdjKind.Strait || kind === AdjKind.SeaRoute) continue;
+          if (mark[j] !== st || d[j] >= 0) continue;
+          if (wm.iv?.locked(j, t)) continue;
+          d[j] = d[r] + 1;
+          q[qt++] = j;
+        }
       }
-      if (!tooClose) finalCenters.push(c);
-    }
+      return d;
+    };
 
-    // 软目标:多于 maxCenters 时留下分最高的
-    finalCenters.sort((a, b) => score(b) - score(a) || a.region - b.region);
-    const capped = finalCenters.slice(0, Math.max(1, opts.maxCenters));
-    if (!capped.length) return [];
+    const chosen: FragmentationCenter[] = [];
+    const lords = centers.filter((c) => preferred.has(c.region) || c.lord).sort((a, b) => score(b) - score(a) || a.region - b.region);
+    for (const c of lords) {
+      if (chosen.length >= k) break;
+      if (!chosen.some((x) => x.region === c.region)) chosen.push(c);
+    }
+    const minHop = new Int32Array(R).fill(0x3fffffff);
+    const refresh = (src: number) => {
+      const d = hopDist(src);
+      for (const r of regions) if (d[r] >= 0 && d[r] < minHop[r]) minHop[r] = d[r];
+    };
+    for (const ch of chosen) refresh(ch.region);
+    while (chosen.length < k) {
+      let best: FragmentationCenter | null = null;
+      let bestMin = -1;
+      for (const c of centers) {
+        if (chosen.some((x) => x.region === c.region)) continue;
+        let minD: number;
+        if (!chosen.length) minD = Math.floor(c.population + c.distance);
+        else {
+          minD = minHop[c.region];
+          if (minD === 0x3fffffff) continue;
+        }
+        if (minD > bestMin || (minD === bestMin && best && score(c) > score(best))) {
+          bestMin = minD;
+          best = c;
+        }
+      }
+      if (!best) {
+        const rest = centers.filter((c) => !chosen.some((x) => x.region === c.region)).sort((a, b) => score(b) - score(a) || a.region - b.region);
+        if (!rest.length) break;
+        chosen.push(rest[0]);
+        refresh(rest[0].region);
+      } else {
+        chosen.push(best);
+        refresh(best.region);
+      }
+    }
+    if (!chosen.length) return [];
 
     const piece = new Int32Array(R).fill(-1);
     let qt = 0;
     const bfsQueue = new Int32Array(R);
-    for (let i = 0; i < capped.length; i++) {
-      piece[capped[i].region] = i;
-      bfsQueue[qt++] = capped[i].region;
+    for (let i = 0; i < chosen.length; i++) {
+      piece[chosen[i].region] = i;
+      bfsQueue[qt++] = chosen[i].region;
     }
     const st = ++stamp;
     for (const r of regions) mark[r] = st;
@@ -694,10 +720,62 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
         bfsQueue[qt++] = j;
       }
     }
-    const groups: number[][] = capped.map(() => []);
+    const groups: number[][] = chosen.map(() => []);
     for (const r of regions) if (piece[r] >= 0) groups[piece[r]].push(r);
-    const viable = groups.filter((g) => g.length >= opts.minSize);
-    return viable.length > 0 ? viable : [];
+
+    // 碎块(< minSize)并进邻近更大块
+    const attachCrumb = (gi: number) => {
+      const g = groups[gi];
+      if (!g.length || g.length >= opts.minSize) return;
+      let best = -1;
+      let bestSize = -1;
+      for (const r of g) {
+        for (let e = reg.adjStart[r]; e < reg.adjStart[r + 1]; e++) {
+          const j = reg.adj[e];
+          const kind = reg.adjKind[e];
+          if (kind === AdjKind.Strait || kind === AdjKind.SeaRoute) continue;
+          const pj = piece[j];
+          if (pj < 0 || pj === gi) continue;
+          const sz = groups[pj].length;
+          if (sz > bestSize || (sz === bestSize && pj < best)) {
+            bestSize = sz;
+            best = pj;
+          }
+        }
+      }
+      if (best < 0) return;
+      for (const r of g) {
+        piece[r] = best;
+        groups[best].push(r);
+      }
+      groups[gi] = [];
+    };
+    for (let i = 0; i < groups.length; i++) attachCrumb(i);
+
+    // 未分到的州:若邻接某块则并入最大邻块
+    for (const r of regions) {
+      if (piece[r] >= 0) continue;
+      let best = -1;
+      let bestSize = -1;
+      for (let e = reg.adjStart[r]; e < reg.adjStart[r + 1]; e++) {
+        const j = reg.adj[e];
+        const kind = reg.adjKind[e];
+        if (kind === AdjKind.Strait || kind === AdjKind.SeaRoute) continue;
+        const pj = piece[j];
+        if (pj < 0) continue;
+        const sz = groups[pj].length;
+        if (sz > bestSize || (sz === bestSize && pj < best)) {
+          bestSize = sz;
+          best = pj;
+        }
+      }
+      if (best >= 0) {
+        piece[r] = best;
+        groups[best].push(r);
+      }
+    }
+
+    return groups.filter((g) => g.length >= opts.minSize);
   };
 
   /** 收集评估输入并算出模式(有 control 模型用现算值;没有则退化) */
@@ -766,20 +844,22 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
   // COLLAPSE_ODDS = 0 的世界没有大崩解:大迁徙打进国都也不崩(migration.ts)
   api.politics.shatter = (P: Polity, k: number, t: number): boolean => (wm.iv?.unites(P.id, t) || !(COLLAPSE_ODDS > 0) ? false : collapse(P, k, t));
 
-  /** 按评估/指定模式算出各块(不 secede);空 = 无可行块 */
+  /** 按评估/指定模式算出各块(不 secede);空 = 无可行块。centers = 目标块数(含核心时由调用方 +1) */
   const planPieces = (
     pid: number,
     regions: readonly number[],
     t: number,
     resolved: { mode: FragmentMode; targetPieces: number; mergeDist: number; minSize: number },
     preferredSeats: readonly number[],
+    centerCount?: number,
   ): [number[], number, number][] => {
     const lordSeatSet = new Set(preferredSeats.filter((r) => regions.includes(r)));
     const centers = identifyFragmentationCenters(pid, regions, t, lordSeatSet);
+    const maxCenters = Math.max(1, centerCount ?? resolved.targetPieces);
     const viable = fragmentByConnectivity(pid, regions, centers, t, {
       mergeDist: resolved.mergeDist,
       minSize: resolved.minSize,
-      maxCenters: resolved.targetPieces,
+      maxCenters,
       preferredSeats,
     });
     const dist = pm.capDist[pid];
@@ -802,41 +882,56 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
     return ready;
   };
 
-  // 手动解散产生继承国(灭国无接收者;mode / pieces 由干预传入,缺省 auto)
+  /** 切整国:失败时退到 shatter;keepCore 时多切一块并把含国都的留给原国 */
+  const partitionLand = (
+    pid: number,
+    regions: readonly number[],
+    t: number,
+    assessed: FragmentAssessment,
+    resolved: { mode: FragmentMode; targetPieces: number; mergeDist: number; minSize: number },
+    keepCore: boolean,
+    capR: number,
+  ): { ready: [number[], number, number][]; mode: FragmentMode } => {
+    const tryMode = (res: { mode: FragmentMode; targetPieces: number; mergeDist: number; minSize: number }) => {
+      const centers = keepCore ? Math.min(12, res.targetPieces + 1) : res.targetPieces;
+      const parts = planPieces(pid, regions, t, res, assessed.lordSeats, centers);
+      if (!keepCore) return parts;
+      const keep = parts.find((g) => g[0].includes(capR));
+      return parts.filter((g) => g !== keep);
+    };
+    let ready = tryMode(resolved);
+    let mode = resolved.mode;
+    if (ready.length === 0 && resolved.mode !== 'shatter') {
+      const shatter = resolveFragmentMode('shatter', assessed);
+      ready = tryMode(shatter);
+      if (ready.length) mode = 'shatter';
+    }
+    return { ready, mode };
+  };
+
+  // 手动解散产生继承国(灭国无接收者;整国切块、无核心)
   api.politics.fragmentOnDestroy = (pid, regions, t, _ivIndex, frag) => {
     const assessed = assessPolityFragment(pid, t);
     const resolved = resolveFragmentMode(frag?.mode, assessed, frag?.pieces);
-    const ready = planPieces(pid, regions, t, resolved, assessed.lordSeats);
+    const { ready, mode } = partitionLand(pid, regions, t, assessed, resolved, false, -1);
     for (const [g, sid, r0] of ready) api.politics.secede!(pid, g, sid, r0, t, 'split', 'collapse');
-    return { successors: ready.length, mode: resolved.mode };
+    return { successors: ready.length, mode };
   };
 
-  // 作者大崩解:核心留下,其余切块;国家不亡。返回 kind 供发展度(0/1)
+  // 作者大崩解:整国切块,国都那一块留下;国家不亡。返回 kind 供发展度(0/1)
   api.politics.authorCollapse = (pid, t, ivIndex, frag) => {
     const P = pm.polities[pid];
-    const tag = pm.ptag[pid];
     const mine = pm.lands[pid].slice();
-    const N = mine.length;
     const assessed = assessPolityFragment(pid, t);
     const resolved = resolveFragmentMode(frag?.mode, assessed, frag?.pieces);
-    const dist = pm.capDist[pid];
-    const keepFrac = resolved.keep[0] + (resolved.keep[1] - resolved.keep[0]) * keyed(um.base, tag, ivIndex, U_KEEP);
-    const byDist = mine.slice().sort((a, b) => dist[a] - dist[b] || reg.seat[a] - reg.seat[b]);
-    const keep = new Set<number>(byDist.slice(0, Math.max(1, Math.ceil(N * keepFrac))));
     const capR = pm.settlements[capitalAt(P, t)].region;
-    keep.add(capR);
-    const rest = mine.filter((r) => !keep.has(r) && !wm.iv?.locked(r, t));
-    let ready = planPieces(pid, rest, t, resolved, assessed.lordSeats);
-    let usedMode = resolved.mode;
-    if (ready.length === 0 && resolved.mode !== 'shatter') {
-      const shatter = resolveFragmentMode('shatter', assessed);
-      ready = planPieces(pid, rest, t, shatter, assessed.lordSeats);
-      if (ready.length) usedMode = 'shatter';
-    }
+    const unlocked = mine.filter((r) => !wm.iv?.locked(r, t));
+    if (unlocked.length < PIECE_MIN) return { successors: 0, mode: resolved.mode, kind: 2 };
+    const { ready, mode } = partitionLand(pid, unlocked, t, assessed, resolved, true, capR);
     for (const [g, sid, r0] of ready) api.politics.secede!(pid, g, sid, r0, t, 'split', 'collapse');
     um.collapsed.set(pid, t);
     pol.lastSplit.set(pid, t);
-    return { successors: ready.length, mode: usedMode, kind: ready.length ? 0 : 2 };
+    return { successors: ready.length, mode, kind: ready.length ? 0 : 2 };
   };
 
   const collapse = (P: Polity, k: number, t: number): boolean => {
@@ -846,16 +941,10 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
     const N = mine.length;
     const capSid = capitalAt(P, t);
     const capR = pm.settlements[capSid].region;
-    const dist = pm.capDist[pid];
 
     const assessed = assessPolityFragment(pid, t);
     const resolved = resolveFragmentMode('auto', assessed);
-    const keepFrac = resolved.keep[0] + (resolved.keep[1] - resolved.keep[0]) * keyed(um.base, tag, k, U_KEEP);
-    const byDist = mine.slice().sort((a, b) => dist[a] - dist[b] || reg.seat[a] - reg.seat[b]);
-    const keep = new Set<number>(byDist.slice(0, Math.max(1, Math.ceil(N * keepFrac))));
-    keep.add(capR);
 
-    const rest = mine.filter((r) => !keep.has(r) && !wm.iv?.locked(r, t));
     const era = devModelOf(sim)?.era[capR] ?? 0;
     const fl = um.famines.get(pid);
     let famine = 0;
@@ -866,18 +955,13 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
     const x = keyed(um.base, tag, k, U_KIND) * (wT + wL + wC);
     const kind = x < wC ? 0 : x < wC + wL ? 1 : 2;
 
-    if (rest.length < PIECE_MIN) return false;
+    const unlocked = mine.filter((r) => !wm.iv?.locked(r, t));
+    if (unlocked.length < PIECE_MIN) return false;
 
-    let ready = planPieces(pid, rest, t, resolved, assessed.lordSeats);
-    let usedMode = resolved.mode;
-    // 选中的模式切不出块时,退到碎裂参数再试,避免轻易整国散回部落
-    if (ready.length === 0 && resolved.mode !== 'shatter') {
-      const shatter = resolveFragmentMode('shatter', assessed);
-      ready = planPieces(pid, rest, t, shatter, assessed.lordSeats);
-      if (ready.length) usedMode = 'shatter';
-    }
+    const { ready, mode: usedMode } = partitionLand(pid, unlocked, t, assessed, resolved, true, capR);
 
     if (ready.length === 0) {
+      // 末路:整国散回部落(war 仍暂记州数;metric 提交再改成 war=0 + foe)
       const allOut = mine.slice().sort((a, b) => a - b);
       sim.record('collapse', { a: pid, b: 2, region: capR, settlement: capSid, war: allOut.length, opt: FRAGMENT_MODE_OPT[usedMode] });
       for (const r of allOut) sim.setOwner(Layer.Polity, r, -1, Ev.Collapse);

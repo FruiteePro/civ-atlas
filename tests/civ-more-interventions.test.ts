@@ -201,7 +201,8 @@ describe.each([7, 2024])('新干预 · seed=%i', (seed) => {
     }
     const later = ownersAt(loose, T + 80).polity;
     expect(lands.some((r) => later[r] >= 0)).toBe(true);
-    expect(ivLines(loose, T)[0].text).toMatch(/散为无主之地$/);
+    // 无接收者:优先裂成继承国(记模式);仅无可行块时才整片散为无主
+    expect(ivLines(loose, T)[0].text).toMatch(/裂为.+国|散为无主之地/);
   }, 120_000);
 
   it('灭国:那一年已亡 = 不生效(历史和不下一样,写原因)', () => {
