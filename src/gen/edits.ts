@@ -858,8 +858,8 @@ export type Intervention = (
   | { kind: 'halt'; a: string; from: number; until?: number }
   | { kind: 'crown'; a: string; char: number; from: number; born: number; until?: number; abdicate?: true; after?: true; keep?: true; leanings: RulerLeanings }
   | { kind: 'keep'; a: string; from: number; until?: number }
-  | { kind: 'destroy'; a: string; from: number; b?: string; mode?: FragmentModeChoice; pieces?: number }
-  | { kind: 'collapse'; a: string; from: number; mode?: FragmentModeChoice; pieces?: number }
+  | { kind: 'destroy'; a: string; from: number; b?: string; mode?: FragmentModeChoice; pieces?: number; noReclaim?: boolean }
+  | { kind: 'collapse'; a: string; from: number; mode?: FragmentModeChoice; pieces?: number; noReclaim?: boolean }
   | { kind: 'death'; a: string; person: string; from: number }
   | { kind: 'temper'; a: string; person: string; from: number; leanings: RulerLeanings }
   | { kind: 'disaster'; type: DisasterKind; level: DisasterLevel; from: number; city?: string; a?: string; regions?: string[]; region?: string; slump?: number }
@@ -2352,6 +2352,7 @@ export function tidyIntervention(x: unknown): Intervention | null {
         v = { kind, a, from } as Intervention;
         if (mode) (v as { mode?: FragmentModeChoice }).mode = mode;
         if (piecesRaw !== undefined) (v as { pieces?: number }).pieces = piecesRaw;
+        if (o.noReclaim === true) (v as { noReclaim?: boolean }).noReclaim = true;
       }
     } else if (kind === 'treaty' || kind === 'neutral') {
       const t = cleanTreatyIv(o, kind, a, from);

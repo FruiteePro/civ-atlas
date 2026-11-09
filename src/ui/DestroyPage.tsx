@@ -58,6 +58,7 @@ export function DestroyPage({ civ, id, year, from }: { civ: Civ; id: number; yea
   const [mode, setMode] = useState<Mode>('merge');
   const [fragMode, setFragMode] = useState<FragmentModeChoice>('auto');
   const [pieces, setPieces] = useState<string>('');
+  const [noReclaim, setNoReclaim] = useState(false);
   const [chosen, setChosen] = useState<number | null>(null);
   const [view, setView] = useState<'form' | 'list'>('form');
   // 照经历开的:整页记着(换到「换一国」列表再回来也还记在他名下)
@@ -121,9 +122,11 @@ export function DestroyPage({ civ, id, year, from }: { civ: Civ; id: number; yea
           from: y,
           mode: fragMode,
           ...(piecesN !== undefined && Number.isFinite(piecesN) ? { pieces: piecesN } : {}),
+          ...(noReclaim ? { noReclaim: true } : {}),
         };
     const modeLabel = merge ? null : fragMode === 'auto' ? '自动' : fragmentModeLabel(fragMode);
-    const err = queueIntervention(v, destroyQueueText(shown, d.n, merge ? nameAt(B!, y) : null, modeLabel), {
+    const queueTxt = destroyQueueText(shown, d.n, merge ? nameAt(B!, y) : null, modeLabel);
+    const err = queueIntervention(v, !merge && noReclaim ? `${queueTxt}，禁收复` : queueTxt, {
       self: id,
       target: merge ? { kind: 'polity', id: bid } : null,
       shown,
@@ -307,10 +310,19 @@ export function DestroyPage({ civ, id, year, from }: { civ: Civ; id: number; yea
                   style={{ width: 64 }}
                 />
               </label>
+              <label className="cp-note" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input
+                  type="checkbox"
+                  data-act="destroy-no-reclaim"
+                  checked={noReclaim}
+                  onChange={(e) => (setNoReclaim(e.target.checked), clear())}
+                />
+                <span>禁止母国收复（永久不许对继承国开战夺回）</span>
+              </label>
               <span className="cp-note">
                 {name} {n}按「{fragLabel}」裂成继承国
                 {pieces.trim() ? `（尽量靠近 ${pieces} 块）` : ''}；切不出的州散成无主，{nb ? `${nb}这些接壤的国家` : '周围的国家'}
-                再慢慢扩进去。
+                再慢慢扩进去{noReclaim ? '；禁止母国收复' : ''}。
               </span>
             </>
           )}

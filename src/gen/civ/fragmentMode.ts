@@ -14,9 +14,12 @@ export type FragmentModeChoice = (typeof FRAGMENT_MODE_CHOICES)[number];
 export const FRAGMENT_MODE_OPT: Record<FragmentMode, number> = { powers: 0, mixed: 1, shatter: 2 };
 
 export function fragmentModeFromOpt(opt: number | undefined): FragmentMode | undefined {
-  if (opt === 0) return 'powers';
-  if (opt === 1) return 'mixed';
-  if (opt === 2) return 'shatter';
+  // 低 2 位 = 模式;bit 4 = 作者「禁止母国收复」
+  if (opt === undefined) return undefined;
+  const m = opt & 3;
+  if (m === 0) return 'powers';
+  if (m === 1) return 'mixed';
+  if (m === 2) return 'shatter';
   return undefined;
 }
 

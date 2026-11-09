@@ -630,9 +630,11 @@ export function installInterventions(sim: CivSim, iv: InterventionModel): void {
       sim.record('intervene', { a, b: -2, region: r, settlement: sid, war: i });
       return;
     }
+    const before = sim.annalCount;
     const { successors, mode } = api.politics.authorCollapse(a, t, i, { mode: v.mode, pieces: v.pieces });
+    const opt = FRAGMENT_MODE_OPT[mode] | (v.noReclaim ? 4 : 0);
     if (successors <= 0) {
-      sim.record('intervene', { a, b: -2, region: r, settlement: sid, war: i, opt: FRAGMENT_MODE_OPT[mode] });
+      sim.record('intervene', { a, b: -2, region: r, settlement: sid, war: i, opt });
       return;
     }
     sim.record('intervene', {
@@ -642,8 +644,15 @@ export function installInterventions(sim: CivSim, iv: InterventionModel): void {
       settlement: sid,
       war: i,
       n: successors,
-      opt: FRAGMENT_MODE_OPT[mode],
+      opt,
     });
+    // 禁止母国收复:把这次切出的继承国永久登记
+    if (v.noReclaim) {
+      for (let j = before; j < sim.annalCount; j++) {
+        const e = sim.annal(j);
+        if (e.kind === 'split' && e.cause === 'collapse' && e.b === a) wm.noReclaim.set(e.a, a);
+      }
+    }
   };
 
   /** 灭国:a 此刻亡,国土并入 b 或产生继承国(b 列:并入的国家 / −1 产生继承国 / −2 无可行继承国散成无主 / −3 a 已亡 / −7 后下的"不许灭"护着它) */
@@ -670,6 +679,7 @@ export function installInterventions(sim: CivSim, iv: InterventionModel): void {
     // 无接收者:尝试产生继承国而非散成无主(评估 / 作者指定模式)
     if (api.politics.fragmentOnDestroy) {
       const frag = v as { mode?: import('./fragmentMode').FragmentModeChoice; pieces?: number };
+      const before = sim.annalCount;
       const { successors, mode } = api.politics.fragmentOnDestroy(a, lands, t, i, {
         mode: frag.mode,
         pieces: frag.pieces,
@@ -684,9 +694,15 @@ export function installInterventions(sim: CivSim, iv: InterventionModel): void {
           settlement: sid,
           war: i,
           n: successors,
-          opt: FRAGMENT_MODE_OPT[mode],
+          opt: FRAGMENT_MODE_OPT[mode] | (v.noReclaim ? 4 : 0),
           foe: leftover.length,
         });
+        if (v.noReclaim) {
+          for (let j = before; j < sim.annalCount; j++) {
+            const e = sim.annal(j);
+            if (e.kind === 'split' && e.cause === 'collapse' && e.b === a) wm.noReclaim.set(e.a, a);
+          }
+        }
         for (const q of leftover) sim.setOwner(Layer.Polity, q, -1, Ev.Cede);
         endPolity(pm, a, t);
         fallen(a, r, t, -1);

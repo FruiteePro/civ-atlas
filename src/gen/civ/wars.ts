@@ -1207,6 +1207,11 @@ export function resumeWars(sim: CivSim, world: World, civ: Civ): void {
       if (e.cause === 'quell' || e.cause === 'heir' || e.cause === 'trek') civil.add(e.war);
     } else if (e.kind === 'split' && e.cause === 'collapse') {
       wm.collapseChild.set(e.a, e.year);
+    } else if (e.kind === 'intervene' && (e.opt ?? 0) & 4 && (e.b === -8 || e.b === -1)) {
+      // 作者「禁止母国收复」:同刻从该国切出的 collapse 子女永久禁收复
+      for (const s of civ.annals) {
+        if (s.kind === 'split' && s.cause === 'collapse' && s.b === e.a && Math.abs(s.year - e.year) < 1e-6) wm.noReclaim.set(s.a, e.a);
+      }
     } else if (e.kind === 'conquer' && e.war >= 0) wm.wars[e.war]?.takes.push({ year: e.year, region: e.region, by: e.a });
     else if (e.kind === 'peace') {
       const w = wm.wars[e.war];
