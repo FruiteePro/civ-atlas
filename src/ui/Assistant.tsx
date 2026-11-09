@@ -50,6 +50,7 @@ import {
   previewProposal,
   previewable,
   sendAsk,
+  setInterveneMode,
   stopAsk,
   syncAssistantWorld,
   toggleItem,
@@ -171,6 +172,19 @@ export function AssistantPanel({ phone, world, raster, civ, raw, lock, busy }: A
             <b>助手</b>
             <small>{model}</small>
           </div>
+          {lock !== 'history' && (
+            <button
+              className={`ast-mode${st.intervene ? ' on' : ''}`}
+              role="switch"
+              aria-checked={st.intervene}
+              aria-label="干预"
+              title={st.intervene ? '干预开着：可提议修改世界' : '讲故事：只问答，不改世界'}
+              data-act="ast-intervene"
+              onClick={() => setInterveneMode(!st.intervene)}
+            >
+              干预
+            </button>
+          )}
           <button className="ast-pill" data-act="ast-new" title="新对话" aria-label="新对话" disabled={!st.turns.length} onClick={newConversation}>
             <Icon name="compose" size={16} />
           </button>
