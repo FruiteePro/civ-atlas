@@ -282,20 +282,23 @@ function detectInterventionConflicts(
 
 /**
  * 安全undo一批干预
- * 
+ *
  * @param current 当前edits
  * @param toRemove 要移除的干预（来自applied.before/after）
+ * @param opts.knownBefore 撤销前已存在的干预：与这些重叠不算冲突（避免误伤执行前就有的条目）
  */
 export function safeUndoInterventions(
   current: WorldEdits,
-  toRemove: Intervention[]
+  toRemove: Intervention[],
+  opts?: { knownBefore?: Intervention[] },
 ): UndoResult {
   const removeSigs = new Set(toRemove.map(i => JSON.stringify(i)));
-  
+  const knownBeforeSigs = new Set((opts?.knownBefore ?? []).map(i => JSON.stringify(i)));
+
   // 分离：要保留的 vs 要移除的
   const remaining: Intervention[] = [];
   const actuallyRemoved: Intervention[] = [];
-  
+
   for (const iv of current.interventions) {
     const sig = JSON.stringify(iv);
     if (removeSigs.has(sig)) {
@@ -304,23 +307,26 @@ export function safeUndoInterventions(
       remaining.push(iv);
     }
   }
-  
-  // 检测冲突：后续干预是否与要移除的干预冲突
-  const conflicts = detectInterventionConflicts(actuallyRemoved, remaining);
-  
+
+  // 只跟“执行后新加、且不在 knownBefore 里”的干预比冲突
+  const conflictCandidates = opts?.knownBefore
+    ? remaining.filter((iv) => !knownBeforeSigs.has(JSON.stringify(iv)))
+    : remaining;
+  const conflicts = detectInterventionConflicts(actuallyRemoved, conflictCandidates);
+
   if (conflicts.length > 0) {
     return {
       success: false,
       conflicts: conflicts.map(c => ({ type: 'intervention' as const, ...c })),
     };
   }
-  
+
   // 无冲突，执行undo
   const newEdits: WorldEdits = {
     ...current,
     interventions: remaining,
   };
-  
+
   return {
     success: true,
     newEdits,

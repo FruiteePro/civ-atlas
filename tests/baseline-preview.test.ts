@@ -274,6 +274,28 @@ test('safeUndoInterventions: 保留不相关编辑', () => {
   expect(result.newEdits?.interventions[1].kind).toBe('declare');
 });
 
+test('safeUndoInterventions: knownBefore 重叠不视为冲突', () => {
+  const protect: Intervention = { kind: 'protect', a: 'polity:c0#0', from: 300, until: 500 };
+  const unity: Intervention = { kind: 'unity', a: 'polity:c0#0', from: 400 };
+  const current = mockEdits([protect, unity]);
+
+  // 撤销本轮加的 unity；protect 是执行前就有的，不算冲突
+  const result = safeUndoInterventions(current, [unity], { knownBefore: [protect] });
+  expect(result.success).toBe(true);
+  expect(result.newEdits?.interventions).toEqual([protect]);
+});
+
+test('safeUndoInterventions: 执行后新加的重叠仍冲突', () => {
+  const protect: Intervention = { kind: 'protect', a: 'polity:c0#0', from: 300, until: 500 };
+  const unity: Intervention = { kind: 'unity', a: 'polity:c0#0', from: 400 };
+  const later: Intervention = { kind: 'halt', a: 'polity:c0#0', from: 450 };
+  const current = mockEdits([protect, unity, later]);
+
+  const result = safeUndoInterventions(current, [unity], { knownBefore: [protect] });
+  expect(result.success).toBe(false);
+  expect(result.conflicts![0].description).toContain('冲突');
+});
+
 test('preview隔离: cancel不影响当前edits', () => {
   const currentEdits = mockEdits([]);
   const originalEdits = JSON.parse(JSON.stringify(currentEdits));
