@@ -59,3 +59,24 @@ describe('author collapse intervention', () => {
     }
   }, 90_000);
 });
+
+describe('post-collapse truce', () => {
+  it('seed7 author collapse: parent does not claim-war children within 100 years', () => {
+    const world = generateWorld({ ...DEFAULT_PARAMS, seed: 7 });
+    const base = generateCiv(world);
+    const T = 1600;
+    const sizes = new Map<number, number>();
+    for (const o of ownersAt(base, T).polity) if (o >= 0) sizes.set(o, (sizes.get(o) ?? 0) + 1);
+    const id = [...sizes.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    const iv: Intervention = { kind: 'collapse', a: polityKey(base, id), from: T, mode: 'shatter' };
+    const civ = generateCiv(world, { interventions: [iv], endYear: T + 99 });
+    const kids = new Set(
+      civ.annals.filter((e) => e.kind === 'split' && e.cause === 'collapse' && e.b === id && Math.abs(e.year - T) < 0.01).map((e) => e.a),
+    );
+    expect(kids.size).toBeGreaterThan(0);
+    const early = civ.annals.filter(
+      (e) => e.kind === 'war' && e.year < T + 100 && e.a === id && kids.has(e.b) && e.cause === 'claim',
+    );
+    expect(early, `claim wars before +100: ${early.map((e) => e.year)}`).toHaveLength(0);
+  }, 180_000);
+});

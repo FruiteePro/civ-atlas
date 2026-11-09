@@ -442,6 +442,8 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
     for (const r of group) if (r !== capR) sim.setOwner(Layer.Polity, r, p.id, Ev.Split);
     sim.record(kind, { a: p.id, b: parent, region: rising, settlement: sid, ...(cause ? { cause } : {}) });
     if (kind === 'split') pol.lastSplit.set(parent, t);
+    // 大崩解 / 灭国切出:记入战争模型,供母国禁收复期查询
+    if (kind === 'split' && cause === 'collapse') wm.collapseChild.set(p.id, t);
     return p;
   };
   api.politics.secede = (parent, group, sid, rising, t, kind, cause, extra) => {
