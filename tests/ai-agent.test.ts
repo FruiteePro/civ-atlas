@@ -505,6 +505,42 @@ describe('助手', () => {
     expect(pole.items[0].problem).toMatch(/^\(0, 89\.9\) 一带没人住;最近有人住的州是 R\d+ /);
   });
 
+  it('灭国 / 大崩解:parseRewrite 认 mode、pieces;灭国可并入 other', () => {
+    const rctx = { world, civ, year: from, edits: EMPTY };
+    const loose = parseRewrite(
+      JSON.stringify({ edits: [{ op: 'destroy', country: `P${victim}`, from, mode: 'shatter', pieces: 6, why: '…' }] }),
+      rctx,
+    );
+    expect(loose.ok).toBe(true);
+    if (!loose.ok) return;
+    expect(loose.items[0].change).toMatchObject({
+      kind: 'intervention',
+      v: { kind: 'destroy', mode: 'shatter', pieces: 6 },
+    });
+    expect(loose.items[0].text).toMatch(/裂成继承国/);
+
+    const merge = parseRewrite(
+      JSON.stringify({ edits: [{ op: 'destroy', country: `P${victim}`, other: `P${friend}`, from, why: '…' }] }),
+      rctx,
+    );
+    expect(merge.ok).toBe(true);
+    if (!merge.ok) return;
+    expect(merge.items[0].change).toMatchObject({ kind: 'intervention', v: { kind: 'destroy' } });
+    expect((merge.items[0].change as { v: { b?: string } }).v.b).toBeTruthy();
+
+    const col = parseRewrite(
+      JSON.stringify({ edits: [{ op: 'collapse', country: `P${victim}`, from, mode: 'powers', pieces: 2, why: '…' }] }),
+      rctx,
+    );
+    expect(col.ok).toBe(true);
+    if (!col.ok) return;
+    expect(col.items[0].change).toMatchObject({
+      kind: 'intervention',
+      v: { kind: 'collapse', mode: 'powers', pieces: 2 },
+    });
+    expect(col.items[0].text).toMatch(/大崩解/);
+  });
+
   it('回给作者的话:编号换成名字,紧挨着写了名字的只去掉编号;英文种类名换成中文;认不出的编号留着', () => {
     const rctx = { world, civ, year: from };
     const v = nameAt(civ.polities[victim], from);

@@ -250,7 +250,7 @@ export const ASSISTANT_SYSTEM = [
 const EDIT_SCHEMA = {
   type: 'object',
   properties: {
-    op: { type: 'string', enum: ['protect', 'unity', 'halt', 'ally', 'declare', 'move', 'cede', 'found', 'rename', 'volcano', 'lake', 'range', 'raise', 'sink'] },
+    op: { type: 'string', enum: ['protect', 'unity', 'halt', 'ally', 'declare', 'move', 'cede', 'found', 'destroy', 'collapse', 'rename', 'volcano', 'lake', 'range', 'raise', 'sink'] },
     country: { type: 'string', description: '国家编号,如 P3' },
     other: { type: 'string', description: '另一个国家的编号(ally、declare)' },
     city: { type: 'string', description: '城的编号,如 C12' },
@@ -260,6 +260,8 @@ const EDIT_SCHEMA = {
     from: { type: 'integer', description: '从哪一年起' },
     until: { type: 'integer', description: '到哪一年为止(可不给)' },
     permanent: { type: 'boolean' },
+    mode: { type: 'string', enum: ['auto', 'powers', 'mixed', 'shatter'], description: 'destroy/collapse 切分模式' },
+    pieces: { type: 'integer', description: 'destroy/collapse 目标块数(软目标,2–12)' },
     at: { type: 'array', items: { type: 'number' }, description: '[经度, 纬度]' },
     path: { type: 'array', items: { type: 'array', items: { type: 'number' } }, description: '[[经度, 纬度], …]' },
     size: { type: 'string', enum: ['小', '中', '大'] },
@@ -359,8 +361,15 @@ function ivWord(civ: Civ, v: Intervention, a: number, b: number): string {
   if (v.kind === 'found') return `在一州立国${v.name ? `「${v.name}」` : ''}`;
   if (v.kind === 'ally') return `${n(a)} 与 ${n(b)} 结盟${until}`;
   if (v.kind === 'declare') return `${n(a)} 向 ${n(b)} 宣战`;
-  if (v.kind === 'destroy') return `${n(a)} 灭国,${v.b ? `国土并入 ${n(b)}` : '国土散成无主'}`;
-  if (v.kind === 'collapse') return `${n(a)} 大崩解`;
+  if (v.kind === 'destroy') {
+    if (v.b) return `${n(a)} 灭国,国土并入 ${n(b)}`;
+    const m = v.mode && v.mode !== 'auto' ? `,${v.mode}` : '';
+    return `${n(a)} 灭国,国土散成继承国${m}`;
+  }
+  if (v.kind === 'collapse') {
+    const m = v.mode && v.mode !== 'auto' ? `,${v.mode}` : '';
+    return `${n(a)} 大崩解${m}`;
+  }
   if (v.kind === 'disaster') return `${v.a ? `${n(a)} ` : ''}降${DISASTER_NAMES[v.type]}(${DISASTER_LEVEL_NAMES[v.level]})`;
   if (v.kind === 'treaty') return `${n(a)} 与另 ${v.ps.length} 国立约`;
   if (v.kind === 'neutral') return `${n(a)} 与另 ${v.ps.length} 国划一州为中立地`;
@@ -392,6 +401,10 @@ function editWord(civ: Civ, x: unknown): string {
       return `划一州给${p(o.country)}`;
     case 'found':
       return '立一个新国家';
+    case 'destroy':
+      return o.other ? `${p(o.country)}灭国并入${p(o.other)}` : `${p(o.country)}灭国裂成继承国`;
+    case 'collapse':
+      return `${p(o.country)}大崩解`;
     case 'rename':
       return `改名为${typeof o.name === 'string' ? o.name : ''}`;
     case 'volcano':
