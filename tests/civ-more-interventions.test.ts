@@ -183,9 +183,22 @@ describe.each([7, 2024])('新干预 · seed=%i', (seed) => {
     expect(buildChronicle(civ).some((x) => x.year === T && x.kind === 'fall' && !x.text.startsWith('【干预】'))).toBe(false);
 
     const loose = generateCiv(w, { interventions: [{ kind: 'destroy', a: polityKey(base, pid), from: T }], endYear: T + 80 });
-    expect(loose.annals.find((x) => x.kind === 'intervene')).toMatchObject({ a: pid, b: -1, n: lands.length });
+    const looseIv = loose.annals.find((x) => x.kind === 'intervene')!;
+    expect(looseIv).toMatchObject({ a: pid });
+    expect([-1, -2]).toContain(looseIv.b); // -1 产生继承国 / -2 散成无主
+    expect(loose.polities[pid].ended).toBe(T);
     const now = ownersAt(loose, T).polity;
-    for (const r of lands) expect(now[r]).toBe(-1);
+    // 亡国不得继续占任何州(继承国切分后的剩余州也必须清掉)
+    for (let r = 0; r < loose.regions.count; r++) expect(now[r], `R${r}`).not.toBe(pid);
+    if (looseIv.b === -2) {
+      expect(looseIv.n).toBe(lands.length);
+      for (const r of lands) expect(now[r]).toBe(-1);
+    } else {
+      expect(looseIv.n).toBeGreaterThan(0);
+      // 至少有一州落到继承国手上;若有剩余则已是无主
+      expect(lands.some((r) => now[r] >= 0 && now[r] !== pid)).toBe(true);
+      for (const r of lands) if (now[r] < 0) expect(now[r]).toBe(-1);
+    }
     const later = ownersAt(loose, T + 80).polity;
     expect(lands.some((r) => later[r] >= 0)).toBe(true);
     expect(ivLines(loose, T)[0].text).toMatch(/散为无主之地$/);
