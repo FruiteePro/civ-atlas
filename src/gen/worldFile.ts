@@ -22,11 +22,12 @@ import { parseSave, type SaveFile } from './savefile';
 import { makePart, partBytes, sha256, unpackValue, type SnapshotPart } from './snapshot';
 import type { World } from './world';
 import { MIGRATIONS, currentSchema, migratePart, type MigrationTable } from './worldMigrate';
-import { parseManifest, validateAuthor, validateChronicle, validateCiv, validateEras, validateFlags, validatePluginLayer, validateSimState, validateThumb, validateWorld, worldHeadLimit, worldPartLimit, type LayerSizes } from './worldValidate';
+import { parseManifest, validateAuthor, validateChronicle, validateCiv, validateEras, validateFlags, validatePlanet, validatePluginLayer, validateSimState, validateThumb, validateWorld, worldHeadLimit, worldPartLimit, type LayerSizes } from './worldValidate';
 import { ZIP_LOCAL_MAX_BYTES, ZIP_UPLOAD_MAX_BYTES, parseZip, writeZip } from './zipStore';
 import {
   KNOWN_PARTS,
   MANIFEST_FILE,
+  PLUGIN_LAYER_MAX_BYTES,
   PLUGIN_LAYER_PREFIX,
   PLUGIN_LAYER_SCHEMA,
   SIM_STATE_PREFIX,
@@ -40,6 +41,7 @@ import {
   pluginLayerPart,
   simStatePart,
   type AuthorContent,
+  type PlanetValue,
   type PluginLayerValue,
   type WorldMade,
   type WorldManifest,
@@ -76,6 +78,8 @@ export interface WorldValues {
   author?: AuthorContent | null;
   /** 封面(JPEG 的字节);没有 = 不给 */
   thumb?: Uint8Array | null;
+  /** 星球参照;没有 = 不给 */
+  planet?: PlanetValue | null;
 }
 
 /** 插件放的附加数据:只当字节留着,看世界用不着 */
@@ -100,6 +104,8 @@ export interface PackInput extends WorldValues {
   /** 第几次修订(不给 = 第 1 次) */
   revision?: WorldRevision;
   extras?: WorldExtra[];
+  /** 地图插件出的图层(块名 → 内容,见 worldRun.ts 的 mapLayerParts):地图那一块不带图层,要存的从这里另存成块 */
+  layers?: readonly { name: string; value: PluginLayerValue }[];
   /** 文件最大多少字节(不给 = 本机存取的上限;传上服务器的传 ZIP_UPLOAD_MAX_BYTES) */
   maxBytes?: number;
 }
@@ -130,6 +136,12 @@ export function knownPart(p: SnapshotPart, schema?: number, migrations?: Migrati
   const known = KNOWN_PARTS.get(p.name);
   if (!known) throw new Error(`认不出这一块:${p.name}`);
   return packedFrom(p, schema ?? currentSchema(p.name, migrations), known.need);
+}
+
+/** 后台线程打好的一块:认得的块同 knownPart;地图插件出的图层块(layer.<插件编号>.<图层编号>)by 写插件编号 */
+export function offeredPart(p: SnapshotPart, schema?: number, migrations?: MigrationTable): PackedPart {
+  const ids = pluginLayerOf(p.name);
+  return ids ? packedFrom(p, PLUGIN_LAYER_SCHEMA, 'extra', ids[0]) : knownPart(p, schema, migrations);
 }
 
 /** 附加数据打包:need 是 extra */
@@ -190,17 +202,20 @@ export async function packThumb(bytes: Uint8Array, migrations?: MigrationTable):
   return { info: { name: 'thumb', file: fileOf('thumb', 'none'), schema: currentSchema('thumb', migrations), sum, bytes: bytes.length, zip: 'none', need: 'extra' }, data: bytes };
 }
 
-/** 去掉回放快照(不存)、各段世界的网格(和地图同一套) */
+/** 去掉回放快照(不存)、各段世界的网格(和地图同一套)、地图插件的图层(另存成图层块) */
 function mapValue(map: World): World {
-  return { ...map, history: [] };
+  const { mapLayers: _l, ...rest } = map;
+  void _l;
+  return { ...rest, history: [] };
 }
 
 function erasValue(e: WorldEras): WorldEras {
   return {
     baseKey: e.baseKey,
     eras: e.eras.map(({ key, world }) => {
-      const { mesh: _mesh, ...rest } = world as Omit<World, 'mesh'> & { mesh?: unknown };
+      const { mesh: _mesh, mapLayers: _l, ...rest } = world as Omit<World, 'mesh'> & { mesh?: unknown };
       void _mesh;
+      void _l;
       return { key, world: { ...rest, history: [] } };
     }),
   };
@@ -266,7 +281,13 @@ export async function packWorldParts(input: PackInput): Promise<PackedWorld> {
   parts.push(await packKnown('civ', layers.civ), await packKnown('chronicle', input.chronicle), await packKnown('flags', input.flags));
   if (input.author) parts.push(await packKnown('author', input.author));
   if (input.thumb) parts.push(await packThumb(input.thumb));
+  if (input.planet) parts.push(await packKnown('planet', input.planet));
   parts.push(...split.parts, ...layers.parts);
+  for (const l of input.layers ?? []) {
+    const ids = pluginLayerOf(l.name);
+    if (!ids) throw new Error(`插件图层不能叫 ${l.name}`);
+    parts.push(await packPluginLayer(ids[0], ids[1], l.value));
+  }
   for (const x of input.extras ?? []) parts.push(await packExtra(x));
   return { manifest: buildManifest(input, parts.map((p) => p.info)), parts };
 }
@@ -370,6 +391,7 @@ export interface WorldContent extends WorldValues {
   eras: WorldEras | null;
   author: AuthorContent | null;
   thumb: Uint8Array | null;
+  planet: PlanetValue | null;
   /** 配方照存档的办法读出来的那份(清理过);界面用这一份,不用清单里的原样 */
   save: SaveFile;
   /** 读配方时的提示(和打开存档时一样) */
@@ -487,11 +509,12 @@ async function readLayerParts(opened: OpenedWorldFile, read: ReturnType<typeof p
     try {
       const v = await read(p.name);
       const hist = history.has(p.name);
-      validatePluginLayer(v, hist ? sizes : { cells: sizes.cells, regions: sizes.regions }, `插件图层 ${p.name}`);
-      // 别的插件存的图层和历史无关:换了历史还得认得,所以只能按地块
-      if (!hist && v.unit !== 'cell') broken(`插件图层 ${p.name} 不是推演插件的,要按地块`);
+      // 按地块、不跟着历史的年份不受历史长短限制(地图换了历史也还在)
+      const byRegion = typeof v === 'object' && v !== null && (v as { unit?: unknown }).unit === 'region';
+      validatePluginLayer(v, hist || byRegion ? sizes : { cells: sizes.cells, regions: sizes.regions }, `插件图层 ${p.name}`);
+      if (v.unit === 'region' && v.years === undefined) broken(`插件图层 ${p.name} 按州的要带年份`);
       if (!hist) continue;
-      if (v.unit !== 'region' || v.years === undefined) broken(`插件图层 ${p.name} 是推演插件的,要按州、带年份`);
+      if (v.unit !== 'region') broken(`插件图层 ${p.name} 是推演插件的,要按州、带年份`);
       const [by, id] = pluginLayerOf(p.name)!;
       out.push({ by, id, ...v } as SimLayer);
     } catch (err) {
@@ -590,10 +613,14 @@ async function readContent(opened: OpenedWorldFile, spare: boolean): Promise<Sto
     if (got.trouble) skipped.push('author');
     const thumb = (await read('thumb', (b) => b)) as Uint8Array | null;
     if (thumb) validateThumb(thumb);
+    // 本机读的过不了只是没装地图插件时推不了历史,世界照样开
+    const planet = await story<PlanetValue | null>('planet', (v) => {
+      if (v !== null) validatePlanet(v, map);
+    });
     const r = parseSave(JSON.stringify(manifest.recipe));
     if (!r.ok) broken(r.error);
     const warnings = got.trouble ? [...r.warnings, got.trouble === 'damaged' ? AUTHOR_DAMAGED : AUTHOR_SKIPPED] : r.warnings;
-    return { map, eras, civ, chronicle, flags, author: got.author, thumb, save: r.save, warnings, skipped, ...(got.trouble ? { authorTrouble: got.trouble } : {}) };
+    return { map, eras, civ, chronicle, flags, author: got.author, thumb, planet, save: r.save, warnings, skipped, ...(got.trouble ? { authorTrouble: got.trouble } : {}) };
   } catch (err) {
     throw asWorldFileError(err);
   }
@@ -609,10 +636,25 @@ export interface RewriteChange {
   readers?: WorldReaders;
   recipe?: SaveFile;
   plugins?: WorldPlugin[];
-  /** 换掉的块;eras、author、thumb 给 null = 去掉这一块 */
+  /** 换掉的块;eras、author、thumb、planet 给 null = 去掉这一块 */
   values?: Partial<WorldValues>;
   /** 文件最大多少字节(不给 = 本机存取的上限) */
   maxBytes?: number;
+}
+
+/** 文件里工具插件存的按州图层的块名(不算 skip 里的、只当字节留着的;读不出来的不算) */
+async function regionLayerNames(opened: OpenedWorldFile, skip: ReadonlySet<string>): Promise<string[]> {
+  const out: string[] = [];
+  for (const p of opened.manifest.parts) {
+    if (!isPluginLayer(p.name) || skip.has(p.name) || opened.kept.includes(p)) continue;
+    try {
+      const v = unpackValue(await partBytes(p as Pick<SnapshotPart, 'name' | 'bytes' | 'sum' | 'zip'>, opened.bytes.get(p.name)!, PLUGIN_LAYER_MAX_BYTES)) as { unit?: unknown } | null;
+      if (v?.unit === 'region') out.push(p.name);
+    } catch {
+      // 读不出来的照原样带着
+    }
+  }
+  return out;
 }
 
 /**
@@ -634,10 +676,15 @@ export async function rewriteWorldFile(opened: OpenedWorldFile, change: RewriteC
   if (v.flags) replaced.set('flags', await packKnown('flags', v.flags, table));
   if (v.author !== undefined) replaced.set('author', v.author ? await packKnown('author', v.author, table) : null);
   if (v.thumb !== undefined) replaced.set('thumb', v.thumb ? await packThumb(v.thumb, table) : null);
+  if (v.planet !== undefined) replaced.set('planet', v.planet ? await packKnown('planet', v.planet, table) : null);
 
   const parts: PackedPart[] = [];
   const stale = new Set(sims ? historyParts(manifest.parts.map((p) => p.name)) : []);
   for (const q of layers?.parts ?? []) stale.add(q.info.name);
+  // 工具插件存的按州图层照旧历史算的:历史真变了(civ 块不一样)就去掉
+  const oldCiv = manifest.parts.find((p) => p.name === 'civ');
+  const newCiv = replaced.get('civ');
+  if (newCiv && oldCiv && newCiv.info.sum !== oldCiv.sum) for (const name of await regionLayerNames(opened, stale)) stale.add(name);
   for (const p of manifest.parts) {
     if (stale.has(p.name)) continue;
     if (!replaced.has(p.name)) parts.push({ info: p, data: opened.bytes.get(p.name)! });

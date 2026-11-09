@@ -3,6 +3,7 @@ import { permissionLines, simCommandsText, simInfluencesText, type PermissionLin
 import type { PluginManifest } from '../../plugin/pluginFile';
 import type { SimManifest } from '../../plugin/pluginSim';
 import { versionLabel, sizeText } from './pluginWords';
+import { isMap, mapWhere } from './mapText';
 
 export { versionText, versionLabel, sizeText, moreText } from './pluginWords';
 
@@ -51,7 +52,8 @@ export function toolWhere(m: PluginManifest, phone: boolean): string | undefined
 export function wallInstalledText(m: PluginManifest, phone: boolean): string {
   const tail = '装在这个浏览器里，所有世界都能用。';
   if (isSim(m)) return `${simWhere(phone)}。${tail}`;
-  const where = isTool(m) ? (phone ? '右上竖排的拼图里' : '地图右下的「工具」里') : caps(m).has('layer.cells@1') ? '图层面板的「插件图层」里' : '';
+  if (isMap(m)) return `${mapWhere()}。${tail}`;
+  const where = isTool(m) ? (phone ? '右上竖排的拼图里' : '地图右下的「工具」里') : caps(m).has('layer.cells@1') || caps(m).has('layer.regions@1') ? '图层面板的「插件图层」里' : '';
   return where ? `打开一个世界，${where}就有它。${tail}` : tail;
 }
 
@@ -72,7 +74,7 @@ export function addsRows(m: PluginManifest, phone: boolean): AddsRow[] {
   const c = caps(m);
   const rows: AddsRow[] = [];
   if (isTool(m)) rows.push({ k: `工具「${m.name}」`, v: phone ? '在右上竖排的拼图里' : '在地图右下的「工具」里' });
-  if (c.has('layer.cells@1')) rows.push({ k: '图层', v: '在图层面板的「插件图层」里' });
+  if (c.has('layer.cells@1') || c.has('layer.regions@1')) rows.push({ k: '图层', v: '在图层面板的「插件图层」里' });
   const k = '往世界里存东西';
   if (c.has('store.world@1')) rows.push({ k, v: '存它自己的数据', small: '存了以后那个世界不能公开分享，能存成文件发给别人' });
   else if (c.has('author.write@1')) rows.push({ k, v: '不存它自己的数据', small: phone ? '改的东西记进你的修改，照常能分享' : '改的东西记进你的修改，和你自己改的一样：能分享、能撤销' });
@@ -189,4 +191,214 @@ export function devStopText(reason: string, detail: string): string | null {
   const t = STOPPED[reason];
   if (!t) return null;
   return detail && reason !== 'crashed' ? `${t}（${detail}）` : t;
+}
+
+// 开发者模式的试推(载入的是推演插件)
+
+/** 试推交回来的一部分(DevTried 的样子,这里只用到这几样) */
+export interface TriedView {
+  at: number;
+  file: string;
+  plugins: readonly { id: string; name: string; dev: boolean }[];
+  alone: boolean;
+  error?: string;
+  result: {
+    years: number;
+    stuck: { year: number; error: string } | null;
+    ms: number;
+    plugins: readonly { id: string; turns: number; ms: number; worst: number; worstYear: number }[];
+    commands: Readonly<Record<string, number>>;
+    lines: number;
+    logs: readonly { year: number | null; level: DevLevel; plugin: string; text: string }[];
+    resume: { same: true } | { same: false; year: number | null; what: string } | null;
+  } | null;
+}
+
+/** 命令的短说法(一句话里用,不带括号) */
+const COMMAND_SHORT: Record<string, string> = { declare: '宣战', ally: '结盟', treaty: '立约', cede: '割地', found: '立国', move: '迁都', destroy: '灭国', disaster: '天灾', trek: '大迁徙' };
+
+const secText = (ms: number) => `${ms < 1000 ? (ms / 1000).toFixed(2) : (ms / 1000).toFixed(1)} 秒`;
+
+/** 小卡第二行:试推完、推不下去、没推成 */
+export function devTryLine(t: TriedView, phone: boolean): string {
+  const r = t.result;
+  if (!r) return `${clockText(t.at)} 没推成：${t.error ?? '后台线程出错'}`;
+  if (r.stuck) return `${clockText(t.at)} 试推到第 ${r.stuck.year} 年出错停下${phone ? '' : `（${t.file}）`}`;
+  return `${clockText(t.at)} 试推完：${phone ? '' : '这个世界的地图，'}第 0 年推到第 ${r.years} 年，用了 ${secText(r.ms)}${phone ? '' : `（${t.file}）`}`;
+}
+
+/** 表里一个插件一行:名字、出手几回、一共多久、最慢一次(电脑上带哪年) */
+export function devTryRows(t: TriedView, phone: boolean): { id: string; name: string; turns: string; total: string; worst: string }[] {
+  const r = t.result;
+  if (!r) return [];
+  return r.plugins.map((p) => {
+    const who = t.plugins.find((x) => x.id === p.id);
+    const name = who ? (who.dev ? `${who.name}（开发中）` : who.name) : p.id;
+    const worst = p.turns === 0 ? '—' : `${p.worst < 1 ? '不到 1' : Math.round(p.worst)} 毫秒${phone ? '' : `，第 ${p.worstYear} 年`}`;
+    return { id: p.id, name, turns: `${p.turns} 回`, total: secText(p.ms), worst };
+  });
+}
+
+/** 「下了 14 条命令（立约 9、宣战 3、结盟 2），写了 14 句编年史」(手机上不列每种几条) */
+export function devTryCounts(t: TriedView, phone: boolean): string {
+  const r = t.result;
+  if (!r) return '';
+  const kinds = Object.entries(r.commands).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+  const n = kinds.reduce((s, [, k]) => s + k, 0);
+  const cmd = n ? `下了 ${n} 条命令${phone ? '' : `（${kinds.map(([k, c]) => `${COMMAND_SHORT[k] ?? k} ${c}`).join('、')}）`}` : '没下命令';
+  return `${cmd}，${r.lines ? `写了 ${r.lines} 句编年史` : '没写编年史'}`;
+}
+
+/** 分段推那一行:一样 / 不一样在哪;没查(推不下去)= null */
+export function devTryResume(t: TriedView, half: number, phone: boolean): { ok: boolean; text: string } | null {
+  const v = t.result?.resume;
+  if (!v) return null;
+  if (v.same) return { ok: true, text: phone ? '分段推和一口气推一样' : `分段推（推到第 ${half} 年存下、打开再接着推）和一口气推一样` };
+  if (v.what === 'stuck') return { ok: false, text: `分段推的时候${v.year === null ? '' : `第 ${v.year} 年`}推不下去，一口气推的推得下去，多半是用了全局变量记东西` };
+  return { ok: false, text: v.year === null ? `不一样：史事都一样，${v.what} 对不上，多半是用了全局变量记东西` : `不一样：第 ${v.year} 年起对不上，多半是用了全局变量记东西` };
+}
+
+/** 日志一行左边:第几年(装插件时打的写「装的时候」) */
+export const devTryYear = (year: number | null): string => (year === null ? '装的时候' : `第 ${year} 年`);
+
+/** 试推的「复制全部」:那一行、每个插件、命令和编年史、分段推、日志 */
+export function devTryCopy(t: TriedView, half: number): string {
+  const out = [devTryLine(t, false)];
+  for (const r of devTryRows(t, false)) out.push(`${r.name}：出手 ${r.turns}，一共 ${r.total}，最慢一次 ${r.worst}`);
+  if (t.result) out.push(devTryCounts(t, false));
+  const v = devTryResume(t, half, false);
+  if (v) out.push(v.text);
+  for (const l of t.result?.logs ?? []) out.push(`${devTryYear(l.year)} ${levelText(l.level)} ${l.plugin ? `[${l.plugin}] ` : ''}${l.text}`);
+  return out.join('\n');
+}
+
+// 开发者模式的试生成(载入的是地图插件)
+
+/** 试生成交回来的一部分(DevGenTried 的样子,这里只用到这几样) */
+export interface GenView {
+  at: number;
+  file: string;
+  plugins: readonly { id: string; name: string; dev: boolean }[];
+  alone: boolean;
+  error?: string;
+  result: {
+    ms: number;
+    steps: readonly { id: string; stage: string; ms: number; changed: number; failed?: true }[];
+    stats: { official: GenTally | null; plugin: GenTally | null };
+    sameTwice: boolean | null;
+    sameNote?: string;
+    cachedSame: boolean | null;
+    cachedNote?: string;
+    logs: readonly { stage: string | null; level: DevLevel; plugin: string; text: string }[];
+    error: { plugin: string; stage: string | null; why: string } | null;
+  } | null;
+}
+
+interface GenTally {
+  land: number;
+  lakes: number;
+  rivers: number;
+}
+
+const GEN_STAGE: Record<string, string> = { height: '改海拔', climate: '改气候', layers: '出图层' };
+/** 日志一行左边:哪一步(装插件时打的写「装的时候」) */
+export const devGenStage = (s: string | null): string => (s === null ? '装的时候' : (GEN_STAGE[s] ?? s));
+/** 一口超过这么久(毫秒)那格标黄 */
+export const GEN_SLOW_MS = 1000;
+
+/** 3 毫秒、0.09 秒、1.2 秒 */
+export function genTime(ms: number): string {
+  if (ms < 10) return ms < 0.5 ? '不到 1 毫秒' : `${Math.round(ms)} 毫秒`;
+  return `${(ms / 1000).toFixed(ms < 1000 ? 2 : 1)} 秒`;
+}
+
+/** 小卡第二行:试生成完、出错停下、没长成 */
+export function devGenLine(t: GenView, phone: boolean): string {
+  const r = t.result;
+  const file = phone ? '' : `（${t.file}）`;
+  if (!r) return `${clockText(t.at)} 没长成：${t.error ?? '后台线程出错'}`;
+  if (r.error) return r.error.stage === null ? `${clockText(t.at)} 试生成时插件装不上${file}` : `${clockText(t.at)} 试生成到「${devGenStage(r.error.stage)}」出错停下${file}`;
+  return `${clockText(t.at)} 试生成完：${phone ? '' : '这个世界的种子和参数，'}不带 / 带插件各长一遍，用了 ${(r.ms / 1000).toFixed(1)} 秒${file}`;
+}
+
+/** 表里一个插件的一口一行:名字、哪一步、用时(超 1 秒标黄)、改了几块(出图层 = 几张) */
+export function devGenRows(t: GenView): { key: string; name: string; stage: string; time: string; changed: string; slow: boolean }[] {
+  return (t.result?.steps ?? []).map((s, i) => ({
+    key: `${s.id}:${s.stage}:${i}`,
+    name: t.plugins.find((p) => p.id === s.id)?.name ?? s.id,
+    stage: devGenStage(s.stage),
+    time: genTime(s.ms),
+    changed: s.failed ? '出错' : s.stage === 'layers' ? `${s.changed} 张` : `${s.changed.toLocaleString('en-US')} 块`,
+    slow: s.ms > GEN_SLOW_MS,
+  }));
+}
+
+const TALLY: readonly [keyof GenTally, string, (n: number) => string][] = [
+  ['land', '陆地', (n) => `${n}%`],
+  ['lakes', '湖', (n) => `${n} 块`],
+  ['rivers', '河', (n) => `${n} 条`],
+];
+
+/** 右边那张表:几样数不带 / 带(带插件的没长出来 = 「—」) */
+export function devGenTally(t: GenView): { key: string; name: string; off: string; on: string }[] {
+  const s = t.result?.stats;
+  const off = s?.official;
+  if (!s || !off) return [];
+  return TALLY.map(([k, name, f]) => ({ key: k, name, off: f(off[k]), on: s.plugin ? f(s.plugin[k]) : '—' }));
+}
+
+/** 手机上的两行:「环形山改海拔 8 毫秒，柯本气候改气候 0.31 秒」「湖 82 → 88 块，河 214 → 251 条，陆地 33% 没变」 */
+export function devGenBrief(t: GenView): string[] {
+  const steps = devGenRows(t).map((r) => `${r.name}${r.stage} ${r.time}`);
+  const out = steps.length ? [steps.join('，')] : [];
+  const s = t.result?.stats;
+  if (!s?.official || !s.plugin) return out;
+  const moved: string[] = [];
+  const kept: string[] = [];
+  for (const [k, name, f] of TALLY) {
+    const a = s.official[k];
+    const b = s.plugin[k];
+    if (a === b) kept.push(`${name} ${f(a)} 没变`);
+    else moved.push(`${name} ${k === 'land' ? f(a) : a} → ${f(b)}`);
+  }
+  return [...out, [...moved, ...kept].join('，')];
+}
+
+const GLOBAL_VAR = '多半是用了全局变量记东西';
+
+/** 两条自动查:长两遍一样、改一笔和从头长一样;没查(出错停下)的不列 */
+export function devGenChecks(t: GenView, phone: boolean): { key: string; ok: boolean; text: string }[] {
+  const r = t.result;
+  if (!r) return [];
+  // 后几遍出错的,note 是「出错：……」
+  const failed = (note: string | undefined) => !!note?.startsWith('出错');
+  const out: { key: string; ok: boolean; text: string }[] = [];
+  if (r.sameTwice !== null)
+    out.push({
+      key: 'twice',
+      ok: r.sameTwice,
+      text: r.sameTwice ? (phone ? '长两遍一样' : '同一个种子长两遍一样') : `不一样：${failed(r.sameNote) ? `长第二遍时${r.sameNote}` : `长两遍${r.sameNote ?? ''}对不上`}，${GLOBAL_VAR}`,
+    });
+  if (r.cachedSame !== null)
+    out.push({
+      key: 'edit',
+      ok: r.cachedSame,
+      text: r.cachedSame
+        ? phone
+          ? '改一笔地形和从头长一样'
+          : '改一笔地形（挖一个湖）和从头长一样'
+        : `不一样：${failed(r.cachedNote) ? `改一笔地形以后接着长时${r.cachedNote}` : `改一笔地形以后接着长和从头长${r.cachedNote ?? ''}对不上`}，${GLOBAL_VAR}`,
+    });
+  return out;
+}
+
+/** 试生成的「复制全部」:那一行、每一口、几样数、两条自动查、日志 */
+export function devGenCopy(t: GenView): string {
+  const out = [devGenLine(t, false)];
+  if (t.alone) out.push('这个世界用的地图插件本机对不上，这次只带了它');
+  for (const r of devGenRows(t)) out.push(`${r.name} ${r.stage}：${r.time}，改了 ${r.changed}`);
+  for (const r of devGenTally(t)) out.push(`${r.name}：不带 ${r.off}，带 ${r.on}`);
+  for (const c of devGenChecks(t, false)) out.push(`${c.ok ? '✓' : '✗'} ${c.text}`);
+  for (const l of t.result?.logs ?? []) out.push(`${devGenStage(l.stage)} ${levelText(l.level)} ${l.plugin ? `[${l.plugin}] ` : ''}${l.text}`);
+  return out.join('\n');
 }

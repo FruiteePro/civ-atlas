@@ -46,7 +46,7 @@ import { parseSave, type SaveFile } from '../gen/savefile';
 import { recipeKey, recipeOfSave, recipeText } from '../gen/snapshot';
 import type { AuthorContent, WorldMade } from '../gen/worldFormat';
 import type { SimPluginsReady } from '../plugin/simPlugins';
-import type { SimPluginFile } from '../plugin/pluginWorld';
+import type { MapPluginFile, SimPluginFile } from '../plugin/pluginWorld';
 import type { ConvertJob } from '../worldConvert';
 import type { ConvertReply } from '../worldConvertWorker';
 import { pendingEdit, type CommitRequest, type CommitResult, type DraftedFile, type PendingEdit, type VaultErrorKind, type VaultOps, type WorldPartsOffer } from '../worldVault';
@@ -260,6 +260,13 @@ async function noteFailure(id: string, e: unknown, notes = false): Promise<void>
   await drainTrash().catch(() => {});
 }
 
+const partsSaved = new Set<(id: string) => void>();
+/** 线程交回的整份内容存进了仓库(地图插件的图层这时才读得到);返回取消的函数 */
+export function onPartsSaved(f: (id: string) => void): () => void {
+  partsSaved.add(f);
+  return () => void partsSaved.delete(f);
+}
+
 /** 生成世界的线程交回来一份完整的内容:对得上当前世界存着的存档就存 */
 export function offerWorldParts(o: WorldPartsOffer): Promise<boolean> {
   offer = o;
@@ -285,10 +292,12 @@ function keepOffer(): Promise<boolean> {
       offer = null;
       const made: WorldMade = { app: APP_VERSION, generator: o.generator, commit: APP_COMMIT, at: new Date().toISOString() };
       const r = await commit(
-        { id: c.id, recipe: again.save, recipeKey: o.recipe, parts: o.parts, ...(o.schemas ? { schemas: o.schemas } : {}), ...(o.plugins ? { simPlugins: o.plugins } : {}), made, readers: o.readers ?? { ...READER_VERSIONS }, thumb: thumbBytes(again.thumb) },
+        { id: c.id, recipe: again.save, recipeKey: o.recipe, parts: o.parts, ...(o.schemas ? { schemas: o.schemas } : {}), ...(o.plugins ? { simPlugins: o.plugins } : {}), ...(o.mapPlugins ? { mapPlugins: o.mapPlugins } : {}), made, readers: o.readers ?? { ...READER_VERSIONS }, thumb: thumbBytes(again.thumb) },
         o.parts.map((p) => p.data),
       );
-      return r?.status === 'saved';
+      if (r?.status !== 'saved') return false;
+      if (o.mapPlugins?.length) for (const f of partsSaved) f(c.id);
+      return true;
     } catch {
       return false;
     }
@@ -487,6 +496,8 @@ export interface WorldStoreSim {
   packParts?: (ask: Omit<PackAsk, 'id'>) => Promise<WorldPartsOffer>;
   /** 页面里这个世界推演带的推演插件(没用 = undefined;本机对不上、推不出来 = null) */
   sims?: () => SimPluginFile[] | null | undefined;
+  /** 页面里这个世界长地图带的地图插件(没用 = undefined;本机对不上 = null) */
+  maps?: () => MapPluginFile[] | null | undefined;
 }
 
 /** 接上生成世界的线程 */
@@ -499,12 +510,16 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 /** 手机(不在后台算世界) */
 const onPhone = () => isNarrow() || isCoarse();
 
-/** 这个世界最新的修订记的推演插件本机有没有同一版(没用推演插件、没有修订 = null) */
-async function simFilesOf(id: string, read: <T>(p: Promise<T>) => Promise<T | null>): Promise<SimPluginsReady | null> {
+/**
+ * 这个世界最新的修订记的推演插件、地图插件本机有没有同一版:sims 没用推演插件、没有修订 = null;
+ * maps 没用地图插件 = undefined,本机没有同一版 = null(按配方重算长出来是另一张地图)
+ */
+async function pluginFilesOf(id: string, read: <T>(p: Promise<T>) => Promise<T | null>): Promise<{ sims: SimPluginsReady | null; maps?: MapPluginFile[] | null }> {
   const m = await read(call('worldPluginsOf', [id]));
-  if (!m?.plugins.some((p) => p.role === 'sim')) return null;
-  const { simPluginsReady } = await import('../plugin/simPlugins');
-  return simPluginsReady(m.plugins);
+  const sims = m?.plugins.some((p) => p.role === 'sim') ? await (await import('../plugin/simPlugins')).simPluginsReady(m.plugins) : null;
+  if (!m?.plugins.some((p) => p.role === 'map')) return { sims };
+  const r = await (await import('../plugin/mapPlugins')).mapPluginsReady(m.plugins);
+  return { sims, maps: r.ok ? r.files : null };
 }
 
 /**
@@ -541,14 +556,16 @@ async function jobFor(id: string, asked = false, noArchive = false): Promise<Con
     // 打开着的世界线程自己会交内容;手机上打开哪个转哪个
     if (!asked && (onPhone() || currentWorld()?.id === id)) return null;
     // 用了推演插件的带着世界记的那一版推;本机没有就不推(推出来是另一段历史),照原样留着,记下在等哪几个
-    const sims = await simFilesOf(id, read);
+    const { sims, maps } = await pluginFilesOf(id, read);
     const wait = sims && !sims.ok ? sims.checks.filter((c) => c.status !== 'ready').map((c) => c.id) : undefined;
     if (JSON.stringify(state?.simWait) !== JSON.stringify(wait)) await call('patchState', [id, { simWait: wait }]).catch(() => {});
     if (wait) return null;
     const more = sims?.ok && sims.files.length ? { simPlugins: sims.files } : {};
     // 地图留着的世界不按种子算:先看它自己、再看它出自的世界,再看别的世界有没有存着那张地图
     if (keptMapOf(w.save.edits)) return { ...body, ...more, kind: 'keptMap', save: w.save, from: [id, ...(w.save.edits.map?.from ? [w.save.edits.map.from] : []), ...allWorldIds()], app: APP_VERSION, commit: APP_COMMIT };
-    return { ...body, ...more, kind: 'recompute', save: w.save, app: APP_VERSION, commit: APP_COMMIT };
+    // 用了地图插件的带着世界记的那一版长地图;本机没有就不转
+    if (maps === null) return null;
+    return { ...body, ...more, ...(maps?.length ? { mapPlugins: maps } : {}), kind: 'recompute', save: w.save, app: APP_VERSION, commit: APP_COMMIT };
   }
   // 只是记一笔:存储满了记不下也没事
   if (state?.status !== 'old' || state.generator !== w.save.generator) await call('patchState', [id, { status: 'old', generator: w.save.generator }]).catch(() => {});
@@ -802,9 +819,13 @@ export function packPage(save: SaveFile): Promise<WorldPartsOffer> | null {
   // 用了推演插件的带着它们打;本机对不上的算不出来(按官方推出来是另一段历史,还会把世界记的插件冲掉)
   const sims = sim.sims?.();
   if (sims === null) return null;
+  // 用了地图插件的同样:本机对不上的长不出这张地图
+  const maps = sim.maps?.();
+  if (maps === null) return null;
   const r = recipeOfSave(save);
   return sim.packParts({
     ...(sims?.length ? { simPlugins: sims } : {}),
+    ...(maps?.length ? { mapPlugins: maps } : {}),
     params: r.params,
     terrain: r.terrain as TerrainOp[] | undefined,
     sketch: r.sketch,

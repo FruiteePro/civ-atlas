@@ -11,6 +11,7 @@
  *   parts/flags.gz       各国历代的旗(FlagBook)
  *   parts/author.gz      作者的内容:AI 写的正文(可选)
  *   parts/thumb.jpg      封面(可选)
+ *   parts/planet.gz      没改地形的星球参照(可选,见 PlanetValue)
  *   parts/ext.xxx.gz     插件存的数据(可选,见 PLUGIN_DATA_PREFIX)
  *   parts/sim.xxx.gz     推演插件推到哪的状态(可选,见 SIM_STATE_PREFIX)
  *   parts/layer.xxx.yyy.gz  存进世界的插件图层(可选,见 PLUGIN_LAYER_PREFIX)
@@ -42,6 +43,7 @@
  * 纯定义,不碰 DOM,网页、worker、Node(服务器)共用一份。
  */
 import type { SaveFile } from './savefile';
+import type { PlanetNames, PlanetTempo } from './civ/types';
 
 /** 文件的后缀 */
 export const WORLD_FILE_EXT = '.civworld';
@@ -176,6 +178,15 @@ export interface PluginLayerValue {
   opacity?: number;
 }
 
+/**
+ * 一个地图插件在世界里的那一串(World.mapPlugins 的一项,线程里的世界键、生成的缓存也按它认):
+ * 「编号@文件指纹」,有滑条的后面接按名字排好的 [名字, 值] 串(滑条照清单补齐以后的)
+ */
+export function mapPluginKey(p: { id: string; sum: string; params?: Readonly<Record<string, number>> }): string {
+  const params = Object.entries(p.params ?? {}).sort(([a], [b]) => (a < b ? -1 : 1));
+  return `${p.id}@${p.sum}${params.length ? JSON.stringify(params) : ''}`;
+}
+
 /** 用过的插件:世界里只记这些,绝不放插件的代码 */
 export interface WorldPlugin {
   id: string;
@@ -222,7 +233,19 @@ export const KNOWN_PARTS: ReadonlyMap<string, { file: string; required: boolean;
   ['flags', { file: 'parts/flags.gz', required: true, need: 'view' }],
   ['author', { file: 'parts/author.gz', required: false, need: 'extra' }],
   ['thumb', { file: 'parts/thumb.jpg', required: false, need: 'extra' }],
+  ['planet', { file: 'parts/planet.gz', required: false, need: 'extra' }],
 ]);
+
+/**
+ * planet 那一块:用地图插件长、改过地形的世界,推历史要照"没改地形的同一颗星球"的两样,存的时候(插件在手)算好,
+ * 没装插件的人推历史用它,不用重长那颗星球。不给的那一样 = 没存
+ */
+export interface PlanetValue {
+  /** 扩张节拍和城的人口折算(gen/civ 的 planetTempo;null = 那颗星球长不出文明) */
+  tempo?: PlanetTempo | null;
+  /** 山海湖岛照着沿用的地名:只对得上起它的那套设定(key) */
+  names?: PlanetNames;
+}
 
 /** 作者内容里的一条 AI 正文(和浏览器里存的 AiNote 同样的字段) */
 export interface AuthorNote {

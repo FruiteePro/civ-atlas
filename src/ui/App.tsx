@@ -47,7 +47,8 @@ import {
 import { renderLayer, type LayerId } from '../render/layers';
 import { Legend } from './Legend';
 import { ThoughtLegend } from './ThoughtParts';
-import type { WorkerRequest } from '../worker';
+import type { MapFailedKind, WorkerRequest } from '../worker';
+import type { MapSpent, MapStage } from '../gen/mapHooks';
 import type { Civ } from '../gen/civ/types';
 import { CivLayer, civOpenSteps } from './CivLayer';
 import { CivTimeline } from './CivTimeline';
@@ -175,7 +176,7 @@ import { RulesHost } from './rules/RulesHost';
 import { pluginsUiOn } from './plugins/flag';
 import { PluginsHost, ToolsHost } from './plugins/entry';
 import { toolCard, toolCellPick } from './plugins/toolsState';
-import { PluginDevSlot } from './plugins/devSlot';
+import { PluginDevMapSlot, PluginDevSlot, useDevMapOn } from './plugins/devSlot';
 import { PluginAskSlot, PluginCellSlot, PluginLegendSlot, PluginMarksSlot, PluginSavedSlot, usePluginLegendOn } from './plugins/layerSlots';
 import { GalleryPage, WorkGone } from './Gallery';
 import { MapWorkView, WorkBar } from './GalleryWork';
@@ -247,7 +248,7 @@ import { SourceLayer, useImportOn, useSourceView } from './ImportImage';
 import { NewWorldDialog } from './NewWorldDialog';
 import { randomSeedValue, type HomeStart } from './homeStart';
 import { WORKER_URL } from './workerUrl';
-import { noteCrash, resetStuck, simFailOpt } from './stuckStore';
+import { noteCrash as noteCrashNow, resetStuck, simFailOpt } from './stuckStore';
 import { StuckCard } from './StuckCard';
 import { SimClient } from './sim/simClient';
 import { useSimResults, type ExtendJob, type ExtendUndo, type OutlineJob, type RenameCheck, type ResimInfo, type SwitchNote } from './sim/useSimResults';
@@ -279,6 +280,7 @@ import { useAutoSave, useSaveThumbs } from './world/useWorldSave';
 import { useOpenRefs, type CivRefs, type GenProgress, type GenRefs, type MapFirst, type MapRefs, type RegenJob, type ResimRefs, type WorldViewRefs } from './world/worldRefs';
 import {
   draftModeOf,
+  mapsOpt,
   presetDialog,
   writeGalleryUrl,
   type CivSetup,
@@ -290,7 +292,13 @@ import {
   type WorkFor,
 } from './world/worldTarget';
 import { simsOf } from './world/simNow';
+import { getMapNow, mapFilesOf } from './world/mapNow';
+import { setMapFail, type MapFail } from './world/mapFail';
+import { undoLastEdit } from './undo';
+import { MAP_STAGE_TEXT } from './plugins/mapText';
 import { SimAskHost } from './world/SimAskHost';
+import { MapAskHost } from './world/MapAskHost';
+import { askMaps } from './world/mapAsk';
 
 type Replay = { w: number; h: number; frames: Uint8ClampedArray[]; mya: number[]; idx: number };
 
@@ -593,6 +601,9 @@ function AppBody({ fromHome }: { fromHome?: HomeStart }) {
   const mapLayer = layerOf(style, layer, civShow);
   /** 地形画在写实底图上时用哪种画法(别的画风不看它) */
   const terrainLook: SurfaceLook = style === 'realistic' ? paintedLook : 'classic';
+  const devLook = { style, look: terrainLook, layer };
+  // 开发者模式「放到地图上看」盖着试生成的那张:地名是这张地图的,藏起来
+  const devMapOn = useDevMapOn();
   const mapViewRef = useRef({ base: mapBase, fill: mapFill, sat: satLook });
   mapViewRef.current = { base: mapBase, fill: mapFill, sat: satLook };
   const theme = studioOn || baseDark(mapBase) ? 'dark' : 'light';
@@ -769,6 +780,63 @@ function AppBody({ fromHome }: { fromHome?: HomeStart }) {
   const fresh = useRef(false);
   /** 正在进行的"按新地形重新生成"(编号 = 那次生成的请求编号);t0 = 发出去的时刻 */
   const regenRef = useRef<RegenJob | null>(null);
+  /** 地图插件长不下去的那件活(线程随后照 lost 收起它,那时不算线程出错) */
+  const mapFailReq = useRef<WorkerRequest | null>(null);
+  /**
+   * 地图插件长不下去:新建中整张长不出来,星球上放一张卡(world/mapFail.ts);改地形涂的一笔长不出来,顶上一条、能撤销这一笔;
+   * 别的(回放形成、地形大事预览……)顶上说一声。地图都还是原来那份
+   */
+  const mapFailedRef = useRef<(m: { plugin: string; stage: MapStage | null; why: string; kind?: MapFailedKind; spent?: MapSpent[] }, req: WorkerRequest) => void>(() => {});
+  mapFailedRef.current = (m, req) => {
+    const list = getMapNow()?.list ?? [];
+    const rec = list.find((x) => x.id === m.plugin);
+    const name = rec?.name ?? m.plugin;
+    const stage = m.stage ? `「${MAP_STAGE_TEXT[m.stage]}」那一步` : '';
+    const names = new Map(list.map((x) => [x.id, x.name ?? x.id]));
+    const failOf = (): MapFail => ({
+      worldId: targetRef.current?.id ?? '',
+      plugin: m.plugin,
+      name,
+      ...(rec ? { version: rec.version, sum: rec.sum, ...(rec.params ? { params: Object.fromEntries(Object.entries(rec.params).filter((e): e is [string, number] => typeof e[1] === 'number')) } : {}) } : {}),
+      stage: m.stage,
+      why: m.why,
+      kind: m.kind ?? 'throw',
+      ...(m.spent ? { spent: m.spent.map((x) => ({ ...x, name: names.get(x.id) ?? x.id })) } : {}),
+      seed: genParams.current?.seed ?? 0,
+    });
+    if (req.type === 'generate' && req.skipCiv) {
+      regenRef.current = null;
+      setTerrainStatus((s) => ({ ...s, busy: false }));
+      setProgress(null);
+      // 这一笔还在修改里,地图是上一笔的:撤销或重新长以前不能存、不能建
+      setMapFail({ ...failOf(), quiet: true });
+      showToast({
+        id: 'map-fail',
+        kind: 'warn',
+        text: '这一笔没长成',
+        more: [`地图插件「${name}」在${stage || '长地图时'}出错了，地图还是这一笔之前的样子`],
+        actions: [
+          { label: '撤销这一笔', act: 'map-fail-undo', onClick: () => void undoLastEdit() },
+          { label: '看看', act: 'map-fail-look', onClick: () => setMapFail(failOf()) },
+        ],
+        dismissible: true,
+        ttl: 0,
+      });
+      return;
+    }
+    if (req.type === 'generate') {
+      setProgress(null);
+      if (targetRef.current?.kind === 'draft' && getStage().stage === 'draft') return setMapFail(failOf());
+    }
+    // 地形大事看「会怎么样」要照插件重新长:本机对不上(没装、别的版本、停用了)先问
+    const now = getMapNow();
+    const cur = currentWorld();
+    if (req.type === 'upPreview' && now && cur && now.id === cur.id && !now.ready) {
+      closeUpheaval();
+      return askMaps({ title: cur.title || '未命名世界', checks: now.checks, now: getEdits(), next: getEdits(), what: '地形大事' });
+    }
+    showToast({ id: 'map-fail', kind: 'warn', text: `地图插件「${name}」出错了`, more: [`${stage ? `在${stage}：` : ''}${m.why}`], dismissible: true, ttl: 0 });
+  };
   /** 地图上那张整图(baseRef)是哪个世界的(线程的 baseKey;编辑地形时线程按它判断能不能只交回变了的那块) */
   const baseKeyRef = useRef<string | null>(null);
   /** 最近一次发出去的生成请求(按块重铺对不上时按整张重新要) */
@@ -927,6 +995,10 @@ function AppBody({ fromHome }: { fromHome?: HomeStart }) {
       spawn: () => new Worker(WORKER_URL, { type: 'module' }),
       currentId: () => reqId.current,
       ...simFailOpt(),
+      mapFailed: (m, req) => {
+        mapFailReq.current = req;
+        mapFailedRef.current(m, req);
+      },
       on: {
         // 生成、打开世界那几种(世界和地图、进度、原件读不出来、原件、主图补丁、地形大事预览):见 ./world/worldMessages.ts
         ...worldMessages({
@@ -964,6 +1036,10 @@ function AppBody({ fromHome }: { fromHome?: HomeStart }) {
       // 线程出错、重发过一次又出错的活(见 ./sim/simClient.ts 文件头「线程出错」):不再算它,界面上收起,地图上还是原来那份。
       // 生成世界、重推、再推没推成的弹「后台算不动了」那张卡(多半是内存不够),能再推一次;读档退回旧的路,回放帧、地形大事预览再点一次就是新的一件活
       lost: (req) => {
+        // 地图插件长不下去(mapFailed 已经说过了):不算线程出错,不弹「后台算不动了」
+        const quiet = mapFailReq.current === req;
+        if (quiet) mapFailReq.current = null;
+        const noteCrash = quiet ? () => {} : noteCrashNow;
         // 打开世界的那件重发过又出错了:退回旧的路
         if (req.type === 'load') {
           endLoadWatch();
@@ -1046,6 +1122,9 @@ function AppBody({ fromHome }: { fromHome?: HomeStart }) {
         cancelTerrainPatch();
         dropPreparedRivers();
         resetStuck();
+        // 又要长了:上一次地图插件长不出来的卡、提示收起
+        setMapFail(null);
+        clearToast('map-fail');
       }
       // 交回历史的请求带上现在的改名:线程先交套上它的编年史(打开世界时那两种自己带着存档里的改名;试推演不换上,不用)
       const named =
@@ -1161,7 +1240,7 @@ function AppBody({ fromHome }: { fromHome?: HomeStart }) {
   // ---- 存档(阶段 4):自动存、自动恢复、读档;建好的世界推完以后把结果(原件)存进浏览器(./world/useWorldSave.ts) ----
   useAutoSave();
   // 世界仓库(./worldStore.ts)要知道用的人是不是在推演(转存旧世界时让路),要关页面时叫线程把等着的内容打好
-  useEffect(() => setWorldStoreSim({ busy: () => sim.busy > 0, packNow: () => sim.tell({ type: 'packNow', id: reqId.current }), packParts: (ask) => sim.packParts({ ...ask, id: reqId.current }), sims: () => simsOf(currentWorld()?.id) }), []);
+  useEffect(() => setWorldStoreSim({ busy: () => sim.busy > 0, packNow: () => sim.tell({ type: 'packNow', id: reqId.current }), packParts: (ask) => sim.packParts({ ...ask, id: reqId.current }), sims: () => simsOf(currentWorld()?.id), maps: () => mapFilesOf(currentWorld()?.id) }), []);
   // AI(阶段 5):登记服务商、恢复设置、调用记录存本地
   useEffect(() => setupAi(), []);
   // 「使用 AI 功能」关了:助手停下、回到现在、收起;正在写的史书停下(写到一半的不存),写史书的窗口、阅读页关上
@@ -1201,6 +1280,7 @@ function AppBody({ fromHome }: { fromHome?: HomeStart }) {
     draftState,
     draftSeed,
     draftParams,
+    draftMaps,
     draftRename,
     createWorld,
     draftFromCurrent,
@@ -1441,7 +1521,7 @@ function AppBody({ fromHome }: { fromHome?: HomeStart }) {
     prepareCivReplay(); // 文明层先退回第 0 年,等地质放完再接着放文明
     setReplayOn(true);
     if (replay) setReplay({ ...replay, idx: 0 });
-    else send({ type: 'history', id: reqId.current, params: genParams.current, terrain: [...genTerrain.current], sketch: genSketch.current });
+    else send({ type: 'history', id: reqId.current, params: genParams.current, terrain: [...genTerrain.current], sketch: genSketch.current, ...mapsOpt(civSetup.current) });
   };
   /** 弯边投影:回放帧先放在离屏的等距圆柱原图上,再按投影铺到屏幕上 */
   const overlayProj = useRef(new ProjLayer());
@@ -2187,16 +2267,19 @@ function AppBody({ fromHome }: { fromHome?: HomeStart }) {
   // 生成世界(首次打开、换种子、调参数、读档)/ 按新地形重新生成:一行"正在…",小字是种子和这一步在做什么
   useEffect(() => {
     // 照故事找世界打开一个结果:地图顶上那一条写着"正在打开",不另出提示条
+    // 地图先换上了、地图插件还在补图层
+    const backfill = mapEarly && progress?.stage.startsWith('地图插件');
     if (progress && !finderOn)
       showToast({
         id: 'progress',
         kind: 'progress',
-        text: progress.regen ? '正在按新地形重新生成' : '正在生成世界',
-        more: [progress.seed !== undefined && !progress.regen ? `种子 ${progress.seed}，${progress.stage}` : progress.stage],
+        text: backfill ? '地图长好了，正在补插件的图层' : progress.regen ? '正在按新地形重新生成' : '正在生成世界',
+        // 手机上地图插件那一句放不下种子
+        more: [progress.seed !== undefined && !progress.regen && !backfill && !(narrow && progress.stage.startsWith('地图插件')) ? `种子 ${progress.seed}，${progress.stage}` : progress.stage],
         progress: progress.pct,
       });
     else clearToast('progress');
-  }, [progress, finderOn]);
+  }, [progress, finderOn, narrow, mapEarly]);
   // 回放世界形成:后台算各个年代的地形那一两秒(算好以后是地图上的字幕)
   const replayWait = replayOn && !replay;
   useEffect(() => {
@@ -2505,6 +2588,7 @@ function AppBody({ fromHome }: { fromHome?: HomeStart }) {
       onSeed={draftSeed}
       onRandomSeed={() => draftSeed(randomSeedValue())}
       onParams={draftParams}
+      onMaps={draftMaps}
       onTitle={draftRename}
       onCreate={studioCreate}
       onSaveMap={saveMap}
@@ -2638,6 +2722,7 @@ function AppBody({ fromHome }: { fromHome?: HomeStart }) {
               <CivLayer world={data.world} raster={data.raster} civ={namesHeld ? null : civ} geo={namesHeld ? null : shownRaw} style={style} view={view} mp={mp} labelsHost={labelsHost} detailHost={civDetailHost} flags={flagView} bright={mapBase === 'satellite'} />
             )}
             {data && pluginsUiOn() && <PluginCellSlot world={data.world} raster={data.raster} mp={mp} />}
+            {data && pluginsUiOn() && <PluginDevMapSlot mp={mp} />}
             <canvas ref={overlayRef} className={`overlay ${replayOn && replay ? 'show' : ''}`} />
             <canvas ref={overlayCopyRef} className={`overlay wrap-copy ${replayOn && replay ? 'show' : ''}`} />
             {/* 照手绘图新建:原图 / 认出来的 / 叠上原图(在改地形覆盖层底下,笔画在它上面) */}
@@ -2648,7 +2733,7 @@ function AppBody({ fromHome }: { fromHome?: HomeStart }) {
           </div>
         </div>
         {/* 文字层(CivLayer 放进来);回放世界形成时、认图时、照手绘图新建看原图或认出来的时藏起来(回放画面盖住文明层,字也不露出来;认图时只看图) */}
-        <div className={`screen-layer${namesIn ? ' names-in' : ''}`} ref={setLabelsHost} style={(replayOn && replay) || importing || (draft && sourceView.show !== 'grown') ? { ...screenStyle, display: 'none' } : screenStyle} />
+        <div className={`screen-layer${namesIn ? ' names-in' : ''}`} ref={setLabelsHost} style={(replayOn && replay) || devMapOn || importing || (draft && sourceView.show !== 'grown') ? { ...screenStyle, display: 'none' } : screenStyle} />
         {/* 地形大事:涂的地方、会变的地块、会没了的城盖在地名上面(和地图一起缩放) */}
         {data && !curved && upOn && (
           <div className="canvas-wrap-upper" data-hold={hold} style={wrapStyle}>
@@ -2891,8 +2976,8 @@ function AppBody({ fromHome }: { fromHome?: HomeStart }) {
         {/* 导播的字幕条:浮在时间轴上面 */}
         {data && world && <DirectorCaption phone={narrow} civ={civ} hidden={directorOff || stepQuiet} />}
         {/* 开发者模式载入的插件:左边一块小卡(重新载入、日志) */}
-        {pluginsUiOn() && data && world && <PluginDevSlot phone={narrow} world={data.world} civ={realCiv} raw={shownRaw} api={markApi} />}
-        {pluginsUiOn() && data && world && <PluginSavedSlot worldId={worldId} cells={data.world.mesh.n} civ={shownRaw} />}
+        {pluginsUiOn() && data && world && <PluginDevSlot phone={narrow} world={data.world} root={baseData?.world ?? data.world} civ={realCiv} raw={shownRaw} api={markApi} look={devLook} />}
+        {pluginsUiOn() && data && world && <PluginSavedSlot worldId={worldId} cells={data.world.mesh.n} civ={shownRaw} real={previewRaw ? null : rawCiv} mesh={data.world.mesh} />}
         {/* 再推 N 年:电脑是「再推」上面的弹层,手机推的时候胶囊上面一张小卡片 */}
         {data && world && civ && !narrow && <ExtendPop end={civ.endYear} hidden={!extendShown} />}
         {data && world && narrow && <ExtendDock hidden={!extendShown} />}
@@ -2934,6 +3019,7 @@ function AppBody({ fromHome }: { fromHome?: HomeStart }) {
       <AccountHost phone={narrow} />
       {pluginsUiOn() && <PluginsHost phone={narrow} />}
       {pluginsUiOn() && <SimAskHost phone={narrow} />}
+      <MapAskHost phone={narrow} />
       {pluginsUiOn() && <PluginAskSlot phone={narrow} />}
       {pluginsUiOn() && data && world && <ToolsHost phone={narrow} world={data.world} root={baseData?.world ?? data.world} civ={civ} raw={shownRaw} api={markApi} stage={stageRef} active={toolable} />}
       <FrozenAsk phone={narrow} />

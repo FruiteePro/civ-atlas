@@ -3,6 +3,7 @@ import { endParamOf, type WorldEdits } from '../../gen/edits';
 import type { SimPluginCheck } from '../../plugin/pluginWorld';
 import type { UsedPlugin } from './worldPlugins';
 import { versionLabel } from './pluginWords';
+import { MAP_STAGE_TEXT } from './mapText';
 
 type Other = Extract<SimPluginCheck, { status: 'other' }>;
 /** 另存的那份叫什么(和旧版本世界另存的同一个叫法) */
@@ -27,10 +28,39 @@ export function simLines(u: Pick<UsedPlugin, 'plugin' | 'installed'>, order: num
   return out;
 }
 
+/** 地图插件那一行的小字:哪一步、第几个出手、滑条拨到几;出的图层;对不上的说改地形要装回哪一版 */
+export function mapLines(u: Pick<UsedPlugin, 'plugin' | 'installed'>, order: number, titles: readonly string[]): string[] {
+  const m = u.installed?.current.manifest.map;
+  const spec = m?.params ?? {};
+  const given = Object.entries(u.plugin?.params ?? {}).filter((e): e is [string, number] => typeof e[1] === 'number');
+  const changed = given.filter(([k, v]) => !spec[k] || v !== spec[k].default);
+  const knobs = !given.length ? '' : !changed.length ? '滑条都是默认' : `滑条：${changed.map(([k, v]) => (spec[k] ? `${spec[k].label} ${v}（默认 ${spec[k].default}）` : `${k} ${v}`)).join('、')}${changed.length < given.length ? '，别的是默认' : ''}`;
+  const steps = m ? m.stages.map((k) => MAP_STAGE_TEXT[k] ?? k).join('、') : '';
+  const out = [`${steps ? `${steps}，` : ''}第 ${order} 个出手。${knobs}`.replace(/。$/, '')];
+  if (titles.length) out.push(`出了${titles.length > 1 ? ` ${titles.length} 张` : '一张'}图层${titles.map((t) => `「${t}」`).join('')}，存在世界里，没装也照常能看（图层面板「插件图层」）`);
+  if (simHere(u) !== 'same' && u.plugin) out.push(`要改地形，得装回${versionLabel(u.plugin.version)}`);
+  return out;
+}
+
 /** 要先装的那一句 */
 export function missingText(title: string, miss: readonly Pick<SimPluginCheck, 'id' | 'plugin'>[]): string {
   const list = miss.map((c) => `「${c.plugin.name ?? c.id}」${versionLabel(c.plugin.version)}`).join('、');
   return `「${title}」用了推演插件${list}。看不用装；要接着推，得先装上同一版，推出来的历史才对得上。`;
+}
+
+/** 被网站停用了:框的标题 */
+export function blockedLabel(blocked: readonly Pick<SimPluginCheck, 'id' | 'plugin'>[]): string {
+  return blocked.length === 1 ? `「${blocked[0].plugin.name ?? blocked[0].id}」被网站停用了` : `${blocked.length} 个推演插件被网站停用了`;
+}
+
+/** 被网站停用了:框里那两句 */
+export function blockedText(title: string, blocked: readonly Pick<SimPluginCheck, 'id' | 'plugin'>[]): [string, string] {
+  const list = blocked.map((c) => `「${c.plugin.name ?? c.id}」${versionLabel(c.plugin.version)}`).join('、');
+  const it = blocked.length > 1 ? '它们' : '它';
+  return [
+    `「${title}」用了推演插件${list}，${it}被网站停用了，不再跑。这个世界照样能看；要接着推，只能另存一份不带${it}的。`,
+    `原来的「${title}」不动；另存一份「${newTitle(title)}」，地图和你写的东西留下，历史不带${it}、从第 0 年重推，整段都会不一样。`,
+  ];
 }
 
 /** 另存一份那两句 */

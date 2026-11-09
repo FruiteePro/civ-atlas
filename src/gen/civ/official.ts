@@ -4,7 +4,9 @@
  */
 import { generateWorld, type World, type WorldParams } from '../world';
 import type { Sketch } from '../sketch';
-import type { Annal, Civ, CivEra, CivParams, Culture, Habitat, NamePins, PlanetTempo, Place, Polity, Regions, Route, Settlement, UpheavalFact } from './types';
+import { withoutLayers, type MapPlugin } from '../mapHooks';
+import type { Annal, Civ, CivEra, CivParams, Culture, Habitat, NamePins, PlanetNames, PlanetTempo, Place, Polity, Regions, Route, Settlement, UpheavalFact } from './types';
+import { subSeed } from '../util';
 import { computeHabitat } from './habitat';
 import { buildRegions } from './regions';
 import type { CivSim } from './engine/sim';
@@ -37,13 +39,14 @@ import { OFFICIAL_NAMES, officialUnit, simRead, type OfficialName, type SimRead 
  * 改过地形的世界要是按改后的地形重算,远海放一座小岛也会把全世界的扩张拨快或拨慢、城都大一点或小一点,各处的历史全跟着错开。
  * 所以改过地形的世界沿用原来星球的这两个数,只有改动附近(和受它牵连)的历史跟着地形变。
  * 要多生成一遍没改过的地形;worker 按参数缓存,经 CivParams.tempo 传给 generateCiv。
- * 草图(新建世界时画的大陆和海)算星球的一部分:画过草图的世界,"没改地形的星球"是照草图长出来的那一颗(sketch 传进来)。
+ * 草图(新建世界时画的大陆和海)、地图插件都算星球的一部分:画过草图的世界,"没改地形的星球"是照草图长出来的那一颗(sketch 传进来),
+ * 用地图插件长的世界照同样的地图插件长(mapPlugins,按先后)。
  * 没改过的星球长不出文明 = undefined(改过的世界按它自己标定)
  */
-export function planetTempo(params: WorldParams, civ: Partial<CivParams> = {}, sketch?: Sketch | null): PlanetTempo | undefined {
+export function planetTempo(params: WorldParams, civ: Partial<CivParams> = {}, sketch?: Sketch | null, mapPlugins?: readonly MapPlugin[]): PlanetTempo | undefined {
   const p: CivParams = { ...DEFAULT_CIV_PARAMS, ...civ };
   const knobs = knobSet(p.knobs);
-  const world = generateWorld(params, undefined, undefined, sketch);
+  const world = generateWorld(params, undefined, undefined, sketch, undefined, mapPlugins && withoutLayers(mapPlugins));
   const habitat = computeHabitat(world);
   if (!viability(world, habitat).viable) return undefined;
   const seed = params.seed;
@@ -83,6 +86,15 @@ function modelsOf(sim: CivSim): { cm: CultureModel | null; pm: PolityModel | nul
 /** 改过地形:带地形修改或草图(草图只改了板块的也算) */
 const edited = (world: World) => !!world.terrain?.length || !!world.sketch;
 
+/** 重长没改地形的星球要用的地图插件:要和世界记的那一串一一对上,不然长出来的不是同一颗星球 */
+function planetPlugins(world: World, p: CivParams): readonly MapPlugin[] | undefined {
+  const want = world.mapPlugins;
+  if (!want?.length) return undefined;
+  const have = p.mapPlugins ?? [];
+  if (have.length !== want.length || have.some((pl, i) => pl.key !== want[i])) throw new Error('这个世界是用地图插件长的,推历史要带上同样的地图插件');
+  return withoutLayers(have);
+}
+
 /** 文明这边定"谁住在哪、按什么语感起名"的几项设定(地名照着沿用的那一份按它们算,见 nameRefOf) */
 interface RefSetup {
   p: CivParams;
@@ -97,13 +109,17 @@ interface RefSetup {
  * 地名照着沿用的那一份按什么认:世界参数 + 文明种子、地名风格、每州面积、民族数、扩张快慢、诞生跨度、拓荒、起源。
  * 推演年数、干预、地形大事、国家数不算:地名只看计划中的疆域和各民族的语感(和推到哪一年无关),干预立国来的民族不在计划中的疆域里
  */
-function refKeyOf(params: WorldParams, s: RefSetup): string {
+function refKeyOf(world: Pick<World, 'params' | 'mapPlugins'>, s: RefSetup): string {
   const { p } = s;
-  const entries = Object.entries(params).sort(([a], [b]) => (a < b ? -1 : 1));
+  const entries = Object.entries(world.params).sort(([a], [b]) => (a < b ? -1 : 1));
   // 一套数只在改过的时候进键(官方的和加这一项以前一样)
   const k = s.knobs ? [knobsKey(s.knobs)] : [];
-  return JSON.stringify([entries, p.civSeed ?? null, s.mix ?? null, p.regionArea, p.cultures, p.pace, p.birthSpan ?? null, s.frontier ?? null, s.origins ?? null, ...k]);
+  const m = world.mapPlugins?.length ? [{ map: world.mapPlugins }] : [];
+  return JSON.stringify([entries, p.civSeed ?? null, s.mix ?? null, p.regionArea, p.cultures, p.pace, p.birthSpan ?? null, s.frontier ?? null, s.origins ?? null, ...k, ...m]);
 }
+
+/** 设定键的指纹(存进世界的那一份地名带着它):两条 32 位散列拼成 16 位十六进制 */
+const refSum = (key: string): string => [1, 2].map((s) => subSeed(s, key).toString(16).padStart(8, '0')).join('');
 
 /** 记着的几份(按 refKeyOf;最近用过的在后面) */
 const refMemo = new Map<string, readonly NameRef[]>();
@@ -123,11 +139,12 @@ function rememberRef(key: string, ref: readonly NameRef[]): void {
  */
 function nameRefOf(pack: CivPack<OfficialOwn>, world: World, s: RefSetup): readonly NameRef[] | undefined {
   if (!edited(world) || s.p.placeRef === false) return undefined;
-  const key = refKeyOf(world.params, s);
-  let ref = refMemo.get(key);
+  const key = refKeyOf(world, s);
+  const kept = s.p.planetNames;
+  let ref = kept && kept.key === refSum(key) ? kept.ref : refMemo.get(key);
   if (!ref) {
     const { p, mix, frontier, origins, knobs } = s;
-    const w0 = generateWorld(world.params);
+    const w0 = generateWorld(world.params, undefined, undefined, undefined, undefined, planetPlugins(world, p));
     const c0 = runPack(pack, w0, {
       endYear: 0,
       ...(knobs ? { knobs } : {}),
@@ -146,6 +163,17 @@ function nameRefOf(pack: CivPack<OfficialOwn>, world: World, s: RefSetup): reado
   return ref;
 }
 
+/** 同 index.ts 的 planetNames;设定照 prelude、settle 里的取法,和推的时候认的是同一个键 */
+export function planetNamesOf(pack: CivPack<OfficialOwn>, world: World, params: Partial<CivParams>, grow: boolean): PlanetNames | null | undefined {
+  const p: CivParams = { ...DEFAULT_CIV_PARAMS, ...params };
+  if (!edited(world) || p.placeRef === false) return undefined;
+  const s: RefSetup = { p, mix: cleanMix(p.names), frontier: cleanFrontier(p.frontier), origins: cleanOrigins(p.origins), knobs: knobSet(p.knobs, pack.knobs).patch };
+  const key = refKeyOf(world, s);
+  const kept = p.planetNames;
+  if (!grow && !(kept && kept.key === refSum(key)) && !refMemo.has(key)) return null;
+  return { key: refSum(key), ref: nameRefOf(pack, world, s)! };
+}
+
 /** 开头几步:定民族、定国家;干预的事件最先预约(同一刻里只排在地形大事和看王朝、新君即位、迁都后重看边地后面,干预之前的历史一字不差) */
 function prelude(run: Run, seg: Segment): { own: OfficialOwn; install: InstallCtx | null } {
   const { p, seed, knobs, viable } = run;
@@ -156,7 +184,7 @@ function prelude(run: Run, seg: Segment): { own: OfficialOwn; install: InstallCt
   const calamity = cleanCalamity(p.calamity);
   // 改过地形:扩张节拍、城的人口折算沿用没改地形时的同一颗星球(planetTempo);没改 = 按这个世界自己标定。
   // 给了文明种子的(一张地图上新开的历史)一律按这张地图本身标定:地图是定下来的那一张,不另按现在的生成器长一颗没改地形的星球
-  const tempo = viable && world.terrain?.length && p.civSeed === undefined ? (p.tempo === undefined ? planetTempo(world.params, p, world.sketch) : (p.tempo ?? undefined)) : undefined;
+  const tempo = viable && world.terrain?.length && p.civSeed === undefined ? (p.tempo === undefined ? planetTempo(world.params, p, world.sketch, planetPlugins(world, p)) : (p.tempo ?? undefined)) : undefined;
   // 推演插件以前下的命令不当输入:从第 0 年推,插件会再下一遍
   const interventions = p.interventions?.some((v) => v && isCommand(v)) ? p.interventions.filter((v) => !(v && isCommand(v))) : p.interventions;
   const model = viable
@@ -362,7 +390,7 @@ function settle(run: Run, own: OfficialOwn, fin: Segment, eras: CivEra[], facts:
   // 地形大事以后:同一处地方沿用大事以前的地名
   if (eras.length) keepPlaceNames(fin.world, eras[eras.length - 1].places, places);
   // 没改过地形、没有干预和地形大事的:这就是改地形以后要照着沿用的那一份,记下(nameRefOf)
-  if (!edited(fin.world) && !interventions?.length && !eras.length) rememberRef(refKeyOf(fin.world.params, setup), nameRefs(fin.world, places, cultures, fin.regions));
+  if (!edited(fin.world) && !interventions?.length && !eras.length) rememberRef(refKeyOf(fin.world, setup), nameRefs(fin.world, places, cultures, fin.regions));
   const people = buildPeople({
     knobs,
     seed,

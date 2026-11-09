@@ -21,6 +21,8 @@ import {
   type DevLog,
 } from '../src/ui/plugins/pluginText';
 import { CAP_LABEL } from '../src/ui/plugins/pluginWords';
+import { mapBrief, mapRows } from '../src/ui/plugins/mapText';
+import { mapLines } from '../src/ui/plugins/simWorldText';
 import { PERMISSIONS } from '../src/plugin/pluginCaps';
 
 function manifest(over: Partial<PluginManifest> = {}): PluginManifest {
@@ -130,6 +132,54 @@ describe('推演插件的字', () => {
   it('权限的短说法每行都有;从作品墙装好以后说去哪选', () => {
     for (const k of Object.keys(PERMISSIONS)) expect(CAP_LABEL[k]).toBeTruthy();
     expect(wallInstalledText(manifest({ role: 'sim', runtime: 'quickjs', requires: caps }), false)).toBe('新建世界时，在「文明」那一步的「推演插件」里选上它。装在这个浏览器里，所有世界都能用。');
+  });
+});
+
+describe('地图插件的字', () => {
+  const koppen = {
+    stages: ['climate', 'layers'],
+    layers: [{ id: 'k', title: '柯本气候', classes: Array.from({ length: 30 }, (_, i) => ({ value: i, color: '#000000', label: String(i) })) }],
+    params: { monsoon: { label: '季风强弱', min: 0, max: 2, default: 1 } },
+  };
+
+  it('它在长地图时做什么:哪一步、会改什么、图层、滑条,网站自己的说法', () => {
+    expect(mapRows(koppen, false)).toEqual([
+      { k: '在哪一步出手', v: '改气候（气温降水算好以后）、出图层（地图长好以后）' },
+      { k: '会改什么', v: '气温、降水', small: '后面的海冰、河、森林草原沙漠、文明跟着变' },
+      { k: '图层', v: '1 张：「柯本气候」（30 类）', small: '存进世界，在图层面板「插件图层」里' },
+      { k: '滑条', v: '1 个：季风强弱（0–2，默认 1）', small: '新建世界选它时拨' },
+      { k: '多花多久', v: '没量过' },
+    ]);
+    const phone = mapRows(koppen, true);
+    expect(phone.slice(0, 3)).toEqual([
+      { k: '哪一步', v: '改气候、出图层' },
+      { k: '会改什么', v: '气温、降水', small: '后面的河、森林草原沙漠、文明跟着变' },
+      { k: '图层', v: '「柯本气候」（30 类）', small: '存进世界，在图层面板「插件图层」里' },
+    ]);
+    const craters = mapRows({ stages: ['height'], params: { a: { label: '坑有几个', min: 0, max: 200, default: 40 }, b: { label: '坑多大', min: 0.5, max: 2, default: 1 } } }, false);
+    expect(craters[1]).toEqual({ k: '会改什么', v: '海拔（跨过海平面的地方海陆跟着变）', small: '后面的湖、气候、河、森林草原沙漠、文明跟着变' });
+    expect(craters[2]).toEqual({ k: '图层', v: '不加' });
+    expect(craters[3].v).toBe('2 个：坑有几个、坑多大');
+    expect(mapRows({ stages: ['layers'], layers: [{ id: 't', title: '潮差', ramp: { colors: ['#000000', '#ffffff'] } }] }, false)[1]).toEqual({ k: '会改什么', v: '不改地图' });
+  });
+
+  it('世界设定「用到的插件」里地图插件那一行:哪一步、第几个出手、滑条、出的图层,对不上的说改地形要装回哪一版', () => {
+    const installed = (sum: string, version = '1.0.0') =>
+      ({ id: 'craters', current: { sum, manifest: { version, map: { stages: ['height'], params: { count: { label: '坑有几个', min: 0, max: 200, default: 24 }, size: { label: '坑多大', min: 0.5, max: 2, default: 1 } } } } } }) as never;
+    const plugin = { id: 'craters', version: '1.0.0', sum: 'a', role: 'map', name: '环形山', params: { count: 40, size: 1 } };
+    expect(mapLines({ plugin, installed: installed('a') }, 1, [])).toEqual(['改海拔，第 1 个出手。滑条：坑有几个 40（默认 24），别的是默认']);
+    expect(mapLines({ plugin: { ...plugin, params: { count: 24, size: 1 } }, installed: installed('b', '1.1.0') }, 2, ['柯本气候'])).toEqual([
+      '改海拔，第 2 个出手。滑条都是默认',
+      '出了一张图层「柯本气候」，存在世界里，没装也照常能看（图层面板「插件图层」）',
+      '要改地形，得装回第 1.0 版',
+    ]);
+    expect(mapLines({ plugin, installed: null }, 1, [])).toEqual(['第 1 个出手。滑条：count 40、size 1', '要改地形，得装回第 1.0 版']);
+  });
+
+  it('选插件那一页名字下面那行按出手的先后;装好以后说去哪选', () => {
+    expect(mapBrief({ stages: ['layers', 'climate'], layers: koppen.layers })).toBe('改气候、出 1 张图层');
+    expect(mapBrief({ stages: ['height'] })).toBe('改海拔');
+    expect(wallInstalledText(manifest({ role: 'map', runtime: 'quickjs', requires: ['gen.height@1'] }), true)).toBe('新建世界时，在「地图」那一步的「地图插件」里选上它。装在这个浏览器里，所有世界都能用。');
   });
 });
 

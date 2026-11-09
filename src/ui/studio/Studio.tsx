@@ -37,7 +37,7 @@
  * 没有 WebGL(或显卡丢了):中间一直是平常的平面地图;样式照样能换。
  * 系统设了"减少动态效果":地球仪不自转,换样式和投影只做很短的过渡。
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { World, WorldParams } from '../../gen/world';
 import { DEFAULT_PARAMS } from '../../gen/world';
 import type { Civ } from '../../gen/civ/types';
@@ -135,11 +135,16 @@ import type { LabelView } from '../../render/labels/draw';
 import { LEFT_W, RIGHT_W, appPose, flatRect } from './layout';
 import { flatGeom, getStudioFlat, keepStudioView, setStudioFlat, takeStudioView } from './studioStore';
 import { holdMark } from '../holdMark';
-import { PuzzleIcon, SimPickHost } from '../plugins/entry';
+import { MapPickHost, PuzzleIcon, SimPickHost } from '../plugins/entry';
 import { pluginsUiOn } from '../plugins/flag';
 import { useSimNow } from '../world/simNow';
+import { useMapNow } from '../world/mapNow';
+import { useMapFail } from '../world/mapFail';
 import '../worlds.css';
 import './studio.css';
+
+/** 地图插件长不出地图的卡:出错时才下载 */
+const MapFailCard = lazy(() => import('../plugins/MapFailCard').then((m) => ({ default: m.MapFailCard })));
 
 /** 新建时能看的样式(不用历史的;政区、民族建好以后才有) */
 export const STUDIO_STYLES: { id: MapLayer; name: string; hint: string }[] = [
@@ -168,7 +173,7 @@ const AST_SHEET = 0.58;
 /** 手机上照手绘图那一页的底部卡片占屏幕多高(和 studio.css 的 .sk-sheet 一致;拉到最高时盖住地图,地图不跟着挪) */
 const SK_SHEET = 0.642;
 /** 确认框里"下面几样不能再改" */
-const LOCK_COUNT = ['', '一', '两', '三', '四', '五', '六', '七', '八', '九', '十'];
+const LOCK_COUNT = ['', '一', '两', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二'];
 
 /** 「天灾」选了多 / 很多:下面那一句(手机短一些) */
 function calamityNote(c: Calamity, phone: boolean): string {
@@ -202,6 +207,8 @@ export interface StudioProps {
   /** 换一个随机种子(随机生成的「换一颗」;照手绘图的「山河、地名换一种」:海陆照图,不变) */
   onRandomSeed: () => void;
   onParams: (p: WorldParams) => void;
+  /** 选的地图插件变了(已记进 world/mapNow.ts):星球照它重新长 */
+  onMaps?: () => void;
   onTitle: (title: string) => void;
   /**
    * 确认创建:名字、正中的经度(度,平常的地图从这里接着看);how = 选了「演绎」(step:从第 0 年起逐年推演)/「照大纲」(outline:建好以后先打开大纲);
@@ -431,6 +438,20 @@ export function Studio(p: StudioProps) {
   const simNames = simNow?.list.map((x) => x.name ?? x.id) ?? [];
   /** 确认框里列推演插件:选了的(照故事找的不带) */
   const simLocked = simOn && !found && simNames.length > 0;
+  /** 左边换成选地图插件的那一页 */
+  const [mapPage, setMapPage] = useState(false);
+  const mapNow = useMapNow();
+  const mapNames = mapNow?.list.map((x) => x.name ?? x.id) ?? [];
+  /** 地图插件长不出这张地图(星球上那张卡;改了选的、重新长就收起) */
+  const mapFail = useMapFail();
+  // 手机:卡在最上面,卡片退回「地图」那一页、不拉到最高(不挡着卡)
+  useEffect(() => {
+    if (!mapFail || mapFail.quiet || !p.phone) return;
+    setMapPage(false);
+    setSheetFull(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapFail]);
+  const mapLocked = simOn && !found && mapNames.length > 0;
   /** 起源页上:星球停住时的样子(圆点按它摆;动着 = null)、底下的提示(点错了的那句和画虚线圈的地方,过几秒收起) */
   const [pinPose, setPinPose] = useState<StillPose | null>(null);
   const [originMsg, setOriginMsg] = useState<{ text: string; x: number; y: number } | null>(null);
@@ -994,6 +1015,8 @@ export function Studio(p: StudioProps) {
     if (name !== p.title) p.onTitle(name);
   };
   const askCreate = () => {
+    // 以它为底稿带过来的推演插件本机没装:先到选推演插件那一页,装上或移出
+    if (simLocked && !simNow?.files) return openSimPage();
     p.onLeaveTerrain();
     commitName();
     mixFlush.current?.();
@@ -1007,6 +1030,7 @@ export function Studio(p: StudioProps) {
     if (p.phone) setSheetFull(true);
     setRulesPage(false);
     setSimPage(false);
+    setMapPage(false);
     setNamesPage(true);
   };
   /** 选「规则」的那一页:手机上卡片拉到最高 */
@@ -1025,7 +1049,19 @@ export function Studio(p: StudioProps) {
     if (p.phone) setSheetFull(true);
     setNamesPage(false);
     closeOrigins();
+    setMapPage(false);
     setSimPage(true);
+  };
+  /** 选地图插件的那一页:手机上卡片拉到最高 */
+  const openMapPage = () => {
+    setDrawer(null);
+    setStyOpen(false);
+    if (p.phone) setSheetFull(true);
+    setNamesPage(false);
+    setRulesPage(false);
+    closeOrigins();
+    setSimPage(false);
+    setMapPage(true);
   };
   /** 「文明起源」页:星球停转(照手绘图的卷成地球仪),圆点按星球现在的样子摆;手机上卡片拉开 */
   const openOrigins = () => {
@@ -1039,6 +1075,7 @@ export function Studio(p: StudioProps) {
     keptOrigins.current = undefined;
     setRulesPage(false);
     setSimPage(false);
+    setMapPage(false);
     if (p.phone) setSheetFull(true);
     if (image) {
       if (tool.on) setTerrainTool({ on: false });
@@ -1065,6 +1102,7 @@ export function Studio(p: StudioProps) {
       setNamesPage(false);
       setRulesPage(false);
       setSimPage(false);
+      setMapPage(false);
     }
     closeOrigins();
     if (tool.on) setTerrainTool({ on: false });
@@ -1519,6 +1557,28 @@ export function Studio(p: StudioProps) {
       <Icon name="chevron" size={14} className="sb-chev" />
     </button>
   );
+  /** 「地图插件」:选上的几个(没选写「不用」),点了左边换成选地图插件的那一页(插件界面开着才有) */
+  const mapPlugRow = simOn && (
+    <button className="sb-row" data-act="map-plugins" disabled={!p.ready} onClick={openMapPage}>
+      <span className="sb-ico">
+        <PuzzleIcon size={ico} />
+      </span>
+      <span className="sb-row-main">
+        <b>地图插件</b>
+      </span>
+      {mapFail ? (
+        <span className="sb-row-side sb-origin nw-map-warn" data-side="map-plugins">
+          <Icon name="warn" size={14} />
+          {mapFail.name}出错了
+        </span>
+      ) : (
+        <span className="sb-row-side sb-origin" data-side="map-plugins">
+          {mapNames.length ? mapNames.join('、') : '不用'}
+        </span>
+      )}
+      <Icon name="chevron" size={14} className="sb-chev" />
+    </button>
+  );
   /** 「推演插件」:选上的几个(没选写「不用」),点了左边换成选推演插件的那一页(插件界面开着才有) */
   const simRow = simOn && (
     <button className="sb-row" data-act="sim-plugins" onClick={openSimPage}>
@@ -1677,6 +1737,7 @@ export function Studio(p: StudioProps) {
     setNamesPage(false);
     setRulesPage(false);
     setSimPage(false);
+    setMapPage(false);
     closeOrigins();
     setSheetFull(false);
     setCivStep(true);
@@ -1687,6 +1748,7 @@ export function Studio(p: StudioProps) {
     setNamesPage(false);
     setRulesPage(false);
     setSimPage(false);
+    setMapPage(false);
     closeOrigins();
     setSheetFull(false);
     setYearsOpen(false);
@@ -1746,17 +1808,17 @@ export function Studio(p: StudioProps) {
     </button>
   );
   const createBtn = (
-    <button className="nw-create" data-act="create-world" disabled={p.busy || !p.ready || out > 0 || importing || (image && !applied)} onClick={askCreate}>
+    <button className="nw-create" data-act="create-world" disabled={p.busy || !p.ready || out > 0 || importing || (image && !applied) || !!mapFail} onClick={askCreate}>
       {base ? '创建新世界' : step2 ? (stepHow ? '开始演绎' : outlineHow ? '建好，先写大纲' : found ? `建好，停在第 ${found.year} 年` : '开始推演') : '创建世界'}
     </button>
   );
   /** 第 1 步底部:「保存地图」「打造文明 ›」 */
   const mapBtns = (
     <div className="st-foot-2">
-      <button className="nw-create alt" data-act="save-map" disabled={p.busy || !p.ready || out > 0} onClick={() => p.onSaveMap()}>
+      <button className="nw-create alt" data-act="save-map" disabled={p.busy || !p.ready || out > 0 || !!mapFail} onClick={() => p.onSaveMap()}>
         保存地图
       </button>
-      <button className="nw-create" data-act="to-civ" disabled={p.busy || !p.ready || out > 0} onClick={toCiv}>
+      <button className="nw-create" data-act="to-civ" disabled={p.busy || !p.ready || out > 0 || !!mapFail} onClick={toCiv}>
         {p.phone ? '地图做好了，下一步' : '打造文明 ›'}
       </button>
     </div>
@@ -1768,8 +1830,9 @@ export function Studio(p: StudioProps) {
   const ogRaw = p.civ ?? p.raw;
   const ogCiv = ogRaw && originCiv(ogRaw);
   const spShown = simOn && simPage && !tool.on && !peek && !mixShown && !rpShown;
-  const ogShown = originsOn && !mixShown && !rpShown && !spShown;
-  const pageShown = mixShown || ogShown || rpShown || spShown;
+  const mpShown = simOn && mapPage && !tool.on && !peek && !mixShown && !rpShown && !spShown;
+  const ogShown = originsOn && !mixShown && !rpShown && !spShown && !mpShown;
+  const pageShown = mixShown || ogShown || rpShown || spShown || mpShown;
   const mixPage = mixShown ? (
     <NameMixPage backLabel={heading} onBack={() => setNamesPage(false)} civ={p.raw} busy={p.busy} ready={p.ready} phone={p.phone} flush={mixFlush} />
   ) : rpShown ? (
@@ -1783,6 +1846,8 @@ export function Studio(p: StudioProps) {
     />
   ) : spShown ? (
     <SimPickHost phone={p.phone} onBack={() => setSimPage(false)} onCollapse={p.phone ? undefined : () => setCollapsed(true)} />
+  ) : mpShown ? (
+    <MapPickHost phone={p.phone} worldId={mapFail?.worldId ?? mapNow?.id} onBack={() => setMapPage(false)} onChange={() => p.onMaps?.()} onCollapse={p.phone ? undefined : () => setCollapsed(true)} />
   ) : (
     ogShown && (
       <OriginsPage
@@ -1854,6 +1919,7 @@ export function Studio(p: StudioProps) {
         '参数和名字',
         <>
           <StepParams params={p.params} onParams={p.onParams} disabled={p.busy} />
+          {mapPlugRow}
           {rerollRow}
           {rulesRow}
           {simRow}
@@ -1900,6 +1966,7 @@ export function Studio(p: StudioProps) {
               {lockedRow('origins-found', '文明起源', '和找的时候一样')}
               {lockedRow('calamity-found', '天灾', '和找的时候一样')}
               {rulesOn && lockedRow('rules-found', '规则', '和找的时候一样')}
+              {simOn && lockedRow('maps-found', '地图插件', '不用（找的时候没带插件）')}
               {simOn && lockedRow('sims-found', '推演插件', '不用（找的时候没带插件）')}
             </>
           ) : (
@@ -1955,6 +2022,7 @@ export function Studio(p: StudioProps) {
         <div className="sb-group">
           {seedRow}
           {!peek && paramsRow}
+          {!peek && mapPlugRow}
           {finderRow}
         </div>
         {!peek && noCivHint}
@@ -2009,6 +2077,7 @@ export function Studio(p: StudioProps) {
           setNamesPage(false);
           setRulesPage(false);
           setSimPage(false);
+          setMapPage(false);
           closeOrigins();
         }
         setSheetFull(!sheetFull);
@@ -2355,6 +2424,21 @@ export function Studio(p: StudioProps) {
           }}
         />
       )}
+      {mapFail && !mapFail.quiet && !out && (
+        <div className={`mf-wrap${p.phone ? ' ph' : ''}`} style={p.phone ? undefined : { left: box.x + box.w / 2, top: box.y + box.h / 2 }}>
+          <Suspense fallback={null}>
+            <MapFailCard
+              f={mapFail}
+              onPick={openMapPage}
+              onDrop={() =>
+                void import('../plugins/mapWorld').then(async (m) => {
+                  if (await m.chooseMaps(mapFail.worldId, m.chosenMaps(mapFail.worldId).filter((c) => c.id !== mapFail.plugin))) p.onMaps?.();
+                })
+              }
+            />
+          </Suspense>
+        </div>
+      )}
       {viewSaved && !out && (
         <div className="st-cap st-tip st-def-tip" style={!p.phone ? { left: box.x + box.w / 2 } : undefined} data-act="default-view-tip">
           {viewSaved.text}
@@ -2391,7 +2475,7 @@ export function Studio(p: StudioProps) {
               {step2 ? (nameNow ? `开始${verb}「${nameNow}」？` : `开始${verb}这个文明？`) : nameNow ? `创建「${nameNow}」？` : '创建这个世界？'}
             </h2>
             <p>
-              {step2 ? `开始${verb}以后` : '创建以后，这颗星球的样子就定下来了'}，下面{LOCK_COUNT[4 + (step2 ? 1 : 0) + (yearsLocked ? 1 : 0) + (frontier ? 1 : 0) + (calamity ? 1 : 0) + (edits.rules ? 1 : 0) + (simLocked ? 1 : 0) + (originN ? 1 : 0)]}样不能再改：
+              {step2 ? `开始${verb}以后` : '创建以后，这颗星球的样子就定下来了'}，下面{LOCK_COUNT[4 + (step2 ? 1 : 0) + (yearsLocked ? 1 : 0) + (frontier ? 1 : 0) + (calamity ? 1 : 0) + (edits.rules ? 1 : 0) + (simLocked ? 1 : 0) + (mapLocked ? 1 : 0) + (originN ? 1 : 0)]}样不能再改：
             </p>
             <div className="sb-group">
               {image ? (
@@ -2422,6 +2506,17 @@ export function Studio(p: StudioProps) {
                 </span>
                 <span className="sb-row-side">{paramsSide(p.params)}</span>
               </div>
+              {mapLocked && (
+                <div className="sb-row static">
+                  <Icon name="lock" size={16} className="sb-ico" />
+                  <span className="sb-row-main">
+                    <b>地图插件</b>
+                  </span>
+                  <span className="sb-row-side sb-origin" data-confirm="map-plugins">
+                    {mapNames.join('、')}
+                  </span>
+                </div>
+              )}
               {step2 && (
                 <div className="sb-row static">
                   <Icon name="lock" size={16} className="sb-ico" />

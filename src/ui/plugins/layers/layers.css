@@ -17,7 +17,7 @@
   padding-left: 4px;
   padding-right: 4px;
 }
-/* 有推演插件的图层时:按钮挨着排,推演插件的按字宽(带「推演」小标),别的照旧一格宽 */
+/* 有推演、地图插件的图层时:按钮挨着排,它们的按字宽(带「推演」「地图」小标,名字太长时省略名字、小标不截),别的照旧一格宽 */
 .lp-chips.plg-chips {
   display: flex;
   flex-wrap: wrap;
@@ -25,7 +25,7 @@
 .plg-chips .lp-chip.plg-chip {
   width: calc((100% - 18px) / 4);
 }
-.plg-chips .lp-chip.plg-chip.sim {
+.plg-chips .lp-chip.plg-chip.tagged {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -34,6 +34,11 @@
   max-width: 100%;
   padding-left: 10px;
   padding-right: 10px;
+}
+.plg-cname {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .plg-ctag {
   flex: none;
@@ -93,6 +98,32 @@
   margin-left: auto;
   color: var(--ink-2);
   white-space: nowrap;
+}
+/* 工具插件带年份的:名字和第几年一行,下面一行插件名和按钮 */
+.plg-lt.plg-lta {
+  min-height: 0;
+  margin-top: 3px;
+  align-items: baseline;
+  gap: 8px;
+}
+.plg-lyear.warn {
+  align-self: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: var(--r-tag);
+  background: rgba(185, 124, 12, 0.15);
+  color: #8f5d07;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 18px;
+}
+[data-theme='dark'] .plg-lyear.warn {
+  background: rgba(255, 214, 10, 0.16);
+  color: var(--warn);
+}
+/* 存好的提示说了存了哪些年、多大,放一行太长会盖住左上的图例 */
+.toast[data-toast='plugin-layer'] {
+  max-width: min(470px, calc(100% - 32px));
 }
 .plg-ltag {
   flex: none;

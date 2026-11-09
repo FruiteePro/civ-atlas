@@ -1221,6 +1221,12 @@ export interface PlanetTempo {
   capNorm: number;
 }
 
+/** 改过地形的世界山海湖岛照着沿用的那一份地名(official.ts 的 nameRefOf):key = 起这份地名的那套设定的指纹 */
+export interface PlanetNames {
+  key: string;
+  ref: readonly import('./places').NameRef[];
+}
+
 /**
  * 推文明的底子:宜居度和州(index.ts 的 civBase;generateCiv 的头两步)。
  * 只跟地形(world)、文明种子、每州目标面积有关,和干预、拓荒、起源、地名风格、推演年数……都无关:
@@ -1292,6 +1298,8 @@ export interface CivParams {
    * 照原样打开的旧版本世界,按现在的生成器生成的"没改过的星球"不一定是它原来那一颗。不给 = 照着起;没改过地形的世界不看它
    */
   placeRef?: false;
+  /** 存下的照着沿用的地名(用地图插件长的世界存在 planet 那一块):指纹对得上这次的设定才用,对不上照常重长没改地形的星球 */
+  planetNames?: PlanetNames;
   /**
    * 这个世界的一套数(engine/knobs.ts):推演里各子系统"调参"那一段的数,只写和官方不一样的项(表 id → 项名 → 值;推演前先清理,
    * 认不出的表、项,值不合用的当没有)。不给 / 清理完是空的 = 官方(和没有这一项逐字节一样)。
@@ -1303,6 +1311,11 @@ export interface CivParams {
    * 带着代码,不跨线程传;接着推时要和 civ.simPlugins 记的插件一一对上,对不上从第 0 年重推
    */
   plugins?: readonly import('./engine/plugin').SimPlugin<import('./simRead').SimRead>[];
+  /**
+   * 世界用地图插件长的(World.mapPlugins)、改过地形时,重长没改地形的星球(扩张节拍、地名照着的那一颗)要用的地图插件,
+   * 要和世界记的一一对上。带着代码,不跨线程传
+   */
+  mapPlugins?: readonly import('../mapHooks').MapPlugin[];
   /** 推演插件计时(毫秒;单测换成假的):插件用时超了 engine/plugin.ts 的 PLUGIN_TIME 就停下。不给 = performance.now */
   pluginClock?: () => number;
 }

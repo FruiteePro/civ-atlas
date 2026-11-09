@@ -34,6 +34,7 @@
 import { CivPartInbox } from '../../civParts';
 import { diagBeat, recordSimError, recordWorkerError } from '../../diag/watch';
 import type { Civ } from '../../gen/civ';
+import type { DevTryResult } from '../../plugin/devTry';
 import type { LoadRequest, TempoNote, WorkerRequest, WorkerResponse } from '../../worker';
 import type { WorldPartsOffer } from '../../worldVault';
 import { adoptChronicle, dropChronicleParts, takeChronicleBlock, takeChroniclePart } from '../chronicleHandoff';
@@ -49,7 +50,7 @@ export interface SimWorker {
 
 type Msg<K extends WorkerResponse['type']> = Extract<WorkerResponse, { type: K }>;
 /** 客户端自己收拾的:分段先交的历史、编年史,半路放下的回音,试推演的结果,打好的内容 */
-type Internal = 'civPart' | 'chronicle' | 'chronicleBlock' | 'aborted' | 'trial' | 'packed' | 'simError';
+type Internal = 'civPart' | 'chronicle' | 'chronicleBlock' | 'aborted' | 'trial' | 'packed' | 'simError' | 'devTry' | 'devTryProgress' | 'mapFailed';
 /** 每种消息交给谁(现在这个世界的;记账、拼历史、记编年史都已做完) */
 export type SimHandlers = { [K in Exclude<WorkerResponse['type'], Internal>]: (m: Msg<K>) => void };
 
@@ -64,6 +65,8 @@ export interface SimClientOptions {
    * 只交现在这个世界的(编号对不上的不交);试推演不交,这里直接 reject
    */
   lost: (req: WorkerRequest) => void;
+  /** 地图插件长不下去(worker.ts 的 mapFailed):先交给它说是哪个插件、为什么(只交现在这个世界的),再照 lost 收起那件活 */
+  mapFailed?: (m: Msg<'mapFailed'>, req: WorkerRequest) => void;
   /** 冒烟检查、截图用:每个新开的线程推过这一年就故意出错(见 worker.ts 的 simFail;不给 = 照常) */
   simFail?: number;
 }
@@ -94,7 +97,7 @@ export function forgetSimError(): void {
   lastSim = null;
 }
 
-const QUIET = new Set<WorkerResponse['type']>(['progress', 'eraPatch', 'snapshot', 'worldParts', 'extendProgress', 'outlineProgress', 'chronicle', 'chronicleBlock', 'map', 'simError']);
+const QUIET = new Set<WorkerResponse['type']>(['progress', 'eraPatch', 'snapshot', 'worldParts', 'extendProgress', 'outlineProgress', 'chronicle', 'chronicleBlock', 'map', 'simError', 'devTryProgress']);
 
 /** 叫线程打内容要给的(见 worker.ts 的 packParts) */
 export type PackAsk = Omit<Extract<WorkerRequest, { type: 'packParts' }>, 'type' | 'fid'>;
@@ -116,6 +119,14 @@ interface Trial {
   reject: (e: Error) => void;
 }
 
+/** 开发者模式试推要给的(见 worker.ts 的 devTry) */
+export type DevTryAsk = Omit<Extract<WorkerRequest, { type: 'devTry' }>, 'did'>;
+interface DevTryWait {
+  resolve: (r: DevTryResult) => void;
+  reject: (e: Error) => void;
+  progress?: (pct: number) => void;
+}
+
 export class SimClient {
   private w: SimWorker | null = null;
   /** 发给当前线程、还没回音的活(生成世界 / 回放帧 / 重推文明……),按发出的先后;线程按这个先后一件件做、一件件回 */
@@ -132,6 +143,9 @@ export class SimClient {
   /** 助手的试推演:发给线程、还没回音的(编号 → 等着的那一次) */
   private trials = new Map<number, Trial>();
   private trialSeq = 0;
+  /** 开发者模式的试推:发给线程、还没回音的 */
+  private devTries = new Map<number, DevTryWait>();
+  private devSeq = 0;
   /** 叫线程打的内容(packParts):发给线程、还没回音的(编号 → 等着的那一次) */
   private packs = new Map<number, PackWait>();
   private packSeq = 0;
@@ -244,6 +258,12 @@ export class SimClient {
 
   /** 不再重发的一件活:试推演 reject,现在这个世界的交给 lost */
   private lose(req: WorkerRequest): void {
+    if (req.type === 'devTry') {
+      const d = this.devTries.get(req.did);
+      this.devTries.delete(req.did);
+      d?.reject(new Error('后台线程出错，试推没算成'));
+      return;
+    }
     if (req.type === 'trial') {
       const t = this.trials.get(req.tid);
       this.trials.delete(req.tid);
@@ -257,6 +277,17 @@ export class SimClient {
   private dropTrials(why: string): void {
     for (const t of this.trials.values()) t.reject(new Error(why));
     this.trials.clear();
+    for (const d of this.devTries.values()) d.reject(new Error(why));
+    this.devTries.clear();
+  }
+
+  /** 开发者模式试推(见 worker.ts 的 devTry):排在手上的活后面;线程出错、换了世界、页面关了都 reject */
+  devTry(req: DevTryAsk, progress?: (pct: number) => void): Promise<DevTryResult> {
+    return new Promise((resolve, reject) => {
+      const did = ++this.devSeq;
+      this.devTries.set(did, { resolve, reject, progress });
+      this.send({ ...req, did });
+    });
   }
 
   /** 不算一件活、线程不回音的(改名、换上了、叫停、放掉整图):有线程就直接发,没有就算了 */
@@ -331,16 +362,28 @@ export class SimClient {
       return void recordSimError(m.at, m.message, m.stack);
     }
     if ('split' in m && m.split) this.parts.join(m.civ!, m.split);
+    let req: WorkerRequest | undefined;
     if (!QUIET.has(m.type)) {
-      this.pending.shift();
+      req = this.pending.shift()?.req;
       if (!this.pending.length) {
         this.doing = null;
         diagBeat();
       }
-      if (m.type === 'done' || m.type === 'aborted') this.soft.delete(m.id);
+      if (m.type === 'done' || m.type === 'aborted' || m.type === 'mapFailed') this.soft.delete(m.id);
     }
     // 半路放下的生成(被新的一笔顶掉了):只是一声回音
     if (m.type === 'aborted') return;
+    // 地图插件长不下去:那件活到此为止,和重发过又出错的一样收起
+    if (m.type === 'mapFailed') {
+      if (!req) return;
+      if (req.type === 'packParts') {
+        const p = this.packs.get(req.fid);
+        this.packs.delete(req.fid);
+        return void p?.reject(Object.assign(new Error(m.why), { kind: 'failed' }));
+      }
+      if (req.id === this.opts.currentId()) this.opts.mapFailed?.(m, req);
+      return this.lose(req);
+    }
     if ((m.type === 'done' || m.type === 'civ' || m.type === 'trial') && m.tempo) this.tempo = m.tempo;
     if (m.type === 'trial') {
       // 试推演(助手):交给等着它的那一次;世界换了的话助手那边已经停下,结果没人要
@@ -348,6 +391,14 @@ export class SimClient {
       this.trials.delete(m.tid);
       if (m.civ.stuck) t?.reject(new Error(`推到第 ${m.civ.stuck.at} 年推不下去了`));
       else t?.resolve(m.civ);
+      return;
+    }
+    if (m.type === 'devTryProgress') return void this.devTries.get(m.did)?.progress?.(m.pct);
+    if (m.type === 'devTry') {
+      const d = this.devTries.get(m.did);
+      this.devTries.delete(m.did);
+      if (m.result) d?.resolve(m.result);
+      else d?.reject(new Error(m.error ?? '试推没算成'));
       return;
     }
     if (m.type === 'packed') {

@@ -361,6 +361,7 @@ civAtlas.sim({
 - `keep`:每隔几年存一份,1–1000 的整数
 - 样子和工具插件的地块图层同一套写法:`title`(最长 40 个字),`ramp`(渐变,2–16 色,`min`、`max` 不写按数据定)和 `classes`(分类,1–32 类,`{ value, color, label }`)给且只给一个,可选 `legend`、`opacity`
 - 一个插件最多 4 个图层;一个图层存的数最多约 6 MB(份数 × 州数 × 4 字节),超了推演停下,把 `keep` 调大
+- 工具插件也能交这种按州按年份的图层([`layer.regions`](api.md#图层layercells1layerregions1layermarks1)),存进世界以后和推演插件的是同一种块
 
 ## 影响口(`sim.influence@1`)
 
@@ -491,7 +492,7 @@ civAtlas.sim({
 
 这些本来就没有:`fetch` 和一切联网、`setTimeout` 等定时器、`Worker`、`WebAssembly`、`Atomics`、`Intl`、`TextEncoder`、`structuredClone`、`self`、`postMessage`、`importScripts`。用到的库直接写进 `main.js`(普通脚本,不能 `import`)。
 
-`console.log`、`console.warn` 这些可以留在代码里,什么都不做,也不出错。要看中间算出来的数,用 `scripts/sim-plugin-try.ts` 试跑,把要看的写进编年史或小本子。
+`console.log`、`console.warn` 这些可以留在代码里,推演时什么都不做,也不出错。要看中间算出来的数:网站上打开开发者模式载入插件「试推 300 年」,`console.log` 这几样记进小卡的日志、带年份(见[开发者模式](README.md#开发者模式));或者用 `scripts/sim-plugin-try.ts` 试跑,把要看的写进编年史或小本子。
 
 ## 上限
 
