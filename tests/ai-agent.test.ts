@@ -344,7 +344,7 @@ describe('助手', () => {
       '试推演里它撑到了最后。',
     );
     const steps: string[] = [];
-    const r = await runAssistant(ctx(), [], `让${vName}撑到最后`, { onEvent: (e) => e.type === 'step-done' && steps.push(e.step.label) });
+    const r = await runAssistant(ctx(), [], `让${vName}撑到最后`, { role: 'intervention', onEvent: (e) => e.type === 'step-done' && steps.push(e.step.label) });
     expect(r.text).toBe('试推演里它撑到了最后。');
     expect(r.end).toBe('done');
     // 刚查过的国家不再重复国名
@@ -662,9 +662,11 @@ describe('助手', () => {
   }, 30_000);
 
   it('还在新建(只能改地形):不给试推演', () => {
-    const names = (c: AssistantContext) => assistantTools(c, { trials: [], proposal: null }).map((t) => t.def.name);
+    const names = (c: AssistantContext, role?: 'story' | 'intervention') =>
+      assistantTools(c, { trials: [], proposal: null }, role).map((t) => t.def.name);
     expect(names(ctx({ lock: 'history' }))).toEqual(['country', 'chronicle', 'situation', 'people', 'land', 'propose_edits']);
-    expect(names(ctx())).toContain('try_edits');
+    expect(names(ctx(), 'intervention')).toContain('try_edits');
+    expect(names(ctx(), 'story')).toEqual(['country', 'chronicle', 'situation', 'people', 'land']);
   }, 30_000);
 
   it('话里说列了确认单却没调列单的工具:补一句再问一轮,只给列单的工具;回给人看的话里"作者"换成"你"', async () => {
@@ -673,7 +675,7 @@ describe('助手', () => {
       { calls: [['propose_edits', { edits: [PROTECT] }]] },
       '我打算保护它，需作者在确认单上点击执行。',
     );
-    const r = await runAssistant(ctx(), [], `让${vName}撑到最后`);
+    const r = await runAssistant(ctx(), [], `让${vName}撑到最后`, { role: 'intervention' });
     expect(seen).toHaveLength(3);
     expect(seen[1].tools!.map((t) => t.name)).toEqual(['propose_edits']);
     expect(seen[1].messages.at(-1)!.content).toMatch(/^你刚才说要列确认单,但没有调用 propose_edits/);
@@ -682,7 +684,7 @@ describe('助手', () => {
     expect(r.text).toBe('我打算保护它，需你在确认单上点击执行。');
     // 列过了:不补
     const again = script({ calls: [['propose_edits', { edits: [PROTECT] }]] }, '确认单已经列好了。');
-    expect((await runAssistant(ctx(), [], `让${vName}撑到最后`)).text).toBe('确认单已经列好了。');
+    expect((await runAssistant(ctx(), [], `让${vName}撑到最后`, { role: 'intervention' })).text).toBe('确认单已经列好了。');
     expect(again).toHaveLength(2);
   }, 30_000);
 

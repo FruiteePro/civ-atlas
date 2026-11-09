@@ -1113,6 +1113,8 @@ export async function runAssistant(ctx: AssistantContext, history: readonly Assi
     onEvent: onEvent && ((e) => onEvent(e.type === 'text' ? { ...e, text: plain(e.text) } : e)),
     followUp: (text, steps) => {
       if (!saysListed(text)) return null;
+      // story 没有 propose_edits:别补「去列确认单」,否则下一轮 tools 为空
+      if (role === 'story') return null;
       if (!steps.some((s) => s.tool === 'propose_edits' && s.state === 'ok')) return LIST_NUDGE;
       // 列过一张,结果让它挪了落点再列:它说了要挪、要重新列却没再调(作者要的就是连着的,照常回答,不补)
       return state.relist && saysRelisted(text) ? RELIST_NUDGE : null;
