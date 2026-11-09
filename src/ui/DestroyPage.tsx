@@ -6,14 +6,15 @@
  *   国土归谁    并入一国 | 散成无主
  *     并入一国  默认挑接壤的邻国里州最多的;「换一国」列出那年还在的国家(大的在前,州数、接壤),
  *               「在地图上点」和结盟选对象一样(地图压暗、国家浮出名牌;手机上放在列表底部)
- *     散成无主  国土散成无主的部落地带,邻国照规则慢慢扩进去,"这片地方会空几十年"
+ *     散成无主  按切分模式裂成继承国(自动 / 割据分治 / 分崩 / 碎裂),可选目标块数;切不出的州散成无主
  *   推完会怎样  打着的仗当即议和、盟约称臣跟着断、编年史里那一句(手机上只写前两样)
  *   底部        返回 / 加入待推演(逐年推演写「加入」)
  */
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import type { Civ } from '../gen/civ/types';
 import { capitalAt, polityAlive } from '../gen/readers/openQuery';
-import { polityKey, type Intervention } from '../gen/edits';
+import { polityKey, type FragmentModeChoice, type Intervention } from '../gen/edits';
+import { fragmentModeLabel } from '../gen/civ/fragmentMode';
 import { spaced, yearAt, yearFull, yearSpanAt } from '../gen/era';
 import { useEra } from './editsStore';
 import { useNarrow } from './device';
@@ -55,6 +56,8 @@ export function DestroyPage({ civ, id, year, from }: { civ: Civ; id: number; yea
   const alive = useMemo(() => alivePolities(civ, yv).filter((x) => x.id !== id), [civ, yv, id]);
   const aliveIds = useMemo(() => new Set(alive.map((x) => x.id)), [alive]);
   const [mode, setMode] = useState<Mode>('merge');
+  const [fragMode, setFragMode] = useState<FragmentModeChoice>('auto');
+  const [pieces, setPieces] = useState<string>('');
   const [chosen, setChosen] = useState<number | null>(null);
   const [view, setView] = useState<'form' | 'list'>('form');
   // 照经历开的:整页记着(换到「换一国」列表再回来也还记在他名下)
@@ -109,8 +112,18 @@ export function DestroyPage({ civ, id, year, from }: { civ: Civ; id: number; yea
   const go = () => {
     if (why) return;
     const merge = mode === 'merge' && bid !== null;
-    const v: Intervention = merge ? { kind: 'destroy', a: key, from: y, b: polityKey(civ, bid) } : { kind: 'destroy', a: key, from: y };
-    const err = queueIntervention(v, destroyQueueText(shown, d.n, merge ? nameAt(B!, y) : null), {
+    const piecesN = pieces.trim() === '' ? undefined : Math.min(12, Math.max(2, Math.round(Number(pieces))));
+    const v: Intervention = merge
+      ? { kind: 'destroy', a: key, from: y, b: polityKey(civ, bid) }
+      : {
+          kind: 'destroy',
+          a: key,
+          from: y,
+          mode: fragMode,
+          ...(piecesN !== undefined && Number.isFinite(piecesN) ? { pieces: piecesN } : {}),
+        };
+    const modeLabel = merge ? null : fragMode === 'auto' ? '自动' : fragmentModeLabel(fragMode);
+    const err = queueIntervention(v, destroyQueueText(shown, d.n, merge ? nameAt(B!, y) : null, modeLabel), {
       self: id,
       target: merge ? { kind: 'polity', id: bid } : null,
       shown,
@@ -176,7 +189,11 @@ export function DestroyPage({ civ, id, year, from }: { civ: Civ; id: number; yea
   const bName = B ? nameAt(B, y) : '';
   const n = `${d.n} 州`;
   const nb = d.b >= 0 ? nameAt(civ.polities[d.b], y) : '';
-  const story = mode === 'merge' && B ? `【干预】${name}亡，${n}并入${bName}` : `【干预】${name}亡，${n}散为无主之地`;
+  const fragLabel = fragMode === 'auto' ? '自动' : fragmentModeLabel(fragMode);
+  const story =
+    mode === 'merge' && B
+      ? `【干预】${name}亡，${n}并入${bName}`
+      : `【干预】${name}亡，按「${fragLabel}」裂成数国（切不出的州散为无主）`;
 
   return (
     <div className="cr-page" onKeyDown={onKey}>
@@ -255,9 +272,47 @@ export function DestroyPage({ civ, id, year, from }: { civ: Civ; id: number; yea
               </>
             )
           ) : (
-            <span className="cp-note">
-              {name} {n}散成无主的部落地带，各族照旧住着；{nb ? `${nb}这些接壤的国家` : '周围的国家'}照规则慢慢扩进去，这片地方会空几十年。
-            </span>
+            <>
+              <span className="cp-form-title">怎么崩</span>
+              <div className="cp-dur" role="radiogroup" aria-label="怎么崩">
+                {(
+                  [
+                    ['auto', '自动'],
+                    ['powers', '割据分治'],
+                    ['mixed', '分崩'],
+                    ['shatter', '碎裂'],
+                  ] as const
+                ).map(([k, label]) => (
+                  <button
+                    key={k}
+                    role="radio"
+                    aria-checked={fragMode === k}
+                    className={fragMode === k ? 'on' : ''}
+                    data-act={`destroy-frag-${k}`}
+                    onClick={() => (setFragMode(k), clear())}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <label className="cp-note" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span>目标块数（可选）</span>
+                <input
+                  className="cp-year"
+                  data-act="destroy-pieces"
+                  inputMode="numeric"
+                  placeholder="自动"
+                  value={pieces}
+                  onChange={(e) => (setPieces(e.target.value.replace(/[^\d]/g, '')), clear())}
+                  style={{ width: 64 }}
+                />
+              </label>
+              <span className="cp-note">
+                {name} {n}按「{fragLabel}」裂成继承国
+                {pieces.trim() ? `（尽量靠近 ${pieces} 块）` : ''}；切不出的州散成无主，{nb ? `${nb}这些接壤的国家` : '周围的国家'}
+                再慢慢扩进去。
+              </span>
+            </>
           )}
         </div>
         <div className="iv-sum" data-destroy="sum">

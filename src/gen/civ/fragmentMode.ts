@@ -7,7 +7,8 @@
  */
 export type FragmentMode = 'powers' | 'mixed' | 'shatter';
 /** 作者 / AI 指定:auto = 走评估 */
-export type FragmentModeChoice = 'auto' | FragmentMode;
+export const FRAGMENT_MODE_CHOICES = ['auto', 'powers', 'mixed', 'shatter'] as const;
+export type FragmentModeChoice = (typeof FRAGMENT_MODE_CHOICES)[number];
 
 /** 写入史事 collapse / intervene 的 Annal.opt */
 export const FRAGMENT_MODE_OPT: Record<FragmentMode, number> = { powers: 0, mixed: 1, shatter: 2 };

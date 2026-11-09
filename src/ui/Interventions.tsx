@@ -1,3 +1,4 @@
+import { fragmentModeFromOpt, fragmentModeLabel } from '../gen/civ/fragmentMode';
 /**
  * 干预(阶段 4)的数据与界面零件:"在地图上选目标"的状态、干预的说法、州的干预区。
  *
@@ -330,7 +331,15 @@ function ivText(civ: Civ, v: Intervention, i: number, a: string | undefined): st
       return `${A}:方针「${name || '只定亲仇'}」${name && tweakedOrCustom(v) ? `（${policyKnobsText(v)}）` : ''}`;
     }
     case 'destroy': {
-      if (!v.b) return `${A}:灭国，散成无主`;
+      if (!v.b) {
+        const e = ivAnnal(civ, i);
+        if (e && e.b === -1 && e.n && e.n > 0) {
+          const mode = fragmentModeFromOpt(e.opt);
+          return `${A}:灭国，裂为 ${e.n} 国${mode ? `（${fragmentModeLabel(mode)}）` : ''}`;
+        }
+        const mode = v.mode && v.mode !== 'auto' ? fragmentModeLabel(v.mode) : v.mode === 'auto' ? '自动' : null;
+        return `${A}:灭国，散成无主${mode ? `（${mode}）` : ''}`;
+      }
       const n = ivAnnal(civ, i)?.n;
       return `${A}:灭国，${n ? `${n} 州` : ''}并入${keyName(civ, v.b, v.from)}`;
     }
