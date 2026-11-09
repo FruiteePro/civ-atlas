@@ -633,7 +633,7 @@ export interface AssistantOptions {
   extraTools?: AgentTool[];
   /** 确认单列好了(之后最后那句话没说完、出错或停下,界面照样能把确认单留下) */
   onProposal?: (p: AssistantProposal) => void;
-  /** 明确指定角色（否则根据selection自动判断）*/
+  /** 明确指定角色（面板「干预」开关；未指定且非新建地形阶段 = story）*/
   role?: 'story' | 'intervention';
 }
 
@@ -1059,6 +1059,20 @@ function closing(items: readonly RewriteItem[], cannot: boolean, d?: TrialDiff):
   return out;
 }
 
+/**
+ * 解析助手角色。
+ * - lock === 'history'（世界新建中、只能改地形）→ 强制 intervention（与面板开关无关）
+ * - 显式 opts.role → 用之
+ * - 否则默认 story（不再按关键词自动切）
+ */
+export function resolveAssistantRole(opts: {
+  role?: 'story' | 'intervention';
+  lock?: RewriteLock;
+}): 'story' | 'intervention' {
+  if (opts.lock === 'history') return 'intervention';
+  return opts.role ?? 'story';
+}
+
 /** 助手的一次对话:问 → 查 / 试 → 列确认单 → 回话 */
 export async function runAssistant(ctx: AssistantContext, history: readonly AssistantTurn[], ask: string, opts: AssistantOptions = {}): Promise<AssistantResult> {
   const state: AssistantState = {
@@ -1081,13 +1095,8 @@ export async function runAssistant(ctx: AssistantContext, history: readonly Assi
   const plain = (t: string) => you(plainIds(t, ctx));
   const onEvent = opts.onEvent;
   
-  // 判断角色：尊重显式指定的role，不仅基于selection自动切换
-  // selection存在不代表用户要编辑 - 可能只是选中国家写故事
-  // 只有用户表达明确修改意图的关键词时才启用intervention
-  // 匹配明确的编辑意图词汇，包括"让...撑"等改变历史的表达
-  // 特殊情况：lock==='history'时是地形编辑模式，始终用intervention角色
-  const hasEditIntent = /修改|改|保护|结盟|宣战|立国|迁都|禁止|划州|让.*存活|让.*灭亡|让.*撑|不许|阻止|能不能让|帮.*改|想让|放.*山|挖.*湖|造/.test(w);
-  const role = opts.role ?? (ctx.lock === 'history' || hasEditIntent ? 'intervention' : 'story');
+  // 角色：面板开关显式传入；新建中(lock=history，只能改地形)强制 intervention
+  const role = resolveAssistantRole({ role: opts.role, lock: ctx.lock });
   
   const tools = [...assistantTools(ctx, state, role), ...(opts.extraTools ?? [])];
   

@@ -235,7 +235,7 @@ test('角色权限: story模式不能propose_edits', async () => {
   expect(ctx.selection).toBeNull();
 });
 
-test('角色权限: 有效selection自动启用intervention', () => {
+test('角色权限: 有效selection不自动启用intervention（须开开关）', () => {
   const civ = mockCiv();
   const ctx: AssistantContext = {
     world: mockWorld(),
@@ -247,7 +247,7 @@ test('角色权限: 有效selection自动启用intervention', () => {
   
   const result = validateSelection(ctx);
   expect(result.valid).toBe(true);
-  // 在实际runAssistant中，这会触发intervention模式
+  // selection 只提供上下文，角色由面板「干预」开关 / resolveAssistantRole 决定
 });
 
 test('端到端: Mock AI提议保护命令 -> 确认流程', async () => {

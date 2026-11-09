@@ -34,6 +34,7 @@ import {
   ASSISTANT_FEATURE,
   mockAssistant,
   polityOf,
+  resolveAssistantRole,
   runAssistant,
   trialView,
   type AssistantContext,
@@ -149,9 +150,14 @@ export interface AssistantState {
   turns: AsTurn[];
   /** 正在地图上看哪一轮的试推演:raw = 试推演的历史(还在推 = null),names = 套哪份改名 */
   preview: { turn: number; raw: Civ | null; names: Record<string, string> } | null;
+  /**
+   * 「干预」开关：开 = 走干预 AI（可 propose/try edits）；关（默认）= 只讲故事。
+   * 仅会话内记住，不写入 localStorage（避免扩存档格式）。
+   */
+  intervene: boolean;
 }
 
-let state: AssistantState = { world: null, turns: [], preview: null };
+let state: AssistantState = { world: null, turns: [], preview: null, intervene: false };
 const subs = createListeners();
 function set(next: AssistantState) {
   state = next;
@@ -171,6 +177,16 @@ const getPreview = () => state.preview;
 /** 只看"在地图上看哪一轮"(App 用:对话一字一字更新时不跟着重画整个页面) */
 export function useAssistantPreview(): AssistantState['preview'] {
   return subs.use(getPreview);
+}
+
+/** 面板「干预」开关：开 = intervention，关 = story（新建地形阶段仍强制 intervention） */
+export function setInterveneMode(on: boolean): void {
+  if (state.intervene === on) return;
+  set({ ...state, intervene: on });
+}
+
+export function getInterveneMode(): boolean {
+  return state.intervene;
 }
 
 // ---------------------------------------------------------------------------
@@ -290,7 +306,7 @@ export function syncAssistantWorld(lock?: RewriteLock) {
   mark = fits ? (saved.mark ?? null) : null;
   // 不接的也算上编号:接回来时不能和新说的撞
   seq = Math.max(seq, ...(saved?.turns ?? []).map((t) => t.id));
-  set({ world: w, lock, turns: fits ? saved.turns : [], preview: null });
+  set({ world: w, lock, turns: fits ? saved.turns : [], preview: null, intervene: state.intervene });
   if (w && saved) void settleChat(w, saved);
 }
 
@@ -429,7 +445,12 @@ export async function sendAsk(ctx: AskContext, text: string): Promise<number> {
     }));
   };
   try {
+    const role = resolveAssistantRole({
+      role: state.intervene ? 'intervention' : 'story',
+      lock: ctx.lock,
+    });
     const r = await runAssistant(actx, prev, w, {
+      role,
       signal: c.signal,
       extraTools,
       onProposal: (p) => (got = p),
@@ -925,5 +946,5 @@ export function _resetAssistant() {
   seq = 0;
   mark = null;
   chatSeq++;
-  set({ world: null, turns: [], preview: null });
+  set({ world: null, turns: [], preview: null, intervene: false });
 }

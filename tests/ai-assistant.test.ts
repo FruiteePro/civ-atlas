@@ -39,6 +39,7 @@ import {
   sameInBoth,
   previewProposal,
   sendAsk,
+  setInterveneMode,
   setTrialRunner,
   stopAsk,
   syncAssistantWorld,
@@ -232,6 +233,7 @@ describe('助手面板', () => {
 
   it('改世界:查 → 试推演两次 → 列确认单,附上试推演的结果;勾选、先在地图上看看、执行、撤销', async () => {
     setTrialRunner(runner);
+    setInterveneMode(true);
     const id = await sendAsk(ctx(), `让${wardName}多撑一阵`);
     let t = turn(id);
     expect(t.status).toBe('done');
@@ -294,6 +296,7 @@ describe('助手面板', () => {
   it('⌘Z / ⇧⌘Z:执行过的一轮也能撤销、再做一遍(对话里的"已执行 / 已撤销"跟着变,推完的提示和点撤销一样)', async () => {
     setTrialRunner(runner);
     const start = getEdits();
+    setInterveneMode(true);
     const id = await sendAsk(ctx(), `让${wardName}多撑一阵`);
     expect(applyProposal(id, {})).toBeNull();
     const after = getEdits();
@@ -323,6 +326,7 @@ describe('助手面板', () => {
   it('执行过以后点了新对话:提示条上的"撤销"、⌘Z / ⇧⌘Z 照样撤得了、再做得了', async () => {
     setTrialRunner(runner);
     const start = getEdits();
+    setInterveneMode(true);
     const id = await sendAsk(ctx(), `让${wardName}多撑一阵`);
     expect(applyProposal(id, {})).toBeNull();
     const after = getEdits();
@@ -340,6 +344,7 @@ describe('助手面板', () => {
 
   it('撤销时若后续干预与本轮冲突:拒绝并提示,不撤', async () => {
     setTrialRunner(runner);
+    setInterveneMode(true);
     const id = await sendAsk(ctx(), `让${wardName}多撑一阵`);
     expect(applyProposal(id, {})).toBeNull();
     takeRewriteNote(getEdits());
@@ -364,6 +369,7 @@ describe('助手面板', () => {
       if (round++ === 0) return { toolCalls: [{ id: 'c0', name: 'propose_edits', args: JSON.stringify({ edits: [{ op: 'protect', country: `P${ward.id}`, from, why: '…' }] }) }] };
       throw new AiError('network', '连不上');
     });
+    setInterveneMode(true);
     const id = await sendAsk(ctx(), `让${wardName}多撑一阵`);
     const t = turn(id);
     expect(t.status).toBe('done');
@@ -395,6 +401,7 @@ describe('助手面板', () => {
 
   it('世界在这之后改过:不能执行、不能先看;不要的确认单不能再执行', async () => {
     setTrialRunner(runner);
+    setInterveneMode(true);
     const id = await sendAsk(ctx(), '让它多撑一阵');
     setEdits({ ...getEdits(), names: { x: '某' } });
     expect(applyBlock(turn(id), {})).toMatch(/^世界在这之后改过/);
@@ -414,6 +421,7 @@ describe('助手面板', () => {
   }, 30_000);
 
   it('没有试推演(App 没给):确认单不附结果,也不能先看', async () => {
+    setInterveneMode(true);
     const id = await sendAsk(ctx(), '让它多撑一阵');
     const t = turn(id);
     expect(t.steps.filter((s) => s.tool === 'try_edits').every((s) => s.state === 'error')).toBe(true);
@@ -456,6 +464,7 @@ describe('助手面板', () => {
           signal?.addEventListener('abort', () => no(new Error('已停下')));
         }),
     );
+    setInterveneMode(true);
     const p = sendAsk(ctx(), '让它多撑一阵');
     await vi.waitFor(() => expect(getAssistant().turns[0]?.steps.some((s) => s.tool === 'try_edits' && s.state === 'run')).toBe(true));
     stopAsk();
