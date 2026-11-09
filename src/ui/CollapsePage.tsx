@@ -139,7 +139,7 @@ export function CollapsePage({ civ, id, year, from }: { civ: Civ; id: number; ye
             。
             {noReclaim
               ? '勾了「禁止母国收复」后，母国永久不能对这批继承国开战夺回。'
-              : '默认母国与继承国会有约 100 年的收复休战；勾「禁止母国收复」则永久禁止。'}
+              : '默认母国与继承国会有 5–50 年不等的休战期；勾「禁止母国收复」则永久禁止。'}
           </span>
         </div>
         <div className="iv-sum" data-collapse="sum">

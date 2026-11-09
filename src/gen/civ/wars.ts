@@ -21,7 +21,7 @@
  *       强国的边远处照样可能打不过近处的小国 —— 被夺去的州过些年又被夺回来,前线有来有回
  *     同一对国家议和后 TRUCE 年内不再开战;对方已经同时在打 MAX_WARS 场仗的不去凑;
  *     分裂 / 复国出来的国家(politics.ts)立国 NEWBORN 年内没人对它宣战(站稳期)。
- *     大崩解 / 灭国切出的继承国:母国另有 COLLAPSE_TRUCE 年不得对它宣战(也不计收复失地);作者「禁止母国收复」则永久。
+ *     大崩解 / 灭国切出的继承国:母国另有 COLLAPSE_TRUCE[0]–[1] 年不等的收复休战(按母国+崩解年确定性抽,同种种子同结果);作者「禁止母国收复」则永久。
  *     议和了还会再打:一场仗议和时净丢了州的一方记恨赢它的那一国,GRUDGE_YEARS 年内看邻国时对它的赔率 × GRUDGE;
  *       停战期满后再过 REVENGE_LOOK 里随机的几年,替输的一方多看一眼邻国(复仇之战;随机数按 REVENGE_K + 战争编号取,不接着预约)。
  *       讨伐民变、宗室争位的内战不记恨。
@@ -134,8 +134,8 @@ export const WARS_KNOBS = defineKnobs('wars', {
   PREY_ODDS: 2.5,
   /** 分裂 / 复国出来的国家(Polity.parent),这么多年内别国不对它宣战(站稳期;原先 60 年,缩短以后强国吞并得快些) */
   NEWBORN: 30,
-  /** 大崩解 / 灭国切出的继承国:母国这么多年内不得对它宣战(也不计收复失地) */
-  COLLAPSE_TRUCE: 100,
+  /** 大崩解 / 灭国切出的继承国:母国收复休战年数范围(每次崩解在此区间内确定性抽一年数,不计收复失地) */
+  COLLAPSE_TRUCE: [5, 50] as [number, number],
   /** 迁都后这么多年内新国都攻不下(不会几年里一迁再迁) */
   CAPITAL_GRACE: 20,
   /** 丢了国都后剩下不到这么多州的国家撑不下去,残部归攻方、亡国 */
@@ -283,6 +283,7 @@ const U_STAND_END = 14;
 const U_REVENGE = 15;
 const U_THAW = 16;
 const U_CHAIN = 17;
+const U_COLLAPSE_TRUCE = 18;
 
 // ---------------------------------------------------------------------------
 // 模型
@@ -326,7 +327,7 @@ export interface WarModel {
   dm?: DiplomacyModel;
   /**
    * 大崩解 / 灭国切出的继承国(child → 分出年份)。
-   * 母国内 COLLAPSE_TRUCE 年不得对它宣战;收复失地也不计。
+   * 母国内有 5–50 年不等的收复休战(见 collapseTruceYears);收复失地也不计。
    * 作者勾「禁止母国收复」的进 noReclaim(永久)。
    */
   collapseChild: Map<number, Year>;
@@ -351,6 +352,13 @@ function bits(x: number): number {
 }
 
 const pairKey = (a: number, b: number) => Math.min(a, b) * 32768 + Math.max(a, b);
+
+/** 单次崩解的收复休战年数:在 range 内按 base+母国位置锚+崩解年确定性抽取(不扰动顺序 RNG) */
+export function collapseTruceYears(base: number, parentTag: number, year: number, range: readonly [number, number]): number {
+  const lo = range[0];
+  const hi = range[1];
+  return lo + Math.floor((hi - lo + 1) * keyed(base, parentTag, Math.round(year), U_COLLAPSE_TRUCE));
+}
 
 /** 国家 p 第 k 次看邻国的时刻 */
 function checkTime(wm: WarModel, p: number, k: number): number {
@@ -823,7 +831,7 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
       const Q = pm.polities[q];
       if (Q.parent !== p) return false;
       if (wm.noReclaim.get(q) === p) return true;
-      return t - from < COLLAPSE_TRUCE;
+      return t - from < collapseTruceYears(wm.base, pm.ptag[p], from, COLLAPSE_TRUCE);
     };
     /** 邻国 q 手里有几州是从本国夺去的(收复失地;只扫 q 的国土);禁收复期内对崩解子女不计 */
     const claims = (q: number) => {
@@ -870,7 +878,7 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
       if (Q.ended !== undefined || t - (wm.truce.get(pairKey(p, q)) ?? -Infinity) < TRUCE) continue;
       // 分裂 / 复国出来的国家有 NEWBORN 年的站稳期:不会一出生就被吞掉
       if (Q.parent !== undefined && t - Q.founded < NEWBORN) continue;
-      // 大崩解切出的继承国:母国内 COLLAPSE_TRUCE 年(或作者禁止收复)不得宣战
+      // 大崩解切出的继承国:母国内 5–50 年不等休战(或作者禁止收复)不得宣战
       if (collapseProtected(q)) continue;
       const qw = warsOf(q);
       if (qw.length >= MAX_WARS || qw.some((v) => v.a === p || v.b === p)) continue;
