@@ -242,7 +242,7 @@ export const ANNAL_KINDS: Readonly<Record<AnnalKind, AnnalKindInfo>> = {
     war: '−1',
   },
   collapse: {
-    desc: '大崩解:大国一下子散成几块(紧跟着记各块自立的 split,cause = collapse;散回部落的州不另记,日志原因 Ev.Collapse)',
+    desc: '大崩解:大国一下子散成几块(紧跟着记各块自立的 split,cause = collapse;散回部落的州不另记,日志原因 Ev.Collapse)。**切分模式在 Annal.opt**:0 割据分治 powers、1 分崩 mixed、2 碎裂 shatter(见 fragmentMode.ts)',
     a: '国家',
     b: '怎么崩:0 = 中央崩(各地自立)、1 = 地方崩(诸州残破,发展度掉)、2 = 两样都崩(散回部落)',
     region: '国都所在州',

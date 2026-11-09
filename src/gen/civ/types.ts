@@ -527,7 +527,8 @@ export interface Annal {
   by?: number;
   /**
    * 作者下令立的约、划的中立地(cause = decree)才有:几样选项按位(见 AnnalKind 的表;treaties.ts 的 OPT_*);
-   * 改制借用(议事 council 的废君立共和办成、史事 reform 的革命):之后能议政的有几档(参与,councilRules.ts 的 Rules.franchise)
+   * 改制借用(议事 council 的废君立共和办成、史事 reform 的革命):之后能议政的有几档(参与,councilRules.ts 的 Rules.franchise);
+   * 大崩解(collapse)与灭国干预散成继承国(intervene):切分模式 0 powers / 1 mixed / 2 shatter(fragmentMode.ts)
    */
   opt?: number;
   /** 作者下令划的中立地(neutral,cause = decree)选了"到某一年":那一年撤销;顿兵过冬(winter)借用:开春再打的时刻 */
