@@ -50,7 +50,7 @@ describe('fragmentMode assessment', () => {
       lordDomains: [3],
       lordSeats: [7],
     });
-    // centerStrength < 0.55 → not powers; large + weak → shatter
+    // centerStrength < 0.42 → not powers; large + weak → shatter
     expect(weak.mode).toBe('shatter');
   });
 

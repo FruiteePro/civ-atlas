@@ -113,15 +113,15 @@ export function assessFragment(input: FragmentAssessInput): FragmentAssessment {
     ? clamp01(0.35 * Math.min(1, activeLords / 2) * (activeLords <= 3 ? 1 : 0.35) + 0.35 * herfindahl + 0.15 * top2Share + 0.15 * (activeLords <= 3 ? 1 : 0))
     : clamp01(0.15 * (1 - meanC) * sizeFactor);
 
-  // 阈值按 seed7 试算调过:要能分出 powers / mixed / shatter,而非全是 mixed。
-  // powers:有 1–3 处割据座可当种子,且中央尚能保住核心(不要求割据已控大片)。
+  // 阈值按实验 D 调过:自然崩解约 powers ~15% / shatter ~40% / mixed 其余。
+  // powers:有 1–3 处割据座可当种子,中央尚有一定掌控(不要求割据已控大片);门槛自 0.55 降至 0.42。
   let mode: FragmentMode;
-  if (activeLords >= 1 && activeLords <= 3 && centerStrength >= 0.55) {
+  if (activeLords >= 1 && activeLords <= 3 && centerStrength >= 0.42) {
     mode = 'powers';
   } else if (
     activeLords >= 4 ||
-    (N >= 80 && centerStrength < 0.52 && (meanC < 0.45 || foreignShare > 0.4)) ||
-    (activeLords === 0 && N >= 100 && centerStrength < 0.55 && meanC < 0.5)
+    (N >= 80 && centerStrength < 0.48 && (meanC < 0.45 || foreignShare > 0.35)) ||
+    (activeLords === 0 && N >= 90 && centerStrength < 0.5 && meanC < 0.55)
   ) {
     mode = 'shatter';
   } else {
