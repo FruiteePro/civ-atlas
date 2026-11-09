@@ -60,6 +60,30 @@ describe('extractDiplomacy', () => {
   });
 });
 
+  it('议和(peace)后战争不再显示', () => {
+    const civ = mockCiv(
+      [
+        annal({ year: 100, kind: 'war', a: 0, b: 1, war: 7 }),
+        annal({ year: 120, kind: 'peace', a: 0, b: 1, war: 7 }),
+      ],
+      [polity(0), polity(1)],
+    );
+    expect(extractDiplomacy(civ, 110).wars).toEqual([{ id: 7, parties: [0, 1], start: 100 }]);
+    expect(extractDiplomacy(civ, 130).wars).toEqual([]);
+  });
+
+  it('亡国(fall)后对应战争不再显示', () => {
+    const civ = mockCiv(
+      [
+        annal({ year: 100, kind: 'war', a: 0, b: 1, war: 9 }),
+        annal({ year: 140, kind: 'fall', a: 1, b: 0, war: 9 }),
+      ],
+      [polity(0), polity(1, 0, 140)],
+    );
+    expect(extractDiplomacy(civ, 110).wars.map((w) => w.id)).toEqual([9]);
+    expect(extractDiplomacy(civ, 150).wars).toEqual([]);
+  });
+
 describe('外交页面数据提取（生成世界冒烟）', () => {
   it('应该正确提取联盟关系', () => {
     const w = generateWorld({ ...DEFAULT_PARAMS, seed: 2024 });

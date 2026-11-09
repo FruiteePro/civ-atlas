@@ -52,7 +52,7 @@ export function extractDiplomacy(civ: Civ, year: number): { alliances: Alliance[
   const alliances: Alliance[] = pacts.map((p) => ({ a: p.a, b: p.b, since: p.since, foe: p.foe }));
   const vassalages: Vassalage[] = [...liege].map(([vassal, x]) => ({ lord: x.liege, vassal, since: x.since }));
 
-  // 提取战争（war事件，未结束）
+  // 战争：war 开打，peace / fall 结束（与 outline / chronicle 一致）
   const wars: War[] = [];
   const warMap = new Map<number, War>();
   for (const e of civ.annals) {
@@ -62,8 +62,9 @@ export function extractDiplomacy(civ: Civ, year: number): { alliances: Alliance[
       if (wid >= 0) {
         warMap.set(wid, { id: wid, parties: [e.a, e.b], start: e.year });
       }
+    } else if ((e.kind === 'peace' || e.kind === 'fall') && e.war >= 0) {
+      warMap.delete(e.war);
     }
-    // TODO: 战争结束事件（peace等）应该移除战争
   }
   wars.push(...warMap.values());
 
