@@ -6,7 +6,7 @@ import { useState, type KeyboardEvent } from 'react';
 import type { Civ } from '../gen/civ/types';
 import { polityAlive } from '../gen/readers/openQuery';
 import { type FragmentModeChoice, type Intervention, polityKey } from '../gen/edits';
-import { fragmentModeLabel } from '../gen/civ/fragmentMode';
+import { FRAGMENT_MODE_UI, fragmentModeLabel } from '../gen/civ/fragmentMode';
 import { spaced, yearAt, yearSpanAt } from '../gen/era';
 import { useEra } from './editsStore';
 import { useNarrow } from './device';
@@ -93,47 +93,45 @@ export function CollapsePage({ civ, id, year, from }: { civ: Civ; id: number; ye
         )}
         <div className="cp-form">
           <span className="cp-form-title">怎么崩</span>
-          <div className="cp-dur" role="radiogroup" aria-label="怎么崩">
-            {(
-              [
-                ['auto', '自动'],
-                ['powers', '割据分治'],
-                ['mixed', '分崩'],
-                ['shatter', '碎裂'],
-              ] as const
-            ).map(([k, label]) => (
+          <div className="cp-cmds iv-kinds" role="radiogroup" aria-label="怎么崩">
+            {FRAGMENT_MODE_UI.map((x) => (
               <button
-                key={k}
+                key={x.key}
                 role="radio"
-                aria-checked={fragMode === k}
-                className={fragMode === k ? 'on' : ''}
-                data-act={`collapse-frag-${k}`}
-                onClick={() => (setFragMode(k), clear())}
+                aria-checked={fragMode === x.key}
+                className={`cp-cmd${fragMode === x.key ? ' on' : ''}`}
+                data-act={`collapse-frag-${x.key}`}
+                onClick={() => (setFragMode(x.key), clear())}
               >
-                {label}
+                <span className="cp-cmd-main">
+                  <span className="cp-cmd-name">{x.name}</span>
+                  <span className="cp-cmd-desc">{x.desc}</span>
+                </span>
+                {fragMode === x.key && <span className="cr-check">✓</span>}
               </button>
             ))}
           </div>
-          <label className="cp-note" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span>目标块数（可选）</span>
+          <label className="cp-field">
+            <span className="cp-k">目标块数</span>
             <input
-              className="cp-year"
+              className="iv-pieces"
               data-act="collapse-pieces"
               inputMode="numeric"
               placeholder="自动"
               value={pieces}
               onChange={(e) => (setPieces(e.target.value.replace(/[^\d]/g, '')), clear())}
-              style={{ width: 64 }}
             />
+            <span className="cr-after">可选</span>
           </label>
-          <label className="cp-note" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <label className="cp-check" data-collapse="no-reclaim">
             <input
               type="checkbox"
               data-act="collapse-no-reclaim"
               checked={noReclaim}
               onChange={(e) => (setNoReclaim(e.target.checked), clear())}
             />
-            <span>禁止母国收复（永久不许对继承国开战夺回）</span>
+            <span>禁止母国收复</span>
+            <span className="cp-note">永久不许对继承国开战夺回</span>
           </label>
           <span className="cp-note">
             {name} 按「{fragLabel}」崩解

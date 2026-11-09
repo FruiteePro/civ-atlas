@@ -2362,3 +2362,20 @@ button.ov-kv-row:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+@media (max-width: 760px) {
+  .ov-diplomacy {
+    padding: 16px;
+    gap: 18px;
+  }
+  .ov-diplo-row {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    padding: 10px;
+  }
+  .ov-diplo-meta {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}
