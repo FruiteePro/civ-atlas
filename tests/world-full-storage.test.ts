@@ -22,7 +22,7 @@ import { _resetToasts, clearToast, peekToast, showToast } from '../src/ui/toastS
 import { _setWorldFiles, lookWorldFile, keepWorldFile, saveAllWorldFiles, saveWorldFile, type LookedWorldFile } from '../src/ui/worldFiles';
 import { _setHolds, holdWorld, ifNotHeld, isHeld } from '../src/ui/worldHolds';
 import { setSimNow, simsOf } from '../src/ui/world/simNow';
-import { NEAR_FULL_BYTES, TRASH_KEEP_MS, _setWorldStore, _settled, clearTrashNow, fullWorldIds, holdTrashed, notesVault, offerWorldParts, packPage, setWorldStoreSim, spaceBoard, startWorldStore, trashFreed, trashInfo, vaultCall, vaultIsFull, type ConvertRunner, type WorldStoreSim } from '../src/ui/worldStore';
+import { NEAR_FULL_BYTES, TRASH_KEEP_MS, _setWorldStore, _settled, clearTrashNow, fullWorldIds, holdTrashed, notesVault, keepCarried, offerWorldParts, packPage, setWorldStoreSim, spaceBoard, startWorldStore, trashFreed, trashInfo, vaultCall, vaultIsFull, type ConvertRunner, type WorldStoreSim } from '../src/ui/worldStore';
 import { runConvert, type FullWithFile } from '../src/worldConvert';
 import type { ConvertReply } from '../src/worldConvertWorker';
 import { lookFile } from '../src/worldFileLook';
@@ -452,6 +452,30 @@ describe('一个世界存成文件', () => {
     }
   });
 
+  it('以它为底稿新建、用了推演插件的世界建好马上存进仓库,带着推演插件的记录;推演重推了的不抢着存', async () => {
+    const id = saveStore.newWorldId();
+    openWorld(id);
+    saveStore.markCreated();
+    const file = { id: 'weariness', sum: 'a'.repeat(64), bytes: new Uint8Array([1, 2]), params: { k: 2 } };
+    const list = [{ id: 'weariness', version: '1.0.0', sum: file.sum, role: 'sim', name: '厌战', params: { k: 2 } }];
+    const sim = simThatPacks();
+    setWorldStoreSim({ ...sim, packParts: async (ask) => ({ ...(await sim.packParts!(ask)), plugins: list }), sims: () => simsOf(saveStore.currentWorld()?.id) });
+    try {
+      setSimNow({ id, list, files: [file], checks: [] });
+      await keepCarried(id);
+      expect(await latestOf(id)).toBeNull();
+      await keepCarried(id, true);
+      const head = (await readRevision(id))!;
+      expect(head.manifest.plugins?.map((x) => [x.id, x.role])).toEqual([['weariness', 'sim']]);
+      expect(head.manifest.parts.some((x) => x.name === 'civ')).toBe(true);
+      const n = head.head.n;
+      await keepCarried(id, true);
+      expect((await readRevision(id))!.head.n).toBe(n);
+    } finally {
+      setSimNow(null);
+    }
+  });
+
   it('没开着的世界,内容从没存进去:现算一遍,写不下就直接装成文件;写得下的还是存进去', async () => {
     const id = saveStore.importSave(makeSave(PARAMS, { ...EMPTY_EDITS, endYear: 200 }, check, '没开着'))!;
     saveStore.detachWorld();
@@ -478,6 +502,35 @@ describe('一个世界存成文件', () => {
     saveStore.detachWorld();
     const out = await saveWorldFile(old);
     expect(!out.ok && out.kind).toBe('old');
+  });
+});
+
+describe('用了推演插件、本机对不上时线程交回的内容', () => {
+  it('插件被删了、网站关了插件,打开时按配方重推出来的(没带插件)不存:世界记的推演插件和历史照留;对得上时照常存', async () => {
+    const list = [{ id: 'weariness', version: '1.0.0', sum: 'a'.repeat(64), role: 'sim', name: '厌战' }];
+    const file = { id: 'weariness', sum: list[0].sum, bytes: new Uint8Array([1, 2]) };
+    setWorldStoreSim({ ...simThatPacks(), sims: () => simsOf(saveStore.currentWorld()?.id) });
+    try {
+      const id = saveStore.newWorldId();
+      openWorld(id);
+      saveStore.markCreated();
+      setSimNow({ id, list, files: [file], checks: [] });
+      expect(await offerWorldParts({ ...(await offerOf(getEdits())), plugins: list })).toBe(true);
+      const kept = (await readRevision(id))!;
+      // 插件删了(或网站关了插件)以后再打开:推演不带文件
+      setSimNow({ id, list, files: null, checks: [{ id: 'weariness', plugin: list[0], status: 'missing' }], stored: true });
+      expect(await offerWorldParts({ ...(await offerOf(getEdits(), 'official')), plugins: [] })).toBe(false);
+      const now = (await readRevision(id))!;
+      expect(now.head.n).toBe(kept.head.n);
+      expect(now.manifest.plugins?.map((x) => [x.id, x.role])).toEqual([['weariness', 'sim']]);
+      // 装回来:照常存
+      setSimNow({ id, list, files: [file], checks: [], stored: true });
+      expect(await offerWorldParts({ ...(await offerOf(getEdits(), 'again')), plugins: list })).toBe(true);
+      expect((await readRevision(id))!.manifest.plugins?.map((x) => x.id)).toEqual(['weariness']);
+    } finally {
+      setSimNow(null);
+      setWorldStoreSim(simThatPacks());
+    }
   });
 });
 

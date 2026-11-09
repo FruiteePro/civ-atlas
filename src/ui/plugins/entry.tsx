@@ -6,8 +6,15 @@ import { showToast } from '../toastStore';
 import { toolCard, toolRunning, toolsMenu, type ToolsProps } from './toolsState';
 import type { SimPickProps } from './SimPick';
 import type { MapPickProps } from './MapPick';
+import type { MapOffNoteProps } from './MapOffNote';
 
 const open = createStore(false);
+/** 从别处选好、等插件页核对的插件文件;want = 只收这几个插件(编号、名字),选了别的只说一句、不装 */
+export interface PickedFile {
+  file: File;
+  want?: { id: string; name: string }[];
+}
+const picked = createStore<PickedFile | null>(null);
 
 /** 插件的图标:一块拼图(不放进 icons.tsx:那份跟首页一起下载) */
 export function PuzzleIcon({ size = 18 }: { size?: number }) {
@@ -28,8 +35,15 @@ export const usePluginsOpen = (): boolean => open.use();
 /** 插件页开、关时调 f;返回取消的函数 */
 export const subscribePluginsOpen = (f: (on: boolean) => void): (() => void) => open.subscribe(() => f(open.get()));
 
+/** 插件文件已经选好:打开插件页直接核对、问权限、装上(装完或看完说明就关) */
+export function openPluginPicked(f: File, want?: PickedFile['want']): void {
+  picked.set({ file: f, ...(want ? { want } : {}) });
+  open.set(true);
+}
+
 export function closePlugins(): void {
   open.set(false);
+  picked.set(null);
 }
 
 export function PluginsMenuItem() {
@@ -67,15 +81,16 @@ function WindowMissing() {
 const PluginWindow = lazy(() => import('./PluginWindow').catch(() => ({ default: WindowMissing as unknown as typeof import('./PluginWindow').default })));
 
 const WallPlugin = lazy(() => import('./GalleryPlugins').then((m) => ({ default: m.PluginWorkDialog })));
-const wallLook = createStore<string | null>(null);
+const wallLook = createStore<{ id: string; want?: string } | null>(null);
 
-/** 打开作品墙上这个插件的那一页(从那里装);作品编号 */
-export function openWallPlugin(work: string): void {
-  wallLook.set(work);
+/** 打开作品墙上这个插件的那一页(从那里装);作品编号。want = 直接装这一版(指纹;作品墙上换了版本就不装) */
+export function openWallPlugin(work: string, want?: string): void {
+  wallLook.set({ id: work, ...(want ? { want } : {}) });
 }
 
 export function PluginsHost({ phone }: { phone: boolean }) {
   const shown = open.use();
+  const first = picked.use();
   const look = wallLook.use();
   // 装着的插件联网时和作品墙对一对:有新版、被网站停用了
   useEffect(() => {
@@ -87,8 +102,8 @@ export function PluginsHost({ phone }: { phone: boolean }) {
   if (!shown && !look) return null;
   return (
     <Suspense fallback={null}>
-      {look && <WallPlugin id={look} phone={phone} onClose={() => wallLook.set(null)} />}
-      {shown && <PluginWindow phone={phone} onClose={closePlugins} />}
+      {look && <WallPlugin id={look.id} {...(look.want ? { want: look.want, direct: true } : {})} phone={phone} onClose={() => wallLook.set(null)} />}
+      {shown && <PluginWindow phone={phone} onClose={closePlugins} first={first} />}
     </Suspense>
   );
 }
@@ -155,6 +170,17 @@ export function SimPickHost(p: SimPickProps) {
   return (
     <Suspense fallback={null}>
       <SimPickPage {...p} />
+    </Suspense>
+  );
+}
+
+const MapOffPart = lazy(() => import('./MapOffNote').then((m) => ({ default: m.MapOffNote })));
+
+/** 以它为底稿新建、本机对不上地图插件时那一块(用到才下载) */
+export function MapOffHost(p: MapOffNoteProps) {
+  return (
+    <Suspense fallback={null}>
+      <MapOffPart {...p} />
     </Suspense>
   );
 }

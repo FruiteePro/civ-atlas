@@ -71,6 +71,7 @@ import { openRulesHash, openRulesText } from '../rules/sheetStore';
 import { pickSharedPreset } from '../presetStore';
 import { GLOBE_READY, isCurved, isGraticuleStep, isMapProjection, setContourKind, setGraticule, setGraticuleStep, setProjection, type MapProjection } from '../projection';
 import { recipeChanges, recipeKey, recipeOfSave } from '../../gen/snapshot';
+import { shapesWorld } from '../../gen/worldFormat';
 import { endLoadWatch, noteOpenTrouble, openGuardReady, openingClear, openingShown, openingStart, vaultAllowed, watchLoad } from '../openGuard';
 import { frozenResult, resultHeads } from '../resultStore';
 import { keptMapHere, settleKeptWorld, vaultCall } from '../worldStore';
@@ -111,7 +112,7 @@ import {
   type WallView,
 } from './worldTarget';
 import { simNowFor } from './simNow';
-import { getMapNow, mapNowFor, rememberedMaps } from './mapNow';
+import { getMapNow, mapFilesNow, mapNowFor, mapsOff, rememberedMaps } from './mapNow';
 import { forgetSimError } from '../sim/simClient';
 
 /** 这次打开网页里已经照记着的取回过地图插件的新建中的世界(取回过就不再取,免得取不回时一直重来) */
@@ -167,9 +168,23 @@ function oldStored(t: Target): SaveFile | null {
   return save && save.generator < GENERATOR_VERSION ? save : null;
 }
 
+/**
+ * 以它为底稿新建、本机长不了那几个地图插件:底稿那个世界怎么读(交给线程,手上没有它就先读它钉住,照原样放它的地图)。
+ * 不在我的世界里、更旧的版本算的、地图留着的 = null
+ */
+async function baseLoad(baseId: string, id: number): Promise<LoadRequest | null> {
+  const w = loadWorld(baseId);
+  if (!w || w.draft || w.map || w.save.generator !== GENERATOR_VERSION || keptMapOf(w.save.edits)) return null;
+  const e = w.save.edits;
+  const maps = mapFilesNow();
+  return { type: 'load', id, params: w.save.params, scale: 1, vault: { id: baseId, recipe: await recipeKey(recipeOfSave(w.save)), generator: w.save.generator }, terrain: [...e.terrain], sketch: e.sketch, ...upsOpt(e.upheavals), ...(maps ? { mapPlugins: maps } : {}) };
+}
+
 /** 提示条的来源:上次有改动没推完、世界打不开。换世界时收起(提示条上的按钮是冲着那个世界的) */
 const PENDING_TOAST = 'pending-edit';
 const TROUBLE_TOAST = 'open-trouble';
+/** 新建中的世界再打开时,记着的地图插件有用不了的 */
+const MAPS_LOST_TOAST = 'map-lost';
 
 /** 这件事最多等这么久(毫秒),等不到 = fallback:读新路之前的几步卡住了也不能挡着打开世界 */
 function atMost<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
@@ -267,13 +282,15 @@ export function useWorldLoad(deps: WorldLoadDeps) {
         targetRef.current = t;
         setProgress({ stage: '准备', pct: 0, seed: t.params.seed });
         void import('../plugins/mapWorld')
-          .then(async (m) => {
-            const lost = await m.restoreMaps(t.id, kept, () => targetRef.current === t);
-            if (lost.length) showToast({ id: 'map-fail', kind: 'warn', text: '有地图插件用不了了', more: [`${lost.map((n) => `「${n}」`).join('')}没装了，或者被网站停用了，地图照剩下的长`], dismissible: true, ttl: 0 });
-          })
-          .catch(() => {})
-          .finally(() => {
-            if (targetRef.current === t) generate(t);
+          .then((m) => m.restoreMaps(t.id, kept, () => targetRef.current === t, t.base?.id))
+          .catch(() => [] as string[])
+          .then((lost) => {
+            if (targetRef.current !== t) return;
+            // 发出生成请求时会收起地图插件出错的那一条:这一条在那之后再出
+            generate(t);
+            const names = lost.map((n) => `「${n}」`).join('');
+            const line = pluginsUiOn() ? `${names}没装了，或者被网站停用了，地图照剩下的长` : `网站暂时关了插件，${names}现在不跑，地图先照不带${lost.length > 1 ? '它们' : '它'}的长`;
+            if (lost.length) showToast({ id: MAPS_LOST_TOAST, kind: 'warn', text: '有地图插件用不了了', more: [line], dismissible: true, ttl: 0 });
           });
         return;
       }
@@ -326,6 +343,7 @@ export function useWorldLoad(deps: WorldLoadDeps) {
       openingClear();
       clearToast(PENDING_TOAST);
       clearToast(TROUBLE_TOAST);
+      clearToast(MAPS_LOST_TOAST);
       /** 读存下的内容打开。这份内容就是带着 edits 里的干预、地形大事(逐年推演的:推到"现在")推出来的:套上以后不用重推 */
       const sendLoad = (src: Pick<LoadRequest, 'parts' | 'vault' | 'original'>, gen: number, back: LoadBack) => {
         frozenLoad.current = { id: t.id, gen };
@@ -409,15 +427,21 @@ export function useWorldLoad(deps: WorldLoadDeps) {
       const byRecipe = () => {
         if (keptMapOf(t.edits)) return keptOpen();
         genReq.current = null;
-        send(req);
+        if (!(t.kind === 'draft' && t.base && mapsOff(t.id))) return send(req);
+        void baseLoad(t.base.id, id)
+          .catch(() => null)
+          .then((base) => id === reqId.current && send(base ? { ...req, base } : req));
       };
       /** 旧路:旧版本建的世界,浏览器里有它那一版的原件就照原样打开(不重新生成);没有才按现在的规则生成。vaultBad = 新路是读坏了才退回来的 */
       const byOriginal = (vaultBad: boolean) => {
         const save = oldStored(t);
         if (!save) return byRecipe();
         genReq.current = req;
-        void frozenResult(t.id, save).then((r) => {
+        const used = atMost(vaultCall('worldPluginsOf', [t.id]).catch(() => null), 2000, null);
+        void Promise.all([frozenResult(t.id, save), used]).then(([found, u]) => {
           if (id !== reqId.current) return;
+          // 原件不记插件:用了推演、地图插件的世界存着的那份可能是不带插件长的
+          const r = found && found !== 'broken' && u?.plugins.some(shapesWorld) ? 'broken' : found;
           if (!r || r === 'broken') {
             if (r || vaultBad) frozenBroken.current = t.id;
             return byRecipe();
@@ -450,18 +474,18 @@ export function useWorldLoad(deps: WorldLoadDeps) {
         const fail: LoadBack = rd ? (why) => (why === 'newer' ? newerBack() : generate({ ...rd.draft, noVault: true, vaultBad: true })) : vaultBack;
         void (async () => {
           await openGuardReady();
-          if (!vaultAllowed(t.id)) throw new Error('这个世界这一版不走新路');
           const recipe = await recipeKey(recipeOfSave(stored));
-          // 这一版还没有原件的:读完存一份(旧路还留着)
           const heads = stored.generator === GENERATOR_VERSION && !t.fullFile ? await atMost(resultHeads(t.id), 2000, null) : null;
-          const original = !!heads && !heads.some((h) => h.generator === stored.generator && h.recipe === recipe);
-          // 用了推演插件的世界:带着插件读进来,接着推才不用从第 0 年重推
-          if (pluginsUiOn()) {
+          const used = await vaultCall('worldPluginsOf', [t.id]).catch(() => null);
+          // 这一版还没有原件的:读完存一份(旧路还留着)。原件不记插件,用了推演、地图插件的不存
+          const original = !!heads && !heads.some((h) => h.generator === stored.generator && h.recipe === recipe) && !used?.plugins.some(shapesWorld);
+          if (id !== reqId.current) return;
+          // 用了推演插件的世界(插件界面关着也一样):带着插件读进来,接着推才不用从第 0 年重推;关着时不跑,接着推先问
+          if (pluginsUiOn() || used?.plugins.some((p) => p.role === 'sim')) {
             await import('../plugins/worldPlugins').then((m) => m.loadSimNow(t.id)).catch(() => {});
             if (id !== reqId.current) return;
           }
           // 用了地图插件的世界(插件界面关着也一样):请求都带上它们,线程才认得出是哪张地图;本机没有同一版的改地形先问
-          const used = await vaultCall('worldPluginsOf', [t.id]).catch(() => null);
           if (used?.plugins.some((p) => p.role === 'map')) await import('../plugins/mapWorld').then((m) => m.loadMapNow(t.id, used.plugins, () => id === reqId.current)).catch(() => {});
           if (id !== reqId.current) return;
           civSetup.current = setupFor(t.kind === 'draft' && !t.fullCiv, t.edits);
@@ -469,6 +493,8 @@ export function useWorldLoad(deps: WorldLoadDeps) {
           req = { ...req, ...setupOpt(civSetup.current) };
           if (genReq.current) genReq.current = req;
           if (id !== reqId.current) return;
+          // 这一版不走新路的也先把插件读上:退回旧路按配方生成时带着它们
+          if (!vaultAllowed(t.id)) throw new Error('这个世界这一版不走新路');
           sendLoad({ vault: { id: t.id, recipe, generator: stored.generator }, ...(original ? { original } : {}) }, stored.generator, fail);
         })().catch(() => {
           if (id === reqId.current) fail('none');

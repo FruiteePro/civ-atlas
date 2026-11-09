@@ -36,7 +36,7 @@ import { applyNoteOps, cleanNoteList, mergeNotes, sameNotes, type NoteOp } from 
 import { LOCAL_HEAD_MAX_BYTES, LOCAL_PART_MAX_BYTES, packValue, partBytes, sha256, unpackValue, type SnapshotPart } from './gen/snapshot';
 import { GENERATOR_VERSION } from './gen/edits';
 import { VAULT_DB, type RosterMarks } from './worldRoster';
-import type { SaveFile } from './gen/savefile';
+import { worldKey, type SaveFile } from './gen/savefile';
 import { buildManifest, historyParts, manifestBytes, offeredPart, opaqueParts, openWorldFile, packExtra, packKnown, packPluginLayer, packThumb, zipWorld, type PackedPart } from './gen/worldFile';
 import {
   KNOWN_PARTS,
@@ -164,6 +164,8 @@ export interface WorldState extends RosterMarks {
   corrupt?: number;
   /** 要按配方重推,但本机没有世界记的那一版推演插件(插件编号):不重推,照原样留着,装上了再推 */
   simWait?: string[];
+  /** 要按配方重算,但网站关了插件、它用了推演或地图插件(插件编号):不算,照原样留着,插件开回来再算 */
+  pluginsOff?: string[];
   /** 放进来时校验没过的 author 块(指纹):字节留着,不当正文读 */
   authorSkip?: string;
   /** 只有 SIZES_ROW 这一行有:块的键 → 压缩后的字节数 */
@@ -207,6 +209,11 @@ export interface CommitRequest {
    * (空 = 没用);不给 = 不知道,照上一份
    */
   mapPlugins?: WorldPlugin[];
+  /**
+   * 给了 mapPlugins 才看,只管还没有修订的世界:地图照原样用的是这个世界(编号)存着的那张(本机没装那几个地图插件,parts 里没有它们出的图层)。
+   * 它最新一份修订用的地图插件和地图的配方都一样时,它的地图插件图层块、星球参照(这次没带的)照原样带过来,块按内容存,不另写字节
+   */
+  mapsFrom?: string;
 }
 
 export type CommitResult =
@@ -606,6 +613,24 @@ function partsAfter(req: CommitRequest, prev: WorldManifest | null, incoming: re
   return infos;
 }
 
+/** 地图那一块按什么长的(参数、地形修改、草图、地形大事):一样 = 同一张地图、同几段地形 */
+const mapRecipe = (s: SaveFile) => JSON.stringify([worldKey(s.params), s.edits.terrain ?? [], s.edits.sketch ?? null, s.edits.upheavals ?? []]);
+
+/**
+ * 照原样用别的世界那张地图的(CommitRequest.mapsFrom):那个世界最新一份修订里这几个地图插件出的图层块、星球参照,infos 里还没有、块还在的。
+ * 它用的地图插件、地图的配方对不上 = 空
+ */
+async function carriedMapParts(req: CommitRequest, infos: ReadonlyMap<string, WorldPartInfo>): Promise<WorldPartInfo[]> {
+  const head = chainOf(await rowsOf(req.mapsFrom!)).at(-1);
+  const from = head ? manifestOf(head) : null;
+  const keys = (ps: readonly WorldPlugin[]) => JSON.stringify(ps.map((p) => [p.id, p.sum, Object.entries(p.params ?? {}).sort(([a], [b]) => (a < b ? -1 : 1))]));
+  if (!from || keys((from.plugins ?? []).filter((p) => p.role === 'map')) !== keys(req.mapPlugins ?? []) || mapRecipe(from.recipe) !== mapRecipe(req.recipe)) return [];
+  const ids = new Set(req.mapPlugins!.map((p) => p.id));
+  const want = from.parts.filter((p) => !infos.has(p.name) && (p.name === 'planet' || ids.has(pluginLayerOf(p.name)?.[0] ?? '')));
+  const have = await existing(want.map(partKey));
+  return want.filter((p) => have.has(partKey(p)));
+}
+
 /**
  * 存一份修订。不改传进来的请求之外的任何东西;存不下抛 VaultError,上一份修订、别的世界都不受影响。
  * 这里只查清单能不能读(写坏的清单谁都读不了),不跑世界的校验器:万一校验器误伤,东西也得先存下来
@@ -632,7 +657,10 @@ export async function commitWorld(req: CommitRequest): Promise<CommitResult> {
       }
       // 清单读不懂的(坏了):当没有上一份,带着完整内容来的照样写得进去
       const prev = base ? manifestOf(base) : null;
-      const infos = partsAfter(req, prev, incoming, author, thumb);
+      // 照原样用别的世界那张地图的,只有头一份照它带;已经有修订的,地图插件的记录、图层照上一份
+      const r = base && req.mapsFrom ? { ...req, mapPlugins: undefined, mapsFrom: undefined } : req;
+      const infos = partsAfter(r, prev, incoming, author, thumb);
+      if (r.mapsFrom && r.parts && r.mapPlugins?.length) for (const p of await carriedMapParts(r, infos)) infos.set(p.name, p);
       const stale = base && prev ? await staleRegionLayers(req.id, base.n, prev, incoming) : [];
       for (const name of stale) infos.delete(name);
       // 没给作者内容 = 沿用。notes 表里等着的并进来;块坏了要重写时,坏的这一块不留(读不出来,留着存不成文件)
@@ -643,7 +671,7 @@ export async function commitWorld(req: CommitRequest): Promise<CommitResult> {
       const made = (req.parts ? req.made : prev?.made) ?? null;
       const readers = (req.parts ? req.readers : prev?.readers) ?? null;
       if (!made || !readers) throw new VaultError('failed', '存世界没给版本');
-      const plugins = toolsLeft(pluginsFor(req, prev), stale, parts);
+      const plugins = toolsLeft(pluginsFor(r, prev), stale, parts);
       const n = maxN + 1;
       const parent = base ? await sha256(new TextEncoder().encode(base.text)) : undefined;
       // 清单里认不出的字段(以后的版本写的)原样带着
@@ -1211,6 +1239,28 @@ export async function worldPluginsOf(id: string): Promise<Pick<WorldManifest, 'p
   return m ? { plugins: m.plugins, parts: m.parts } : null;
 }
 
+/**
+ * 复制一个世界:from 最新的修订原样成为 to 的第一份修订(块不动、插件记录和插件存的数据、图层都在),清单里的配方照原来的、只换名字。
+ * from 没有修订、to 已经有修订(别的标签页抢先转了) = false
+ */
+export async function copyRevision(from: string, to: string, title: string | undefined): Promise<boolean> {
+  try {
+    const base = chainOf(await rowsOf(from)).at(-1);
+    const prev = base ? manifestOf(base) : null;
+    if (!base || !prev) return false;
+    const named = title === undefined ? {} : { title };
+    const manifest: WorldManifest = { ...prev, id: to, ...(prev.title !== undefined ? named : {}), recipe: { ...prev.recipe, ...named }, revision: { n: 1 } };
+    const text = manifestBytes(manifest);
+    parseManifest(text, { readers: { ...prev.readers } });
+    const row: RevisionRow = { id: to, n: 1, text: new TextDecoder().decode(text), keys: [...base.keys], content: base.content, recipeKey: base.recipeKey, generator: base.generator, source: 'made', at: Date.now() };
+    const out = await publish(row, 0);
+    if (out === 'missing') throw new VaultError('corrupt', '写清单时块不全');
+    return out === 'ok';
+  } catch (e) {
+    throw asVaultError(e);
+  }
+}
+
 /** 一个世界最新的修订里只当字节留着的块(gen/worldFile.ts 的 opaqueParts):有就不能公开分享、投稿;没有修订、清单读不懂 = 没有 */
 export async function opaquePartsOf(id: string): Promise<string[]> {
   const last = chainOf(await rowsOf(id)).at(-1);
@@ -1541,5 +1591,5 @@ export async function rosterCopy(id: string): Promise<{ recipe: SaveFile; thumb:
 }
 
 /** 主线程通过后台线程调的几样(worldVaultWorker.ts、ui/worldStore.ts) */
-export const vaultOps = { commitWorld, draftFile, adoptFile, latestOf, revisionsOf, readRevision, revisionFile, zipBlobs, sweepParts, spaceOf, spaceBoard, fullStates, purgeWorld, clearVault, stateOf, patchState, patchStates, rosterOf, rosterCopy, readAuthor, changeAuthor, readPluginData, changePluginData, readPluginLayers, changePluginLayer, worldPluginsOf, opaquePartsOf };
+export const vaultOps = { commitWorld, draftFile, adoptFile, latestOf, revisionsOf, readRevision, revisionFile, zipBlobs, sweepParts, spaceOf, spaceBoard, fullStates, purgeWorld, clearVault, stateOf, patchState, patchStates, rosterOf, rosterCopy, readAuthor, changeAuthor, readPluginData, changePluginData, readPluginLayers, changePluginLayer, worldPluginsOf, copyRevision, opaquePartsOf };
 export type VaultOps = typeof vaultOps;

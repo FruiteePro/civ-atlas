@@ -7,7 +7,7 @@ import { IDBFactory } from 'fake-indexeddb';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateCiv } from '../src/gen/civ';
 import { EMPTY_EDITS, GENERATOR_VERSION, type WorldEdits } from '../src/gen/edits';
 import { FIRST_READERS, READER_VERSIONS } from '../src/gen/readers/versions';
@@ -21,7 +21,7 @@ import { clearEdits, getEdits, setEdits } from '../src/ui/editsStore';
 import { _setResultBackend, memoryResults, offerSnapshot, resultHeads } from '../src/ui/resultStore';
 import * as saveStore from '../src/ui/saveStore';
 import { APP_COMMIT, APP_VERSION } from '../src/ui/version';
-import { TRASH_KEEP_MS, notesVault, _setWorldStore, _settled, _syncLight, clearWorldStore, contentTrouble, maintain, offerWorldParts, pendingEdit, pendingOf, sameHistory, saveContentAgain, setWorldStoreSim, startConversions, startWorldStore, thumbBytes, trashFreed, worldMark, type ConvertRunner } from '../src/ui/worldStore';
+import { TRASH_KEEP_MS, notesVault, _setWorldStore, _settled, _syncLight, clearWorldStore, contentTrouble, maintain, offerWorldParts, pendingEdit, pendingOf, sameHistory, saveContentAgain, setWorldStoreSim, settleWorld, startConversions, startWorldStore, thumbBytes, trashFreed, worldMark, type ConvertRunner } from '../src/ui/worldStore';
 import { recomputeWorld, runConvert, type ConvertJob } from '../src/worldConvert';
 import { eraWorlds, keyOf, mapValue, worldChronicle, worldFlags } from '../src/worldRun';
 import { _resetVault, changeAuthor, latestOf, patchState, purgeWorld, readAuthor, readRevision, revisionFile, revisionsOf, stateOf, vaultOps, type VaultOps, type WorldPartsOffer } from '../src/worldVault';
@@ -34,6 +34,9 @@ import { FIXTURE_DIR, readSamples } from './lib/savedWorlds';
 import { simV1File } from './lib/simV1Files';
 import { faithEffect, weariness } from './lib/simV1Plugins';
 import { bytesOf } from './lib/worldFileSample';
+
+const flag = vi.hoisted(() => ({ on: true }));
+vi.mock('../src/ui/plugins/flag', () => ({ pluginsUiOn: () => flag.on }));
 
 class FakeStorage {
   map = new Map<string, string>();
@@ -100,6 +103,7 @@ beforeAll(() => {
 }, 60_000);
 
 beforeEach(() => {
+  flag.on = true;
   g.localStorage = new FakeStorage();
   g.indexedDB = new IDBFactory();
   _resetVault();
@@ -804,6 +808,129 @@ describe('把现有的世界转进来', () => {
     const file = await openWorldFile(await bytesOf((await revisionFile(id))!), OPEN);
     expect(file.manifest.plugins).toEqual(records);
     expect(isDeepStrictEqual((await readWorldContent(file)).civ, withSims)).toBe(true);
+    _resetPluginStore();
+  }, 120_000);
+
+  it('网站关了插件:用了推演、地图插件的要按存档重算也不算(装着同一版也不跑),照原样留着、记下在等哪几个;开回来再带着插件算', async () => {
+    _resetPluginStore();
+    const box: SimBoxer = (spec) => quickjsPlugin(quickjsWasm(), spec);
+    const save = makeSave(PARAMS, { ...EMPTY_EDITS, endYear: 300 }, check, 'x', '2026-11-01T00:00:00.000Z');
+    const id = storeSave(save);
+    const mapId = storeSave(makeSave(PARAMS, { ...EMPTY_EDITS, endYear: 200 }, check, 'm', '2026-11-01T00:00:00.000Z'));
+    const bytes = [await simV1File('weariness'), await simV1File('faith')];
+    for (const b of bytes) await installPlugin(b);
+    const files = await Promise.all(
+      bytes.map(async (b) => {
+        const o = await openPluginFile(b);
+        return { id: o.manifest.id, sum: o.sum, bytes: b };
+      }),
+    );
+    const records = await simRecordsOf(files);
+    const withSims = generateCiv(world, { endYear: 300, plugins: [weariness(), faithEffect()] });
+    const parts = [await makePart('map', mapValue(world)), await makePart('civ', withSims), await makePart('chronicle', worldChronicle(withSims, undefined)), await makePart('flags', worldFlags(world, withSims))];
+    const made = { app: '1.9.0', generator: GENERATOR_VERSION, commit: '', at: '2026-11-01T00:00:00.000Z' };
+    await vaultOps.commitWorld({ id, recipe: save, recipeKey: await recipeKey(recipeOfSave(save)), parts, made, readers: { ...READER_VERSIONS }, simPlugins: records });
+    const mapSave = saveStore.loadWorld(mapId)!.save;
+    const craters = { id: 'craters', version: '1.0.0', sum: 'c'.repeat(64), role: 'map', name: '环形山' };
+    await vaultOps.commitWorld({ id: mapId, recipe: mapSave, recipeKey: await recipeKey(recipeOfSave(mapSave)), parts, made, readers: { ...READER_VERSIONS }, mapPlugins: [craters] });
+    await patchState(id, { corrupt: 1 });
+    await patchState(mapId, { corrupt: 1 });
+    const jobs: ConvertJob[] = [];
+    _setWorldStore({ runner: (job) => (jobs.push(job), { done: runConvert(job, results, box).then((result) => ({ ok: true as const, result })), stop: () => {} }) });
+    flag.on = false;
+    await startConversions();
+    expect(jobs).toEqual([]);
+    expect(await stateOf(id)).toMatchObject({ corrupt: 1, pluginsOff: ['weariness', 'faith'] });
+    expect((await stateOf(id))?.simWait).toBeUndefined();
+    expect(await stateOf(mapId)).toMatchObject({ corrupt: 1, pluginsOff: ['craters'] });
+    expect((await revisionsOf(id)).length).toBe(1);
+    expect((await revisionsOf(mapId)).length).toBe(1);
+    // 存成文件之前让仓库跟上(用的人等着要):同样不算
+    await settleWorld(id);
+    expect(jobs).toEqual([]);
+
+    flag.on = true;
+    await startConversions();
+    expect(jobs.map((j) => [j.id, j.kind, j.simPlugins?.map((f) => f.id)])).toEqual([[id, 'recompute', ['weariness', 'faith']]]);
+    const st = await stateOf(id);
+    expect(st?.pluginsOff).toBeUndefined();
+    expect(st?.corrupt).toBeUndefined();
+    const file = await openWorldFile(await bytesOf((await revisionFile(id))!), OPEN);
+    expect(file.manifest.plugins).toEqual(records);
+    expect(isDeepStrictEqual((await readWorldContent(file)).civ, withSims)).toBe(true);
+    // 地图插件这台没装:照旧不算,不再记成在等插件开回来
+    expect((await stateOf(mapId))?.pluginsOff).toBeUndefined();
+    expect((await revisionsOf(mapId)).length).toBe(1);
+    _resetPluginStore();
+  }, 120_000);
+
+  it('网站关了插件:用了插件的世界有同一份配方的原件也不拿它转(原件不记插件);没用插件的照常转', async () => {
+    const save = makeSave(PARAMS, { ...EMPTY_EDITS, endYear: 300 }, check, 'x', '2026-11-01T00:00:00.000Z');
+    const id = storeSave(save);
+    const plain = storeSave(makeSave(PARAMS, { ...EMPTY_EDITS, endYear: 200 }, check, 'p', '2026-11-01T00:00:00.000Z'));
+    const civ0 = generateCiv(world, { endYear: 300 });
+    const parts = [await makePart('map', mapValue(world)), await makePart('civ', civ0), await makePart('chronicle', worldChronicle(civ0, undefined)), await makePart('flags', worldFlags(world, civ0))];
+    const made = { app: '1.9.0', generator: GENERATOR_VERSION, commit: '', at: '2026-11-01T00:00:00.000Z' };
+    const weary = { id: 'weariness', version: '1.0.0', sum: 'e'.repeat(64), role: 'sim', name: '厌战' };
+    await vaultOps.commitWorld({ id, recipe: save, recipeKey: await recipeKey(recipeOfSave(save)), parts, made, readers: { ...READER_VERSIONS }, simPlugins: [weary] });
+    await patchState(id, { corrupt: 1 });
+    // 同一份配方不带插件推出来的原件(新建时先长、后选插件的那一份)
+    await putOriginal(id, [await makePart('map', mapValue(world)), await makePart('civ', civ0)], save, GENERATOR_VERSION);
+    await putOriginal(plain, [await makePart('map', mapValue(world)), await makePart('civ', generateCiv(world, { endYear: 200 }))], saveStore.loadWorld(plain)!.save, GENERATOR_VERSION);
+    const jobs: ConvertJob[] = [];
+    _setWorldStore({ runner: (job) => (jobs.push(job), { done: runConvert(job, results).then((result) => ({ ok: true as const, result })), stop: () => {} }) });
+    flag.on = false;
+    await startConversions();
+    expect(jobs.map((j) => [j.id, j.kind])).toEqual([[plain, 'original']]);
+    expect(await stateOf(id)).toMatchObject({ corrupt: 1, pluginsOff: ['weariness'] });
+    expect((await revisionsOf(id)).length).toBe(1);
+  }, 120_000);
+
+  it('用了推演、地图插件的世界有同一份配方、不带插件推的原件也不拿它转(存成文件前也一样):带着插件按存档重推,本机没有的照原样留着;没用插件的照常转', async () => {
+    _resetPluginStore();
+    const box: SimBoxer = (spec) => quickjsPlugin(quickjsWasm(), spec);
+    const save = makeSave(PARAMS, { ...EMPTY_EDITS, endYear: 300 }, check, 'x', '2026-11-01T00:00:00.000Z');
+    const id = storeSave(save);
+    const mapSave = makeSave(PARAMS, { ...EMPTY_EDITS, endYear: 250 }, check, 'm', '2026-11-01T00:00:00.000Z');
+    const mapId = storeSave(mapSave);
+    const plainSave = makeSave(PARAMS, { ...EMPTY_EDITS, endYear: 200 }, check, 'p', '2026-11-01T00:00:00.000Z');
+    const plain = storeSave(plainSave);
+    const b = await simV1File('weariness');
+    await installPlugin(b);
+    const records = await simRecordsOf([{ id: 'weariness', sum: (await openPluginFile(b)).sum, bytes: b }]);
+    const withSims = generateCiv(world, { endYear: 300, plugins: [weariness()] });
+    const partsOf = async (c: ReturnType<typeof generateCiv>) => [await makePart('map', mapValue(world)), await makePart('civ', c), await makePart('chronicle', worldChronicle(c, undefined)), await makePart('flags', worldFlags(world, c))];
+    const made = { app: '1.9.0', generator: GENERATOR_VERSION, commit: '', at: '2026-11-01T00:00:00.000Z' };
+    await vaultOps.commitWorld({ id, recipe: save, recipeKey: await recipeKey(recipeOfSave(save)), parts: await partsOf(withSims), made, readers: { ...READER_VERSIONS }, simPlugins: records });
+    const craters = { id: 'craters', version: '1.0.0', sum: 'c'.repeat(64), role: 'map', name: '环形山' };
+    const map250 = generateCiv(world, { endYear: 250 });
+    await vaultOps.commitWorld({ id: mapId, recipe: mapSave, recipeKey: await recipeKey(recipeOfSave(mapSave)), parts: await partsOf(map250), made, readers: { ...READER_VERSIONS }, mapPlugins: [craters] });
+    await patchState(id, { corrupt: 1 });
+    await patchState(mapId, { corrupt: 1 });
+    // 同一份配方不带插件推出来的原件(新建时先长、后选插件的那一份)
+    await putOriginal(id, [await makePart('map', mapValue(world)), await makePart('civ', generateCiv(world, { endYear: 300 }))], save, GENERATOR_VERSION);
+    await putOriginal(mapId, [await makePart('map', mapValue(world)), await makePart('civ', map250)], mapSave, GENERATOR_VERSION);
+    await putOriginal(plain, [await makePart('map', mapValue(world)), await makePart('civ', generateCiv(world, { endYear: 200 }))], plainSave, GENERATOR_VERSION);
+    const jobs: ConvertJob[] = [];
+    _setWorldStore({ runner: (job) => (jobs.push(job), { done: runConvert(job, results, box).then((result) => ({ ok: true as const, result })), stop: () => {} }) });
+    await settleWorld(mapId);
+    expect(jobs).toEqual([]);
+    await startConversions();
+    const done = jobs.map((j) => [j.id, j.kind]);
+    expect(done).toHaveLength(2);
+    expect(done).toEqual(
+      expect.arrayContaining([
+        [id, 'recompute'],
+        [plain, 'original'],
+      ]),
+    );
+    const file = await openWorldFile(await bytesOf((await revisionFile(id))!), OPEN);
+    expect(file.manifest.plugins).toEqual(records);
+    expect(isDeepStrictEqual((await readWorldContent(file)).civ, withSims)).toBe(true);
+    // 地图插件这台没装:不算、不拿原件转,仓库里那一份照原样
+    expect((await revisionsOf(mapId)).length).toBe(1);
+    expect(await stateOf(mapId)).toMatchObject({ corrupt: 1 });
+    expect((await latestOf(plain))?.source).toBe('migrated');
     _resetPluginStore();
   }, 120_000);
 

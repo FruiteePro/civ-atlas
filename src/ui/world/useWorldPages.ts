@@ -74,7 +74,7 @@ import { getStage, type DraftBase } from '../stageStore';
 import { keptTerrainBlocked } from '../openTrouble';
 import { clearToast, showToast } from '../Toast';
 import type { SimClient } from '../sim/simClient';
-import { keepMapCopy, type KeptMapCopy } from '../worldStore';
+import { keepCarried, keepMapCopy, type KeptMapCopy } from '../worldStore';
 import type { LoadLater, useWorldLoad } from './useWorldLoad';
 import type { CivRefs, GenRefs, OpenRefs, Ref, ResimRefs, Setter, WorldViewRefs } from './worldRefs';
 import {
@@ -407,6 +407,8 @@ export function useWorldPages(deps: WorldPagesDeps) {
     writeWorldUrl(targetRef.current);
     if (rawRef.current) setWorldStats(aliveAtEnd(rawRef.current));
     refreshThumb();
+    // 以它为底稿新建、推演没有重推的:线程不会再交内容,当场存
+    void keepCarried(t.id, !!t.base && endParamOf(getEdits()) === civYears.current && sameSetup(setupFor(false, getEdits()), civSetup.current));
     const keep = persistent();
     showToast({
       id: 'created',
@@ -465,8 +467,8 @@ export function useWorldPages(deps: WorldPagesDeps) {
     const sims = pluginsUiOn() ? getSimNow() : null;
     const carry = sims?.id === cur.id ? sims.list : [];
     // 地图插件同一版、同样的滑条带过去(插件界面关着也一样):不带的话新建的世界长出来是另一张图。
-    // 本机对不上的还带不了:线程手上没有插件,长不出原来那张地图
-    if (getMapNow()?.ready) carryMaps(cur.id, d.id);
+    // 本机对不上的也带过去:线程照原样用原来那张地图,要重新长地图的几样先装插件
+    if (getMapNow()) carryMaps(cur.id, d.id);
     openTarget({ ...d, pristine: false, view: undefined });
     if (carry.length) void import('../plugins/worldPlugins').then((m) => m.carrySims(d.id, carry)).catch(() => {});
   };
@@ -694,11 +696,12 @@ export function useWorldPages(deps: WorldPagesDeps) {
   saveAsNewRef.current = saveAsNewNow;
   useEffect(() => {
     setSaveAsNew((e, from) => saveAsNewRef.current(e, from));
-    // 用了推演插件、本机没装、只有别的版本、被网站停用了:先装,或者另存一份(按新版 / 不带停用的)从第 0 年重推
+    // 用了推演插件、本机没装、只有别的版本、被网站停用了、网站关了插件:先装,或者另存一份(按新版 / 不带停用的 / 不带插件)从第 0 年重推
     const simGate = (next: WorldEdits): boolean => {
       const c = currentWorld();
-      const sims = pluginsUiOn() ? getSimNow() : null;
+      const sims = getSimNow();
       if (!c || !sims || sims.id !== c.id || sims.files) return false;
+      const off = !pluginsUiOn();
       askSims({
         title: c.title || '未命名世界',
         checks: sims.checks,
@@ -710,7 +713,7 @@ export function useWorldPages(deps: WorldPagesDeps) {
               c.id,
               next,
               (id, notes) => {
-                savedCopy.current = { id, line: drop.length ? '地图和你写的东西留下了，历史不带停用的插件、从第 0 年重推。原来的世界照原样留着' : '地图和你写的东西留下了，历史按新版插件从第 0 年重推。原来的世界照原样留着', more: notes ? [] : [NOTES_LOST] };
+                savedCopy.current = { id, line: off ? '地图和你写的东西留下了，历史不带推演插件、从第 0 年重推。原来的世界照原样留着' : drop.length ? '地图和你写的东西留下了，历史不带停用的插件、从第 0 年重推。原来的世界照原样留着' : '地图和你写的东西留下了，历史按新版插件从第 0 年重推。原来的世界照原样留着', more: notes ? [] : [NOTES_LOST] };
                 openStoredRef.current(id);
               },
               drop,
