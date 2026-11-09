@@ -305,7 +305,7 @@ export function DestroyPage({ civ, id, year, from }: { civ: Civ; id: number; yea
                   value={pieces}
                   onChange={(e) => (setPieces(e.target.value.replace(/[^\d]/g, '')), clear())}
                 />
-                <span className="cr-after">可选</span>
+                <span className="cr-after">软目标</span>
               </label>
               <label className="cp-check" data-destroy="no-reclaim">
                 <input
@@ -318,9 +318,12 @@ export function DestroyPage({ civ, id, year, from }: { civ: Civ; id: number; yea
                 <span className="cp-note">永久不许对继承国开战夺回</span>
               </label>
               <span className="cp-note">
-                {name} {n}按「{fragLabel}」裂成继承国
-                {pieces.trim() ? `（尽量靠近 ${pieces} 块）` : ''}；切不出的州散成无主，{nb ? `${nb}这些接壤的国家` : '周围的国家'}
-                再慢慢扩进去{noReclaim ? '；禁止母国收复' : ''}。
+                灭国与「大崩解」不同：这里国家亡掉，国土按「{fragLabel}」裂成继承国
+                {pieces.trim() ? `（块数尽量靠近 ${pieces}，只是软目标）` : '（块数随模式走，也可填软目标）'}
+                ；切不出的州散成无主，{nb ? `${nb}这些接壤的国家` : '周围的国家'}再慢慢扩进去。
+                {noReclaim
+                  ? '勾了「禁止母国收复」后，即便有人复国，也永久不能对这批继承国开战夺回。'
+                  : '默认母国与继承国会有约 100 年的收复休战；勾「禁止母国收复」则永久禁止。'}
               </span>
             </>
           )}

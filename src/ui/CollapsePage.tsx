@@ -88,7 +88,7 @@ export function CollapsePage({ civ, id, year, from }: { civ: Civ; id: number; ye
           <div className="cp-from">
             <span className="cp-k">哪一年崩解</span>
             <YearRow yi={yi} label="崩解年份" />
-            <span className="cp-note">这年之前的历史不变，之后重新推演。国家本身不亡，国都一带留下。</span>
+            <span className="cp-note">这年之前的历史不变，之后重新推演。国家不亡（与灭国不同），国都一带留下，其余裂成继承国。</span>
           </div>
         )}
         <div className="cp-form">
@@ -121,7 +121,7 @@ export function CollapsePage({ civ, id, year, from }: { civ: Civ; id: number; ye
               value={pieces}
               onChange={(e) => (setPieces(e.target.value.replace(/[^\d]/g, '')), clear())}
             />
-            <span className="cr-after">可选</span>
+            <span className="cr-after">软目标</span>
           </label>
           <label className="cp-check" data-collapse="no-reclaim">
             <input
@@ -134,9 +134,12 @@ export function CollapsePage({ civ, id, year, from }: { civ: Civ; id: number; ye
             <span className="cp-note">永久不许对继承国开战夺回</span>
           </label>
           <span className="cp-note">
-            {name} 按「{fragLabel}」崩解
-            {pieces.trim() ? `（尽量靠近 ${pieces} 块）` : ''}；国都一带留给原来的国家，其余自立
-            {noReclaim ? '；禁止母国收复' : ''}。
+            与「灭国」不同：国家不亡，国都一带留给{name}，其余按「{fragLabel}」自立
+            {pieces.trim() ? `（块数尽量靠近 ${pieces}，只是软目标）` : '（块数随模式走，也可填软目标）'}
+            。
+            {noReclaim
+              ? '勾了「禁止母国收复」后，母国永久不能对这批继承国开战夺回。'
+              : '默认母国与继承国会有约 100 年的收复休战；勾「禁止母国收复」则永久禁止。'}
           </span>
         </div>
         <div className="iv-sum" data-collapse="sum">

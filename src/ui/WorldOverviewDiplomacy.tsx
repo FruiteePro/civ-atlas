@@ -105,10 +105,13 @@ export function DiplomacyPage({ civ, year }: DiplomacyPageProps) {
   
   return (
     <div className="ov-page ov-diplomacy">
+      <p className="ov-diplo-legend">
+        联盟＝两国结盟（可共御强邻）；战争＝正在交战；宗藩＝藩属称臣于宗主。点国名可飞到地图。
+      </p>
       {!hasAny && (
         <div className="ov-empty">
           <p>当前年份（{yearShort(year, era)}）没有外交关系</p>
-          <p className="ov-hint">联盟、战争和宗藩关系会在这里显示</p>
+          <p className="ov-hint">有结盟、开战或称臣时会出现在下面</p>
         </div>
       )}
       

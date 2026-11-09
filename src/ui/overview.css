@@ -2237,6 +2237,13 @@ button.ov-kv-row:hover {
   padding: 24px;
 }
 
+.ov-diplo-legend {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+
 .ov-empty {
   padding: 48px 24px;
   text-align: center;
