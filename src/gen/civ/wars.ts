@@ -142,6 +142,11 @@ export const WARS_KNOBS = defineKnobs('wars', {
   /** 崩解继承国立国防御倍数;COLLAPSE_VIGOR_YEARS 年内线性回到 1;期内无割据、出兵满额 */
   COLLAPSE_VIGOR: 1.5,
   COLLAPSE_VIGOR_YEARS: 40,
+  /** 崩解家族收复:实力至少是对方的这么多倍才计收复赔率;主张满额年数 / 消退到 0 的年数;一族占旧土这么多成则主张消解 */
+  COLLAPSE_CLAIM_POWER: 0.6,
+  COLLAPSE_CLAIM_FULL: 100,
+  COLLAPSE_CLAIM_FADE: 200,
+  COLLAPSE_REUNIFY: 0.7,
   /** 迁都后这么多年内新国都攻不下(不会几年里一迁再迁) */
   CAPITAL_GRACE: 20,
   /** 丢了国都后剩下不到这么多州的国家撑不下去,残部归攻方、亡国 */
@@ -341,7 +346,25 @@ export interface WarModel {
   noReclaim: Map<number, number>;
   /** 母国最近一次大崩解年份(国力虚弱用;从 collapse / 作者大崩解史事重建) */
   collapsedAt: Map<number, Year>;
+  /**
+   * 同一次大崩解的「家族」:母国 + 继承国共享崩解前国土的收复主张。
+   * 从史事 + 归属日志重建,不另存档。
+   */
+  families: CollapseFamily[];
+  /** 国家 → families 下标 */
+  familyOf: Map<number, number>;
   // 别的子系统挂给战争、战争提供给别人的回调(攻城、立约、钱粮、动荡……)不在这里,在具名接口表 civ/api.ts 的 war 那一组
+}
+
+/** 一次大崩解形成的收复家族(可从史事重建) */
+export interface CollapseFamily {
+  parent: number;
+  year: Year;
+  /** 崩解前母国国土 */
+  regions: number[];
+  /** 母国 + 各继承国 */
+  members: Set<number>;
+  noReclaim: boolean;
 }
 
 /** 邻国的内忧(看邻国时算,见 installWars 里的 weakness):赔率倍数、够得上写由头的那一样、割据的那州(没有 = −1) */
@@ -382,6 +405,44 @@ export function collapseVigorFactor(founded: Year | undefined, isCollapseChild: 
   const age = t - founded;
   if (age < 0 || age >= years) return 1;
   return vigor + (1 - vigor) * (age / years);
+}
+
+/** 崩解家族主张强度:满额 FULL 年,之后线性降到 FADE 年为 0 */
+export function collapseClaimStrength(age: number, full: number, fade: number): number {
+  if (age < 0) return 0;
+  if (age <= full) return 1;
+  if (age >= fade || fade <= full) return 0;
+  return 1 - (age - full) / (fade - full);
+}
+
+/** 登记一次大崩解家族(live;resume 走 rebuildCollapseFamilies) */
+export function noteCollapseFamily(wm: WarModel, parent: number, year: Year, regions: readonly number[]): CollapseFamily {
+  const existing = wm.familyOf.get(parent);
+  if (existing !== undefined) {
+    const f = wm.families[existing];
+    if (Math.abs(f.year - year) < 1e-6) {
+      for (const r of regions) if (!f.regions.includes(r)) f.regions.push(r);
+      return f;
+    }
+  }
+  const f: CollapseFamily = { parent, year, regions: [...regions], members: new Set([parent]), noReclaim: false };
+  wm.familyOf.set(parent, wm.families.length);
+  wm.families.push(f);
+  wm.collapsedAt.set(parent, year);
+  return f;
+}
+
+/** 把继承国挂进母国当次崩解的家族 */
+export function joinCollapseFamily(wm: WarModel, parent: number, child: number, year: Year): void {
+  let i = wm.familyOf.get(parent);
+  if (i === undefined) {
+    noteCollapseFamily(wm, parent, year, []);
+    i = wm.familyOf.get(parent)!;
+  }
+  const f = wm.families[i];
+  f.members.add(child);
+  wm.familyOf.set(child, i);
+  wm.collapseChild.set(child, year);
 }
 
 /** 国家 p 第 k 次看邻国的时刻 */
@@ -430,6 +491,8 @@ function newModel(pm: PolityModel): WarModel {
     collapseChild: new Map(),
     noReclaim: new Map(),
     collapsedAt: new Map(),
+    families: [],
+    familyOf: new Map(),
   };
 }
 
@@ -479,7 +542,7 @@ export function warModelOf(sim: CivSim): WarModel | undefined {
 
 /** 登记战争的事件处理和监听(installPolities 之后调用) */
 export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarModel = newModel(pm)): WarModel {
-  const { PROJECT, KIN_ATTACK, HOME_DEF, CAPITAL_DEF, PROTECT_DEF, P_MAX, P_MIN, CAPITAL_GRACE, PROTECT_KEEP, HOLD, DEFENSE, REGAIN, RES_TARGET, MAX_CUT, MIN_STATE, CEDE_I, SURRENDER_SHARE, SURRENDER_POWER, ALLY_JOIN, TWO_FRONTS, REST, BROKE_CUT, PURSE_0, PLUNDER_FLOOR, TRUCE, NEWBORN, COLLAPSE_TRUCE, COLLAPSE_WEAK, COLLAPSE_WEAK_YEARS, COLLAPSE_VIGOR, COLLAPSE_VIGOR_YEARS, MAX_WARS, CRUSH, WAR_ODDS, LOCAL_EXP, BORDER_FULL, FOREIGN, REVANCHE, PREY, PREY_ODDS, GRUDGE_YEARS, GRUDGE, RES_WANT, RES_MAX, RICH, DIVERT, DIVERT_U, DIVERT_STEP, CHAOS_YEARS, PREY_UNREST, PREY_CALM, PREY_HIGH, WEAK_PREY, BLIGHT_MIN, BLIGHT_PREY, BLIGHT_FULL, LORD_PREY, LORD_PREY_MAX, STAND, STAND_DAYS, STAND_SLAIN, STAND_TAKEN, WINTER_T, WINTER_ALWAYS, WINTER_JITTER, BREAK_MAX, BREAK, COUNTER, STALL, BROKE_LENGTH, BROKE_PEACE, REVOLT_LENGTH, CRUSH_GOAL, CEDE } = wm.k;
+  const { PROJECT, KIN_ATTACK, HOME_DEF, CAPITAL_DEF, PROTECT_DEF, P_MAX, P_MIN, CAPITAL_GRACE, PROTECT_KEEP, HOLD, DEFENSE, REGAIN, RES_TARGET, MAX_CUT, MIN_STATE, CEDE_I, SURRENDER_SHARE, SURRENDER_POWER, ALLY_JOIN, TWO_FRONTS, REST, BROKE_CUT, PURSE_0, PLUNDER_FLOOR, TRUCE, NEWBORN, COLLAPSE_TRUCE, COLLAPSE_WEAK, COLLAPSE_WEAK_YEARS, COLLAPSE_VIGOR, COLLAPSE_VIGOR_YEARS, COLLAPSE_CLAIM_POWER, COLLAPSE_CLAIM_FULL, COLLAPSE_CLAIM_FADE, COLLAPSE_REUNIFY, MAX_WARS, CRUSH, WAR_ODDS, LOCAL_EXP, BORDER_FULL, FOREIGN, REVANCHE, PREY, PREY_ODDS, GRUDGE_YEARS, GRUDGE, RES_WANT, RES_MAX, RICH, DIVERT, DIVERT_U, DIVERT_STEP, CHAOS_YEARS, PREY_UNREST, PREY_CALM, PREY_HIGH, WEAK_PREY, BLIGHT_MIN, BLIGHT_PREY, BLIGHT_FULL, LORD_PREY, LORD_PREY_MAX, STAND, STAND_DAYS, STAND_SLAIN, STAND_TAKEN, WINTER_T, WINTER_ALWAYS, WINTER_JITTER, BREAK_MAX, BREAK, COUNTER, STALL, BROKE_LENGTH, BROKE_PEACE, REVOLT_LENGTH, CRUSH_GOAL, CEDE } = wm.k;
   const { FOE_ODDS, FRIEND_JOIN } = pm.knobs.get(POLICY_KNOBS);
   const { ADULT } = pm.knobs.get(REGENTS_KNOBS);
   const api = civApi(sim);
@@ -584,6 +647,9 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     const dy = reachOf(wm, y);
     let lost: Set<number> | null = null;
     if (retake) lost = new Set(w.takes.filter((e) => e.by === y).map((e) => e.region));
+    const famI = wm.familyOf.get(x);
+    const famRegions = famI !== undefined && wm.families[famI].members.has(y) ? new Set(wm.families[famI].regions) : null;
+    const isFamilyClaim = (r: number) => !!famRegions && famRegions.has(r);
     const cand: [number, number, number][] = [];
     // 刚迁都的国家,新国都 CAPITAL_GRACE 年内攻不下(残兵收拢、新都严防):不会几年里一迁再迁
     // 讨伐民变不等(见 接口 war.revolt)
@@ -603,7 +669,7 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
       if (t - wm.since[r] < hold || r === graceR || r === guardR) continue;
       if (wm.iv?.locked(r, t)) continue; // 阶段 4 干预:永久划给它的州攻不下
       if (guardR >= 0 && nextTo(r, guardR, Y, t)) continue;
-      if (lost && !lost.has(r) && wm.prev[r] !== x) continue;
+      if (lost && !lost.has(r) && wm.prev[r] !== x && !isFamilyClaim(r)) continue;
       let att = 0;
       let tot = 0;
       let def = Infinity;
@@ -619,7 +685,7 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
       const frac = tot > 0 ? att / tot : 0.5;
       const toward = dy[r] < Infinity ? fexp(-dy[r] / PROJECT) : 0;
       const score =
-        3 * frac + 0.6 * toward - 0.8 * flog(def) + (wm.prev[r] === x ? REGAIN : 0) + (want && api.war.resOf!(r) & want ? RES_TARGET : 0) + 0.5 * warRand(wm, w, reg.seat[r] * 1024 + (i & 1023), U_TARGET);
+        3 * frac + 0.6 * toward - 0.8 * flog(def) + (wm.prev[r] === x || isFamilyClaim(r) ? REGAIN : 0) + (want && api.war.resOf!(r) & want ? RES_TARGET : 0) + 0.5 * warRand(wm, w, reg.seat[r] * 1024 + (i & 1023), U_TARGET);
       cand.push([r, def, score]);
     }
     // 分数从高往低,挑第一个"打下来不会把 y 的国土切出一大块飞地"的
@@ -857,18 +923,49 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     // 接壤的邻国:边界长短(州与州相邻的对数)、边境上对方的州(和最好打的那条边);邻国手里有几州是从本国夺去的(收复失地)
     const border = new Map<number, number>();
     const front = new Map<number, Map<number, number>>();
-    /** 邻国 q 是不是本国大崩解切出的、还在禁收复期内(或作者永久禁止) */
+    /** 同家族且在休战期 / 禁止收复:不得开战 */
     const collapseProtected = (q: number) => {
-      const from = wm.collapseChild.get(q);
-      if (from === undefined) return false;
-      const Q = pm.polities[q];
-      if (Q.parent !== p) return false;
-      if (wm.noReclaim.get(q) === p) return true;
-      return t - from < collapseTruceYears(wm.base, pm.ptag[p], from, COLLAPSE_TRUCE);
+      const fi = wm.familyOf.get(p);
+      if (fi === undefined) {
+        const from = wm.collapseChild.get(q);
+        if (from === undefined) return false;
+        const Q = pm.polities[q];
+        if (Q.parent !== p) return false;
+        if (wm.noReclaim.get(q) === p) return true;
+        return t - from < collapseTruceYears(wm.base, pm.ptag[p], from, COLLAPSE_TRUCE);
+      }
+      const fam = wm.families[fi];
+      if (!fam.members.has(q) || q === p) return false;
+      if (fam.noReclaim || wm.noReclaim.get(q) === p || wm.noReclaim.get(p) === q) return true;
+      return t - fam.year < collapseTruceYears(wm.base, pm.ptag[fam.parent], fam.year, COLLAPSE_TRUCE);
     };
-    /** 邻国 q 手里有几州是从本国夺去的(收复失地;只扫 q 的国土);禁收复期内对崩解子女不计 */
+    /** 家族是否已有成员占旧土 ≥ REUNIFY */
+    const familyReunified = (fam: CollapseFamily) => {
+      if (!fam.regions.length) return false;
+      const need = COLLAPSE_REUNIFY * fam.regions.length;
+      for (const m of fam.members) {
+        let n = 0;
+        for (const r of fam.regions) if (owner[r] === m) n++;
+        if (n >= need) return true;
+      }
+      return false;
+    };
+    /** 邻国 q 手里有几州可主张收复:同家族用崩解前国土;否则用 prev。禁收复期 / 实力不足 / 已统一 = 0 */
     const claims = (q: number) => {
       if (collapseProtected(q)) return 0;
+      const fi = wm.familyOf.get(p);
+      if (fi !== undefined) {
+        const fam = wm.families[fi];
+        if (fam.members.has(q)) {
+          if (familyReunified(fam)) return 0;
+          const strength = collapseClaimStrength(t - fam.year, COLLAPSE_CLAIM_FULL, COLLAPSE_CLAIM_FADE);
+          if (strength <= 0) return 0;
+          // 实力门槛在算赔率时用 pow;这里先计州数 × 强度
+          let n = 0;
+          for (const r of fam.regions) if (owner[r] === q) n++;
+          return n * strength;
+        }
+      }
       let n = 0;
       for (const r of pm.lands[q]) if (wm.prev[r] === p) n++;
       return n;
@@ -942,7 +1039,11 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
       if (Q.culture !== P.culture) o *= FOREIGN;
       {
         const weak = collapseWeakFactor(wm.collapsedAt.get(p), t, COLLAPSE_WEAK, COLLAPSE_WEAK_YEARS);
-        o *= 1 + REVANCHE * Math.min(4, claims(q)) * weak;
+        let cl = claims(q);
+        // 家族收复:实力不到对方 COLLAPSE_CLAIM_POWER 倍则不计主张赔率
+        const fi = wm.familyOf.get(p);
+        if (cl > 0 && fi !== undefined && wm.families[fi].members.has(q) && pow[p] < COLLAPSE_CLAIM_POWER * pow[q]) cl = 0;
+        o *= 1 + REVANCHE * Math.min(4, cl) * weak;
       }
       // 小国(一场仗就能吞下)格外招人
       if (pm.size[q] <= PREY) o *= PREY_ODDS;
@@ -1252,7 +1353,7 @@ export function resumeWars(sim: CivSim, world: World, civ: Civ): void {
     } else if (e.kind === 'collapse') {
       wm.collapsedAt.set(e.a, e.year);
     } else if (e.kind === 'split' && e.cause === 'collapse') {
-      wm.collapseChild.set(e.a, e.year);
+      joinCollapseFamily(wm, e.b, e.a, e.year);
     } else if (e.kind === 'intervene' && (e.b === -8 || e.b === -1)) {
       wm.collapsedAt.set(e.a, e.year);
       // 作者「禁止母国收复」:同刻从该国切出的 collapse 子女永久禁收复
@@ -1260,6 +1361,8 @@ export function resumeWars(sim: CivSim, world: World, civ: Civ): void {
         for (const s of civ.annals) {
           if (s.kind === 'split' && s.cause === 'collapse' && s.b === e.a && Math.abs(s.year - e.year) < 1e-6) wm.noReclaim.set(s.a, e.a);
         }
+        const fi = wm.familyOf.get(e.a);
+        if (fi !== undefined) wm.families[fi].noReclaim = true;
       }
     } else if (e.kind === 'conquer' && e.war >= 0) wm.wars[e.war]?.takes.push({ year: e.year, region: e.region, by: e.a });
     else if (e.kind === 'peace') {
@@ -1279,6 +1382,39 @@ export function resumeWars(sim: CivSim, world: World, civ: Civ): void {
         wm.rest.delete(g!.win);
         looks.push([w!, g!.win, e.year, true]);
       }
+    }
+  }
+  // 补全各家族崩解前国土(归属日志:崩解年之前属母国的州 + 同年从母国切出的州)
+  {
+    const events: { parent: number; year: number }[] = [];
+    for (const e of civ.annals) {
+      if (e.kind === 'collapse') events.push({ parent: e.a, year: e.year });
+      else if (e.kind === 'intervene' && (e.b === -8 || e.b === -1)) events.push({ parent: e.a, year: e.year });
+    }
+    for (const ev of events) {
+      let fi = wm.familyOf.get(ev.parent);
+      if (fi === undefined) {
+        noteCollapseFamily(wm, ev.parent, ev.year, []);
+        fi = wm.familyOf.get(ev.parent)!;
+      }
+      const fam = wm.families[fi];
+      const cur = new Int16Array(civ.regions.count).fill(-1);
+      const terr = new Set<number>(fam.regions);
+      for (let i = 0; i < log.size; i++) {
+        if (log.layer[i] !== Layer.Polity) continue;
+        const r = log.region[i];
+        const y = log.year[i];
+        if (y < ev.year - 1e-9) {
+          cur[r] = log.value[i];
+          continue;
+        }
+        if (Math.abs(y - ev.year) < 1e-6) {
+          if (cur[r] === ev.parent) terr.add(r);
+          cur[r] = log.value[i];
+        }
+      }
+      for (let r = 0; r < cur.length; r++) if (cur[r] === ev.parent) terr.add(r);
+      fam.regions = [...terr];
     }
   }
   for (const w of wm.wars) if (w && w.end === undefined) wm.active.push(w);

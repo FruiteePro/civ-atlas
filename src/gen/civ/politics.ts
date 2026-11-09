@@ -58,7 +58,7 @@ import { AdjKind, Layer, type AnnalCause, type Civ, type Polity, type Year } fro
 import { fexp, flog, keyed, keyed4, subSeed } from './engine/rand';
 import { BOOKED_AT_START, bookChain, quantize, type CivSim } from './engine/sim';
 import { addPolity, canCross, coreOf, endPolity, foundingYear, moveCapital, polityModelOf, sailsOcean, type PolityModel } from './polities';
-import { warModelOf, type WarModel } from './wars';
+import { joinCollapseFamily, warModelOf, type WarModel } from './wars';
 import { capacityAt, capitalAt, populationAt } from './growth';
 import type { ControlModel } from './control';
 import type { CivModule } from './modules';
@@ -442,11 +442,8 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
     for (const r of group) if (r !== capR) sim.setOwner(Layer.Polity, r, p.id, Ev.Split);
     sim.record(kind, { a: p.id, b: parent, region: rising, settlement: sid, ...(cause ? { cause } : {}) });
     if (kind === 'split') pol.lastSplit.set(parent, t);
-    // 大崩解 / 灭国切出:记入战争模型,供母国禁收复期查询
-    if (kind === 'split' && cause === 'collapse') {
-      wm.collapseChild.set(p.id, t);
-      wm.collapsedAt.set(parent, t);
-    }
+    // 大崩解 / 灭国切出:记入战争模型(家族收复、禁收复期)
+    if (kind === 'split' && cause === 'collapse') joinCollapseFamily(wm, parent, p.id, t);
     return p;
   };
   api.politics.secede = (parent, group, sid, rising, t, kind, cause, extra) => {
