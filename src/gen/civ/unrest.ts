@@ -70,7 +70,7 @@ import { biomeColumn } from '../biomes';
 import { fexp, keyed, keyed4, subSeed } from './engine/rand';
 import { BOOKED_AT_START, bookChain, quantize, type CivSim } from './engine/sim';
 import { endPolity, polityModelOf, type PolityModel } from './polities';
-import { warModelOf, type War, type WarModel } from './wars';
+import { noteCollapseFamily, warModelOf, type War, type WarModel } from './wars';
 import { politicsModelOf, type PoliticsModel } from './politics';
 import { devModelOf } from './development';
 import { GROWTH_A, capitalAt, populationAt } from './growth';
@@ -1052,6 +1052,7 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
     const assessed = assessPolityFragment(pid, t);
     const resolved = resolveFragmentMode(frag?.mode, assessed, frag?.pieces);
     const { ready, mode } = partitionLand(pid, regions, t, assessed, resolved, false, -1);
+    if (ready.length) noteCollapseFamily(wm, pid, t, regions);
     for (const [g, sid, r0] of ready) api.politics.secede!(pid, g, sid, r0, t, 'split', 'collapse');
     return { successors: ready.length, mode };
   };
@@ -1066,6 +1067,7 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
     const unlocked = mine.filter((r) => !wm.iv?.locked(r, t));
     if (unlocked.length < PIECE_MIN) return { successors: 0, mode: resolved.mode, kind: 2 };
     const { ready, mode } = partitionLand(pid, unlocked, t, assessed, resolved, true, capR);
+    if (ready.length) noteCollapseFamily(wm, pid, t, unlocked);
     for (const [g, sid, r0] of ready) api.politics.secede!(pid, g, sid, r0, t, 'split', 'collapse');
     um.collapsed.set(pid, t);
     pol.lastSplit.set(pid, t);
@@ -1111,6 +1113,7 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
 
     const actualKind = kind < 2 ? kind : 1;
     sim.record('collapse', { a: pid, b: actualKind, region: capR, settlement: capSid, war: ready.length, opt: FRAGMENT_MODE_OPT[usedMode] });
+    if (ready.length) noteCollapseFamily(wm, pid, t, unlocked);
     for (const [g, sid, r0] of ready) api.politics.secede!(pid, g, sid, r0, t, 'split', 'collapse');
     um.collapsed.set(pid, t);
     pol.lastSplit.set(pid, t);

@@ -650,7 +650,11 @@ export function installInterventions(sim: CivSim, iv: InterventionModel): void {
     if (v.noReclaim) {
       for (let j = before; j < sim.annalCount; j++) {
         const e = sim.annal(j);
-        if (e.kind === 'split' && e.cause === 'collapse' && e.b === a) wm.noReclaim.set(e.a, a);
+        if (e.kind === 'split' && e.cause === 'collapse' && e.b === a) {
+          wm.noReclaim.set(e.a, a);
+          const fi = wm.familyOf.get(a);
+          if (fi !== undefined) wm.families[fi].noReclaim = true;
+        }
       }
     }
   };
@@ -700,7 +704,11 @@ export function installInterventions(sim: CivSim, iv: InterventionModel): void {
         if (v.noReclaim) {
           for (let j = before; j < sim.annalCount; j++) {
             const e = sim.annal(j);
-            if (e.kind === 'split' && e.cause === 'collapse' && e.b === a) wm.noReclaim.set(e.a, a);
+            if (e.kind === 'split' && e.cause === 'collapse' && e.b === a) {
+          wm.noReclaim.set(e.a, a);
+          const fi = wm.familyOf.get(a);
+          if (fi !== undefined) wm.families[fi].noReclaim = true;
+        }
           }
         }
         for (const q of leftover) sim.setOwner(Layer.Polity, q, -1, Ev.Cede);

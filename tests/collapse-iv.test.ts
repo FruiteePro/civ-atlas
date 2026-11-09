@@ -12,7 +12,7 @@ import { fragmentModeFromOpt } from '../src/gen/civ/fragmentMode';
 import { capitalAt } from '../src/gen/civ/growth';
 import { resumeCiv } from '../src/gen/civ/modules';
 import { polityModelOf } from '../src/gen/civ/polities';
-import { collapseTruceYears, collapseWeakFactor, collapseVigorFactor, warModelOf } from '../src/gen/civ/wars';
+import { collapseTruceYears, collapseWeakFactor, collapseVigorFactor, collapseClaimStrength, warModelOf } from '../src/gen/civ/wars';
 import { newIvDoneText } from '../src/ui/newIvInfo';
 import { nameAt } from '../src/ui/Interventions';
 
@@ -109,6 +109,38 @@ describe('post-collapse truce', () => {
 });
 
 
+
+
+describe('shared collapse family claims', () => {
+  it('collapseClaimStrength: full to 100y, zero by 200y', () => {
+    expect(collapseClaimStrength(0, 100, 200)).toBe(1);
+    expect(collapseClaimStrength(100, 100, 200)).toBe(1);
+    expect(collapseClaimStrength(150, 100, 200)).toBeCloseTo(0.5, 5);
+    expect(collapseClaimStrength(200, 100, 200)).toBe(0);
+  });
+
+  it('seed7 author collapse: family rebuilt with parent+kids and territory', () => {
+    const world = generateWorld({ ...DEFAULT_PARAMS, seed: 7 });
+    const base = generateCiv(world);
+    const T = 1600;
+    const sizes = new Map<number, number>();
+    for (const o of ownersAt(base, T).polity) if (o >= 0) sizes.set(o, (sizes.get(o) ?? 0) + 1);
+    const id = [...sizes.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    const iv: Intervention = { kind: 'collapse', a: polityKey(base, id), from: T, mode: 'shatter' };
+    const civ = generateCiv(world, { interventions: [iv], endYear: T + 5 });
+    const kids = civ.annals.filter((e) => e.kind === 'split' && e.cause === 'collapse' && e.b === id && Math.abs(e.year - T) < 0.01).map((e) => e.a);
+    expect(kids.length).toBeGreaterThan(0);
+    const sim = resumeCiv(world, civ);
+    const wm = warModelOf(sim)!;
+    const fi = wm.familyOf.get(id);
+    expect(fi).toBeDefined();
+    const fam = wm.families[fi!];
+    expect(fam.parent).toBe(id);
+    expect(fam.members.has(id)).toBe(true);
+    for (const k of kids) expect(fam.members.has(k)).toBe(true);
+    expect(fam.regions.length).toBeGreaterThan(0);
+  }, 120_000);
+});
 
 describe('successor founding vigor', () => {
   it('collapseVigorFactor: 1.5 at founding, 1 after 40y; non-child stays 1', () => {
