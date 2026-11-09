@@ -984,7 +984,7 @@ describe('编年史 · 真实世界(默认参数):被迫迁都折进战争,"大�
   // seed 7 121 条、2024 150 条):上限放到 175
   // GENERATOR_VERSION 47(季节进推演)以后 20 个种子 80–200 条(seed 7 154 条、2024 180 条):上限放到 210
   // GENERATOR_VERSION 56(滚雪球:破都纳降,纳降的那一仗算大事)以后 20 个种子 86–199 条(seed 7 145 条、2024 140 条):上限不变
-  const RANGE: [number, number] = [30, 210];
+  const RANGE: [number, number] = [30, 280];
   for (const seed of [7, 2024]) {
     it(`seed ${seed}`, () => {
       const civ = generateCiv(generateWorld({ ...DEFAULT_PARAMS, seed }));
@@ -1062,16 +1062,15 @@ describe('编年史 · 真实世界(默认参数):被迫迁都折进战争,"大�
       for (const e of major) expect(e.text).not.toMatch(/\uff08\uff09|;;|,,|,,/);
     }, 60_000);
   }
-  // 别的种子:都不超过 210 条(GENERATOR_VERSION 22 以后 20 个种子 47–135 条;40 是 64–177 条;
-  // 41 开战看内政以后 67–169 条,seed 1 113 条、3 157 条、99 67 条;43 战争节奏(仗多了,按州数算的门槛跟着调高两成)以后
-  // 84–201 条,seed 1 121 条、3 167 条、99 85 条;46 大迁徙以后 84–191 条,seed 1 146 条、3 189 条、99 81 条;
-  // 56 滚雪球以后 86–199 条,seed 1 150 条、3 169 条、99 81 条:上限放到 210)
+  // 别的种子:都不超过 280 条(GENERATOR_VERSION 22 以后 20 个种子 47–135 条;40 是 64–177 条;
+  // 41 开战看内政以后 67–169 条;43 84–201 条;46 84–191 条;56 86–199 条上限 210;
+  // 改进分裂以后 seed 3 255 条、11 228 条:上限放到 280)
   for (const seed of [1, 3, 99]) {
-    it(`seed ${seed}:"大事"不超过 210 条`, () => {
+    it(`seed ${seed}:"大事"不超过 280 条`, () => {
       const list = buildChronicle(generateCiv(generateWorld({ ...DEFAULT_PARAMS, seed })));
       const n = filterChronicle(list, { major: true }).length;
       expect(n).toBeGreaterThanOrEqual(19);
-      expect(n).toBeLessThanOrEqual(210);
+      expect(n).toBeLessThanOrEqual(280);
     }, 60_000);
   }
 });

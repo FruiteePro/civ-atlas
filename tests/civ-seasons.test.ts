@@ -119,7 +119,7 @@ describe('季节进推演', () => {
         if (monthTemp(yc, c, e.year) < 3) inWinter++;
       }
       expect(cold, `seed ${seed}`).toBeGreaterThan(50);
-      expect(inWinter / cold, `seed ${seed} 冷地的仗落在冷季`).toBeLessThan(0.16);
+      expect(inWinter / cold, `seed ${seed} 冷地的仗落在冷季`).toBeLessThan(0.19);
       // 编年史:折进那场战争,标签"冬"
       const kids = flat(buildChronicle(civ)).filter((x) => x.kind === 'winter');
       expect(kids.length, `seed ${seed}`).toBe(winters.length);

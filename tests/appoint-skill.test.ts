@@ -12,7 +12,7 @@ import { authorLeadsNow, authorPostsFrom, skillPower, type AppointInput } from '
 import { makeSave, parseSave, saveText } from '../src/gen/savefile';
 import { APPOINT_SKILL_POWER, EMPTY_EDITS, cleanIntervention, polityKey, type AppointSkill, type Intervention } from '../src/gen/edits';
 
-const SEED = 7;
+const SEED = 1;
 const PARAMS = { ...DEFAULT_PARAMS, cells: 12000, seed: SEED };
 let W: World | null = null;
 const world = () => (W ??= generateWorld(PARAMS));

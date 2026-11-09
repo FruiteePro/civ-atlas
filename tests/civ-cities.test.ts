@@ -222,7 +222,7 @@ describe('城市兴衰 · 推演', () => {
     }
   });
 
-  it('默认参数 seed 7 / 2024:毁城 2–140 座、多数是村镇;一场战争最多毁 3 座;有重建也有留下的遗址;有洗劫、有旧都渐衰', () => {
+  it('默认参数 seed 7 / 2024:毁城 2–140 座、多数是村镇;一场战争最多毁 4 座;有重建也有留下的遗址;有洗劫、有旧都渐衰', () => {
     let rebuilds = 0;
     for (const seed of [7, 2024]) {
       const civ = civOf({ ...DEFAULT_PARAMS, seed });
@@ -234,7 +234,7 @@ describe('城市兴衰 · 推演', () => {
       // GENERATOR_VERSION 46(大迁徙:迁来的游牧之国破城狠,打进国都、亡国多了)以后 20 个种子(1–20)49–120 座,seed 2024 121 座:上限放到 140
       expect(c.ruins, tag).toBeLessThanOrEqual(140);
       expect(c.ruinsByRank[0] + c.ruinsByRank[1], tag).toBeGreaterThan(c.ruins / 2);
-      expect(c.maxRuinsPerWar, tag).toBeLessThanOrEqual(3);
+      expect(c.maxRuinsPerWar, tag).toBeLessThanOrEqual(4); // 改进分裂以后 seed 7 一场毁 4 座
       // 重建:GENERATOR_VERSION 13 以后 20 个种子里只有 seed 7 一座也没重建(毁的 4 座都留成了遗址),两个世界合计有,见循环后
       rebuilds += c.rebuilds;
       expect(c.ruinsAtEnd, tag).toBeGreaterThan(0);

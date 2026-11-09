@@ -1,6 +1,6 @@
 /**
  * 推演插件接口第 1 版(gen/civ/simApi.ts):能力名和影响口、命令的名字定下来;只照接口写的两个插件(tests/lib/simV1Plugins.ts)
- * 种子 7、2024 默认参数推 3000 年推得完、历史看得出效果,结果钉住(钉子在 tests/lib/simV1Pins.ts,打成插件包的示例也对它)。
+ * 种子 1、2024 默认参数推 3000 年推得完、历史看得出效果,结果钉住(钉子在 tests/lib/simV1Pins.ts,打成插件包的示例也对它)。
  * 改了官方推演(同一种子的历史变了)这里的钉子跟着变:PRINT_PINS=1 跑一遍,照打出来的换掉 V1_PINS
  */
 import { describe, expect, it } from 'vitest';
