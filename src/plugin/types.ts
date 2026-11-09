@@ -308,7 +308,7 @@ export type InterventionInfo = (
   | { kind: 'halt'; a: string; from: number; until?: number }
   | { kind: 'crown'; a: string; char: number; from: number; born: number; until?: number; abdicate?: true; after?: true; keep?: true; leanings: Leanings }
   | { kind: 'keep'; a: string; from: number; until?: number }
-  | { kind: 'destroy'; a: string; from: number; b?: string }
+  | { kind: 'destroy'; a: string; from: number; b?: string; mode?: 'auto' | 'powers' | 'mixed' | 'shatter'; pieces?: number }
   | { kind: 'death'; a: string; person: string; from: number }
   | { kind: 'temper'; a: string; person: string; from: number; leanings: Leanings }
   | {

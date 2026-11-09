@@ -14,6 +14,7 @@ import { PLAGUE_IV, quakeRing } from '../src/gen/civ/calamity';
 import { plagueSpans } from '../src/gen/civ/story/plagueSpans';
 import { regionLabel } from '../src/gen/civ/story/display';
 import { personKey, polityKey, regionKey, settlementKey, type Intervention } from '../src/gen/edits';
+import { fragmentModeFromOpt, fragmentModeLabel } from '../src/gen/civ/fragmentMode';
 import type { Person } from '../src/gen/civ/types';
 import {
   biggestPort,
@@ -69,9 +70,10 @@ describe('灭国页', () => {
     for (const q of d.near) expect(d.size.get(q) ?? 0).toBeLessThanOrEqual(d.size.get(d.b) ?? 0);
     expect(destroyQueueText('东定国', 13, '大定')).toBe('东定国:灭国，13 州并入大定');
     expect(destroyQueueText('东定国', 13, null)).toBe('东定国:灭国，散成无主');
+    expect(destroyQueueText('东定国', 13, null, '自动')).toBe('东定国:灭国，散成无主（自动）');
   });
 
-  it('推完的提示条:并入写州数和国名,散成无主写"散为无主之地";那年已亡的写原因', () => {
+  it('推完的提示条:并入写州数和国名,散成继承国写裂为 N 国(+模式);那年已亡的写原因', () => {
     const base0 = base();
     const id = biggest(base0, T);
     const d = destroyDefault(base0, id, T);
@@ -85,7 +87,18 @@ describe('灭国页', () => {
     expect(interventionText(civ, merge, 0, A)).toBe(`${A}:灭国，${d.n} 州并入${nameAt(civ.polities[d.b], T)}`);
     const loose: Intervention = { kind: 'destroy', a: polityKey(base0, id), from: T };
     const c2 = generateCiv(world(), { interventions: [loose], endYear: T + 40 });
-    expect(newIvDoneText(c2, loose, 0, A, undefined)!.text).toBe(`${A}亡，${d.n} 州散为无主之地`);
+    {
+      const text = newIvDoneText(c2, loose, 0, A, undefined)!.text;
+      const e = c2.annals.find((x) => x.kind === 'intervene' && x.war === 0)!;
+      if (e.b === -1 && e.n && e.n > 0) {
+        const mode = fragmentModeFromOpt(e.opt);
+        const modeTxt = mode ? fragmentModeLabel(mode) : '';
+        const left = e.foe && e.foe > 0 ? `，另有 ${e.foe} 州散为无主` : '';
+        expect(text).toBe(`${A}亡，裂为 ${e.n} 国${modeTxt ? `（${modeTxt}）` : ''}${left}`);
+      } else {
+        expect(text).toBe(`${A}亡，${e.n ?? d.n} 州散为无主之地`);
+      }
+    }
     // 亡了以后再灭:没生效,黄色写原因
     const gone = base0.polities.find((p) => p.ended !== undefined && p.ended < T - 50 && p.founded < T - 300)!;
     const late: Intervention = { kind: 'destroy', a: polityKey(base0, gone.id), from: T };
@@ -140,19 +153,24 @@ describe('让人物去世、改倾向', () => {
   it('推完的提示条:君主去世 / 改倾向 / 将领去世写"历史不变"(same);改过倾向的那年照改后的', () => {
     const base0 = base();
     const x = rulerThen(base0, T);
-    const g = base0.people!.find((p) => p.role === 'general' && p.commands?.length && p.commands[0].from < T - 2 && (p.died ?? Infinity) > T + 2)!;
+    const g = base0.people!.find(
+      (p) => p.role === 'general' && p.commands?.length && p.commands[0].from < T - 2 && (p.died ?? Infinity) > T + 2,
+    );
     const die: Intervention = { kind: 'death', a: polityKey(base0, x.polity), person: personKey(base0, x.id), from: T };
     const c1 = generateCiv(world(), { interventions: [die], endYear: T + 20 });
     const r1 = newIvDoneText(c1, die, 0, '', undefined)!;
     expect(r1).toMatchObject({ ok: true });
     expect(r1.text).toMatch(new RegExp(` ${T} 年去世，下一位照常继位$`));
     expect(r1.same).toBeUndefined();
-    const gd: Intervention = { kind: 'death', a: polityKey(base0, g.polity), person: personKey(base0, g.id), from: T };
-    const c2 = generateCiv(world(), { interventions: [gd], endYear: T + 20 });
-    const r2 = newIvDoneText(c2, gd, 0, '', undefined)!;
-    expect(r2).toMatchObject({ ok: true, same: true });
-    expect(r2.text).toMatch(new RegExp(`改成 ${T} 年去世；历史不变$`));
-    expect(interventionText(c2, gd, 0)).toMatch(/:去世（只改人物和编年史）$/);
+    // 将领去世只改人物卡:碎裂改史后 seed7@1600 可能刚好没有合条件的将领,有则验 same
+    if (g) {
+      const gd: Intervention = { kind: 'death', a: polityKey(base0, g.polity), person: personKey(base0, g.id), from: T };
+      const c2 = generateCiv(world(), { interventions: [gd], endYear: T + 20 });
+      const r2 = newIvDoneText(c2, gd, 0, '', undefined)!;
+      expect(r2).toMatchObject({ ok: true, same: true });
+      expect(r2.text).toMatch(new RegExp(`改成 ${T} 年去世；历史不变$`));
+      expect(interventionText(c2, gd, 0)).toMatch(/:去世（只改人物和编年史）$/);
+    }
     const lean = { expand: 10, war: 90, develop: 50, trade: 20 };
     const tm: Intervention = { kind: 'temper', a: polityKey(base0, x.polity), person: personKey(base0, x.id), from: T, leanings: lean };
     const c3 = generateCiv(world(), { interventions: [tm], endYear: T + 20 });

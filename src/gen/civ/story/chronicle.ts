@@ -1,3 +1,4 @@
+import { fragmentModeFromOpt, fragmentModeLabel } from '../fragmentMode';
 /**
  * 编年史(阶段 3):把 civ.annals(史事)写成一条条中文纪事,给界面上的"编年史"面板和"复制全文"用。
  * 纯函数,主线程用;只引 growth.ts / display.ts / types.ts,不引起名器和推演代码。
@@ -1077,8 +1078,17 @@ function interveneStory(civ: Civ, e: Annal, id: number): IvStory {
     case 'destroy': {
       if (e.b === -3) return fail(`欲灭${A},然${A}已亡`, `那一年${A}已亡`);
       if (e.b === IV_PROTECTED) return fail(`欲灭${A},然又有令保${A}不亡`, `那一年${A}受后下的「保护」护着`);
+      if (e.b >= 0) {
+        const n = e.n ? `${cnNumber(e.n)}州` : '其地';
+        return done(`${A}亡,${n}并入${B}`);
+      }
+      if (e.b === -1 && e.n && e.n > 0) {
+        const mode = fragmentModeFromOpt(e.opt);
+        const left = e.foe && e.foe > 0 ? `,另有${cnNumber(e.foe)}州散为无主` : '';
+        return done(`${A}亡,裂为${cnNumber(e.n)}国${mode ? `（${fragmentModeLabel(mode)}）` : ''}${left}`);
+      }
       const n = e.n ? `${cnNumber(e.n)}州` : '其地';
-      return done(e.b >= 0 ? `${A}亡,${n}并入${B}` : `${A}亡,${n}散为无主之地`);
+      return done(`${A}亡,${n}散为无主之地`);
     }
     case 'death':
     case 'temper':

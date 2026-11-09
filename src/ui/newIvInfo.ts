@@ -40,6 +40,7 @@ import { regionLabel } from '../gen/civ/story/display';
 import { type Owners } from '../gen/civ/engine/timeline';
 import { authorRegentEndWord, cultureKeyName, interventionText, nameAt, neighborsAt, polityIdOf, regentEndWord } from './Interventions';
 import { boostDoneText } from './boostInfo';
+import { fragmentModeFromOpt, fragmentModeLabel } from '../gen/civ/fragmentMode';
 import { trekDoneText } from './trekInfo';
 
 // ---------------------------------------------------------------------------
@@ -53,9 +54,10 @@ export function destroyDefault(civ: Civ, id: number, y: number): { b: number; n:
   return { b, n: size.get(id) ?? 0, size, near };
 }
 
-/** 单子上的一行:"东定国:灭国，13 州并入大定" / "东定国:灭国，散成无主"(同 interventionText) */
-export function destroyQueueText(A: string, n: number, B: string | null): string {
-  return B ? `${A}:灭国，${n ? `${n} 州` : ''}并入${B}` : `${A}:灭国，散成无主`;
+/** 单子上的一行:"东定国:灭国，13 州并入大定" / "东定国:灭国，散成无主（自动）"(同 interventionText) */
+export function destroyQueueText(A: string, n: number, B: string | null, modeLabel?: string | null): string {
+  if (B) return `${A}:灭国，${n ? `${n} 州` : ''}并入${B}`;
+  return `${A}:灭国，散成无主${modeLabel ? `（${modeLabel}）` : ''}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -494,7 +496,7 @@ function keyPerson(civ: Civ, key: string): { x: Person | null; name: string } {
 
 /**
  * 推完的提示条(后面由调用方接"；已从……起重新推演";same = 历史不变,不接):
- *   灭国   "东定国亡，13 州并入大定" / "东定国亡，13 州散为无主之地" / 并入的那国那年已亡 "……散为无主之地（大定那年已亡）"
+ *   灭国   "东定国亡，13 州并入大定" / "东定国亡，裂为 3 国（割据分治）" / 无继承国 "……散为无主之地" / 并入的那国那年已亡 "……散为无主之地（大定那年已亡）"
  *   去世   君主 "燕溟 1500 年去世，下一位照常继位";将领、名臣 "燕鸾澈改成 1500 年去世；历史不变"
  *   改倾向 "燕溟的倾向改了，到他下台为止"
  *   即位(等下台)"顾长安等高宗鸿喾下台再即位"
@@ -517,9 +519,19 @@ export function newIvDoneText(civ: Civ, v: Intervention, i: number, A: string, e
   switch (v.kind) {
     case 'destroy': {
       if (f?.state === 'void') return fail(`灭${A}`);
-      const n = e?.n ? `${e.n} 州` : '国土';
       const B = e && e.b >= 0 && civ.polities[e.b] ? nameAt(civ.polities[e.b], v.from) : null;
-      if (B) return { ok: true, text: `${A}亡，${n}并入${B}` };
+      if (B) {
+        const n = e?.n ? `${e.n} 州` : '国土';
+        return { ok: true, text: `${A}亡，${n}并入${B}` };
+      }
+      // 散成继承国:n = 继承国数;foe = 剩余无主州数;opt = 模式
+      if (e && e.b === -1 && e.n && e.n > 0) {
+        const mode = fragmentModeFromOpt(e.opt);
+        const modeTxt = mode ? fragmentModeLabel(mode) : '';
+        const left = e.foe && e.foe > 0 ? `，另有 ${e.foe} 州散为无主` : '';
+        return { ok: true, text: `${A}亡，裂为 ${e.n} 国${modeTxt ? `（${modeTxt}）` : ''}${left}` };
+      }
+      const n = e?.n ? `${e.n} 州` : '国土';
       const lost = v.b ? polityIdOf(civ, v.b) : -1;
       return { ok: true, text: `${A}亡，${n}散为无主之地${v.b ? `（${lost >= 0 ? nameAt(civ.polities[lost], v.from) : '并入的那国'}那年已亡）` : ''}` };
     }

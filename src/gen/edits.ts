@@ -634,6 +634,8 @@
  *      刻河谷的河宽、河口张法和写实风画河对齐(只改画面)。地形、气候、河不变,历史重新推演
  */
 import type { Civ, Culture, Faith, MigrationDir, Person, Place, Polity, Regions, RulerLeanings, Settlement } from './civ/types';
+import { FRAGMENT_MODE_CHOICES, type FragmentModeChoice } from './civ/fragmentMode';
+export { FRAGMENT_MODE_CHOICES, type FragmentModeChoice } from './civ/fragmentMode';
 import type { AuthorCharacter } from './characters';
 import { polityRootAt } from './civ/polityRoot';
 import { treatyBook } from './civ/treatyBook';
@@ -855,7 +857,7 @@ export type Intervention = (
   | { kind: 'halt'; a: string; from: number; until?: number }
   | { kind: 'crown'; a: string; char: number; from: number; born: number; until?: number; abdicate?: true; after?: true; keep?: true; leanings: RulerLeanings }
   | { kind: 'keep'; a: string; from: number; until?: number }
-  | { kind: 'destroy'; a: string; from: number; b?: string }
+  | { kind: 'destroy'; a: string; from: number; b?: string; mode?: FragmentModeChoice; pieces?: number }
   | { kind: 'death'; a: string; person: string; from: number }
   | { kind: 'temper'; a: string; person: string; from: number; leanings: RulerLeanings }
   | { kind: 'disaster'; type: DisasterKind; level: DisasterLevel; from: number; city?: string; a?: string; regions?: string[]; region?: string; slump?: number }
@@ -2340,7 +2342,15 @@ export function tidyIntervention(x: unknown): Intervention | null {
     } else if (kind === 'policy') {
       v = cleanPolicy(o, a, from);
     } else if (kind === 'destroy') {
-      v = isPolityKey(o.b) && o.b !== a ? { kind, a, from, b: o.b } : { kind, a, from };
+      const mode = (FRAGMENT_MODE_CHOICES as readonly string[]).includes(o.mode as string) ? (o.mode as FragmentModeChoice) : undefined;
+      const piecesRaw = typeof o.pieces === 'number' && Number.isFinite(o.pieces) ? Math.min(12, Math.max(2, Math.round(o.pieces as number))) : undefined;
+      if (isPolityKey(o.b) && o.b !== a) {
+        v = { kind, a, from, b: o.b };
+      } else {
+        v = { kind, a, from };
+        if (mode) (v as { mode?: FragmentModeChoice }).mode = mode;
+        if (piecesRaw !== undefined) (v as { pieces?: number }).pieces = piecesRaw;
+      }
     } else if (kind === 'treaty' || kind === 'neutral') {
       const t = cleanTreatyIv(o, kind, a, from);
       if (!t) return null;

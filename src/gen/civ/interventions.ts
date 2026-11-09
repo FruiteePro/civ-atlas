@@ -650,6 +650,7 @@ export function installInterventions(sim: CivSim, iv: InterventionModel): void {
           war: i,
           n: successors,
           opt: FRAGMENT_MODE_OPT[mode],
+          foe: leftover.length,
         });
         for (const q of leftover) sim.setOwner(Layer.Polity, q, -1, Ev.Cede);
         endPolity(pm, a, t);
