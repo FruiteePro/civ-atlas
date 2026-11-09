@@ -65,6 +65,7 @@ import { getSelection, setCivTime, setSelection, type MapSelection } from './civ
 import { requestFly } from './panelStore';
 import { showToast } from './toastStore';
 import { noteRewrite } from './rewriteStore';
+import { safeUndoInterventions } from './baselinePreview';
 import { namedHistory, prepareChronicle } from './chronicleHandoff';
 import { fullChronicleCached } from '../gen/civ/story/religionText';
 
@@ -719,6 +720,21 @@ export function undoProposal(id: number) {
   // 新建时执行的改地形:点了"创建世界"以后地形锁住,不能再撤销
   if (!x || !a || a.undone || x.lock !== state.lock) return;
   const now = getEdits();
+  // 安全撤销:本轮加的干预若与之后新加的、作用同一目标的干预冲突,则拒绝并说明原因
+  const addedIv = a.after.interventions.filter(
+    (iv) => !a.before.interventions.some((b) => JSON.stringify(b) === JSON.stringify(iv)),
+  );
+  const stillPresent = addedIv.filter((iv) =>
+    now.interventions.some((n) => JSON.stringify(n) === JSON.stringify(iv)),
+  );
+  if (stillPresent.length) {
+    const check = safeUndoInterventions(now, stillPresent, { knownBefore: a.before.interventions });
+    if (!check.success) {
+      const why = check.conflicts?.[0]?.description ?? '与后续干预冲突';
+      showToast({ id: 'resim-done', kind: 'warn', text: '无法撤销这次改写', more: [why], ttl: 6000 });
+      return;
+    }
+  }
   const next = unmergeRewrite(now, a.before, a.after);
   // 照原样保存的旧世界:改历史先问要不要另存一份(App 问),这一轮照旧算执行着
   if (historyDiffers(now, next) && askHistory(next)) return;

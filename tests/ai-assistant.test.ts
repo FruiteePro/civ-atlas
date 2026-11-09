@@ -338,6 +338,24 @@ describe('助手面板', () => {
     expect(getEdits().interventions).toEqual([]);
   }, 30_000);
 
+  it('撤销时若后续干预与本轮冲突:拒绝并提示,不撤', async () => {
+    setTrialRunner(runner);
+    const id = await sendAsk(ctx(), `让${wardName}多撑一阵`);
+    expect(applyProposal(id, {})).toBeNull();
+    takeRewriteNote(getEdits());
+    const applied = getEdits().interventions[0]!;
+    expect(applied.kind).toBe('protect');
+    if (applied.kind !== 'protect') throw new Error('expected protect');
+    // 之后又加了一条作用在同一国家、时间重叠的干预
+    expect(addIntervention({ kind: 'unity', a: applied.a, from: applied.from + 1 })).toBe(true);
+    const beforeUndo = getEdits();
+    _resetToasts();
+    undoProposal(id);
+    expect(getEdits()).toEqual(beforeUndo);
+    expect(turn(id).applied!.undone).toBeFalsy();
+    expect(getToast()).toMatchObject({ kind: 'warn', text: '无法撤销这次改写' });
+  }, 30_000);
+
   it('确认单列好以后,最后那句话出错、停下:确认单留着,照样能先看、执行', async () => {
     setTrialRunner(runner);
     const from = Math.max(Math.ceil(ward.founded), Math.floor(ward.ended!) - 30);

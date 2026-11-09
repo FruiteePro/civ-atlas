@@ -37,7 +37,7 @@ import {
   validateCurrentPreview,
   getPreviewState
 } from './baselinePreviewStore';
-import { safeUndoInterventions, type ComparisonMetrics } from './baselinePreview';
+import { type ComparisonMetrics } from './baselinePreview';
 import {
   applyBlock,
   applyProposal,
