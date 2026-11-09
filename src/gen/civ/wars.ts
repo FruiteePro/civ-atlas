@@ -136,6 +136,9 @@ export const WARS_KNOBS = defineKnobs('wars', {
   NEWBORN: 30,
   /** 大崩解 / 灭国切出的继承国:母国收复休战年数范围(每次崩解在此区间内确定性抽一年数,不计收复失地) */
   COLLAPSE_TRUCE: [5, 50] as [number, number],
+  /** 大崩解当年母国国力倍数;之后 COLLAPSE_WEAK_YEARS 年内线性回到 1(有心无力) */
+  COLLAPSE_WEAK: 0.5,
+  COLLAPSE_WEAK_YEARS: 40,
   /** 迁都后这么多年内新国都攻不下(不会几年里一迁再迁) */
   CAPITAL_GRACE: 20,
   /** 丢了国都后剩下不到这么多州的国家撑不下去,残部归攻方、亡国 */
@@ -333,6 +336,8 @@ export interface WarModel {
   collapseChild: Map<number, Year>;
   /** 禁止母国收复:继承国 id → 母国 id(永久,作者干预) */
   noReclaim: Map<number, number>;
+  /** 母国最近一次大崩解年份(国力虚弱用;从 collapse / 作者大崩解史事重建) */
+  collapsedAt: Map<number, Year>;
   // 别的子系统挂给战争、战争提供给别人的回调(攻城、立约、钱粮、动荡……)不在这里,在具名接口表 civ/api.ts 的 war 那一组
 }
 
@@ -358,6 +363,14 @@ export function collapseTruceYears(base: number, parentTag: number, year: number
   const lo = range[0];
   const hi = range[1];
   return lo + Math.floor((hi - lo + 1) * keyed(base, parentTag, Math.round(year), U_COLLAPSE_TRUCE));
+}
+
+/** 大崩解后母国国力倍数:当年 weak,years 年内线性回到 1 */
+export function collapseWeakFactor(from: Year | undefined, t: number, weak: number, years: number): number {
+  if (from === undefined || years <= 0) return 1;
+  const age = t - from;
+  if (age < 0 || age >= years) return 1;
+  return weak + (1 - weak) * (age / years);
 }
 
 /** 国家 p 第 k 次看邻国的时刻 */
@@ -405,6 +418,7 @@ function newModel(pm: PolityModel): WarModel {
     grudge: new Map(),
     collapseChild: new Map(),
     noReclaim: new Map(),
+    collapsedAt: new Map(),
   };
 }
 
@@ -454,7 +468,7 @@ export function warModelOf(sim: CivSim): WarModel | undefined {
 
 /** 登记战争的事件处理和监听(installPolities 之后调用) */
 export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarModel = newModel(pm)): WarModel {
-  const { PROJECT, KIN_ATTACK, HOME_DEF, CAPITAL_DEF, PROTECT_DEF, P_MAX, P_MIN, CAPITAL_GRACE, PROTECT_KEEP, HOLD, DEFENSE, REGAIN, RES_TARGET, MAX_CUT, MIN_STATE, CEDE_I, SURRENDER_SHARE, SURRENDER_POWER, ALLY_JOIN, TWO_FRONTS, REST, BROKE_CUT, PURSE_0, PLUNDER_FLOOR, TRUCE, NEWBORN, COLLAPSE_TRUCE, MAX_WARS, CRUSH, WAR_ODDS, LOCAL_EXP, BORDER_FULL, FOREIGN, REVANCHE, PREY, PREY_ODDS, GRUDGE_YEARS, GRUDGE, RES_WANT, RES_MAX, RICH, DIVERT, DIVERT_U, DIVERT_STEP, CHAOS_YEARS, PREY_UNREST, PREY_CALM, PREY_HIGH, WEAK_PREY, BLIGHT_MIN, BLIGHT_PREY, BLIGHT_FULL, LORD_PREY, LORD_PREY_MAX, STAND, STAND_DAYS, STAND_SLAIN, STAND_TAKEN, WINTER_T, WINTER_ALWAYS, WINTER_JITTER, BREAK_MAX, BREAK, COUNTER, STALL, BROKE_LENGTH, BROKE_PEACE, REVOLT_LENGTH, CRUSH_GOAL, CEDE } = wm.k;
+  const { PROJECT, KIN_ATTACK, HOME_DEF, CAPITAL_DEF, PROTECT_DEF, P_MAX, P_MIN, CAPITAL_GRACE, PROTECT_KEEP, HOLD, DEFENSE, REGAIN, RES_TARGET, MAX_CUT, MIN_STATE, CEDE_I, SURRENDER_SHARE, SURRENDER_POWER, ALLY_JOIN, TWO_FRONTS, REST, BROKE_CUT, PURSE_0, PLUNDER_FLOOR, TRUCE, NEWBORN, COLLAPSE_TRUCE, COLLAPSE_WEAK, COLLAPSE_WEAK_YEARS, MAX_WARS, CRUSH, WAR_ODDS, LOCAL_EXP, BORDER_FULL, FOREIGN, REVANCHE, PREY, PREY_ODDS, GRUDGE_YEARS, GRUDGE, RES_WANT, RES_MAX, RICH, DIVERT, DIVERT_U, DIVERT_STEP, CHAOS_YEARS, PREY_UNREST, PREY_CALM, PREY_HIGH, WEAK_PREY, BLIGHT_MIN, BLIGHT_PREY, BLIGHT_FULL, LORD_PREY, LORD_PREY_MAX, STAND, STAND_DAYS, STAND_SLAIN, STAND_TAKEN, WINTER_T, WINTER_ALWAYS, WINTER_JITTER, BREAK_MAX, BREAK, COUNTER, STALL, BROKE_LENGTH, BROKE_PEACE, REVOLT_LENGTH, CRUSH_GOAL, CEDE } = wm.k;
   const { FOE_ODDS, FRIEND_JOIN } = pm.knobs.get(POLICY_KNOBS);
   const { ADULT } = pm.knobs.get(REGENTS_KNOBS);
   const api = civApi(sim);
@@ -488,20 +502,23 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
       const tab = api.war.power ? api.war.power(p) : -1;
       if (tab >= 0) {
         pow[p] = tab;
-        continue;
+      } else {
+        let sum = 0;
+        // 管不到的州出兵打折、割据的州不出兵(control.ts;没挂 = 都出)
+        const lv = api.war.levy?.(p, t);
+        for (const r of pm.lands[p]) {
+          const c = pm.cityOf[r];
+          if (c >= 0) sum += lv ? popAt(pm.settlements[c], t) * lv(r) : popAt(pm.settlements[c], t);
+        }
+        // 军力系数(发展度按国都所在州的动员能力定,见 development.ts;没有 = 1)
+        pow[p] = Math.max(1, sum) * (pm.military?.[p] ?? 1);
+        // 顺着引的国力加减(policy.ts;没有 = 不乘)
+        const k = powerScaleOf(pm, p, t);
+        if (k !== 1) pow[p] *= k;
       }
-      let sum = 0;
-      // 管不到的州出兵打折、割据的州不出兵(control.ts;没挂 = 都出)
-      const lv = api.war.levy?.(p, t);
-      for (const r of pm.lands[p]) {
-        const c = pm.cityOf[r];
-        if (c >= 0) sum += lv ? popAt(pm.settlements[c], t) * lv(r) : popAt(pm.settlements[c], t);
-      }
-      // 军力系数(发展度按国都所在州的动员能力定,见 development.ts;没有 = 1)
-      pow[p] = Math.max(1, sum) * (pm.military?.[p] ?? 1);
-      // 顺着引的国力加减(policy.ts;没有 = 不乘)
-      const k = powerScaleOf(pm, p, t);
-      if (k !== 1) pow[p] *= k;
+      // 大崩解后虚弱:当年约半力,数十年内缓过来(表算国力也乘)
+      const weak = collapseWeakFactor(wm.collapsedAt.get(p), t, COLLAPSE_WEAK, COLLAPSE_WEAK_YEARS);
+      if (weak !== 1) pow[p] *= weak;
     }
     return pow;
   };
@@ -907,7 +924,10 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
       const pbar = sum / front.get(q)!.size;
       let o = WAR_ODDS * P.expansionism * fpow(pbar / (1 - pbar), LOCAL_EXP) * Math.sqrt(Math.min(1, n / BORDER_FULL));
       if (Q.culture !== P.culture) o *= FOREIGN;
-      o *= 1 + REVANCHE * Math.min(4, claims(q));
+      {
+        const weak = collapseWeakFactor(wm.collapsedAt.get(p), t, COLLAPSE_WEAK, COLLAPSE_WEAK_YEARS);
+        o *= 1 + REVANCHE * Math.min(4, claims(q)) * weak;
+      }
       // 小国(一场仗就能吞下)格外招人
       if (pm.size[q] <= PREY) o *= PREY_ODDS;
       if (betray) o *= dm!.betrayOdds * (api.war.kinBetray?.(p, q, t) ?? 1);
@@ -1213,12 +1233,17 @@ export function resumeWars(sim: CivSim, world: World, civ: Civ): void {
     if (e.kind === 'war') {
       wm.wars[e.war] = { id: e.war, a: e.a, b: e.b, start: e.year, takes: [] };
       if (e.cause === 'quell' || e.cause === 'heir' || e.cause === 'trek') civil.add(e.war);
+    } else if (e.kind === 'collapse') {
+      wm.collapsedAt.set(e.a, e.year);
     } else if (e.kind === 'split' && e.cause === 'collapse') {
       wm.collapseChild.set(e.a, e.year);
-    } else if (e.kind === 'intervene' && (e.opt ?? 0) & 4 && (e.b === -8 || e.b === -1)) {
+    } else if (e.kind === 'intervene' && (e.b === -8 || e.b === -1)) {
+      wm.collapsedAt.set(e.a, e.year);
       // 作者「禁止母国收复」:同刻从该国切出的 collapse 子女永久禁收复
-      for (const s of civ.annals) {
-        if (s.kind === 'split' && s.cause === 'collapse' && s.b === e.a && Math.abs(s.year - e.year) < 1e-6) wm.noReclaim.set(s.a, e.a);
+      if ((e.opt ?? 0) & 4) {
+        for (const s of civ.annals) {
+          if (s.kind === 'split' && s.cause === 'collapse' && s.b === e.a && Math.abs(s.year - e.year) < 1e-6) wm.noReclaim.set(s.a, e.a);
+        }
       }
     } else if (e.kind === 'conquer' && e.war >= 0) wm.wars[e.war]?.takes.push({ year: e.year, region: e.region, by: e.a });
     else if (e.kind === 'peace') {

@@ -443,7 +443,10 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
     sim.record(kind, { a: p.id, b: parent, region: rising, settlement: sid, ...(cause ? { cause } : {}) });
     if (kind === 'split') pol.lastSplit.set(parent, t);
     // 大崩解 / 灭国切出:记入战争模型,供母国禁收复期查询
-    if (kind === 'split' && cause === 'collapse') wm.collapseChild.set(p.id, t);
+    if (kind === 'split' && cause === 'collapse') {
+      wm.collapseChild.set(p.id, t);
+      wm.collapsedAt.set(parent, t);
+    }
     return p;
   };
   api.politics.secede = (parent, group, sid, rising, t, kind, cause, extra) => {
