@@ -17,9 +17,9 @@ import { evLabel, evType } from '../src/ui/timelineLayout';
 import { flagAt, flagBook } from '../src/gen/civ/story/flags';
 import { flagNote } from '../src/gen/civ/story/flagText';
 
-// 种子 2 是 GENERATOR_VERSION 56 以后补的(以前是 13):滚雪球以后复辟少见了,种子 1–13、2024 里只有 2 号有;
-// 57(湿地)以后种子 1–20、2024 里只有 13 号有复辟(2 号没有了),换回 13
-const SEEDS = [7, 13, 2024];
+// 改进分裂以后复辟落在种子 21、36…;用 7(废君/革命多)、21(复辟)、1(立宪也有)盖住三种
+// (第 57 湿地是 7、13、2024;第 56 滚雪球是 2;更早是 13)
+const SEEDS = [7, 21, 1];
 const worlds = new Map<number, World>();
 const world = (seed: number) => {
   let w = worlds.get(seed);

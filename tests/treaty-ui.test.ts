@@ -13,11 +13,11 @@ import { diedInExile, treatyEntries, treatyPeriod, zoneOfRegionAt, zoneResidents
 import { neutralZones } from '../src/render/civ/neutral';
 import { stripeAt } from '../src/render/civ/territory';
 
-// 种子 26(GENERATOR_VERSION 57 湿地以后的历史):三国以上立约、设了中立地的一份(three),有人被放逐到中立地;
-// 设了中立地又背约的一份(broken)在种子 11 里。第 57 版种子 1–100 里三国立约设中立地的只有 26(没有背约的),分两个世界找
-// (第 56 版是种子 158、1,第 48 版是种子 13,第 47 版是种子 60,第 46 版是种子 50,以前是种子 10、31)
-const SEED = 26;
-const SEED_B = 11;
+// 种子 35(改进分裂以后):三国以上立约、设了中立地的一份(three),有人被放逐到中立地;
+// 设了中立地又背约的一份(broken)在种子 1 里。种子 1–100 里三国立约设中立地的只有 35、47,分两个世界找
+// (第 57 版湿地是种子 26、11,第 56 版是种子 158、1,第 48 版是种子 13,以前是种子 10、31)
+const SEED = 35;
+const SEED_B = 1;
 const world = generateWorld({ ...DEFAULT_PARAMS, seed: SEED });
 const civ = generateCiv(world);
 const book = treatyBook(civ);
