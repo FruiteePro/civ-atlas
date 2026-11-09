@@ -10,6 +10,9 @@ import { ownersAt } from '../src/gen/civ/engine/timeline';
 import { cleanIntervention, polityKey, type Intervention } from '../src/gen/edits';
 import { fragmentModeFromOpt } from '../src/gen/civ/fragmentMode';
 import { capitalAt } from '../src/gen/civ/growth';
+import { resumeCiv } from '../src/gen/civ/modules';
+import { polityModelOf } from '../src/gen/civ/polities';
+import { collapseTruceYears, warModelOf } from '../src/gen/civ/wars';
 import { newIvDoneText } from '../src/ui/newIvInfo';
 import { nameAt } from '../src/ui/Interventions';
 
@@ -63,7 +66,23 @@ describe('author collapse intervention', () => {
 });
 
 describe('post-collapse truce', () => {
-  it('seed7 author collapse: parent does not claim-war children within 100 years', () => {
+  it('collapseTruceYears is in 5–50 and deterministic', () => {
+    const a = collapseTruceYears(0x12345678, 42, 1600, [5, 50]);
+    const b = collapseTruceYears(0x12345678, 42, 1600, [5, 50]);
+    expect(a).toBe(b);
+    expect(a).toBeGreaterThanOrEqual(5);
+    expect(a).toBeLessThanOrEqual(50);
+    // 换母国或年份会变(不要求必变,但常见)
+    const samples = new Set([
+      a,
+      collapseTruceYears(0x12345678, 43, 1600, [5, 50]),
+      collapseTruceYears(0x12345678, 42, 1601, [5, 50]),
+      collapseTruceYears(0x99abcdef, 42, 1600, [5, 50]),
+    ]);
+    expect(samples.size).toBeGreaterThan(1);
+  });
+
+  it('seed7 author collapse: parent does not claim-war children within that collapse\'s truce', () => {
     const world = generateWorld({ ...DEFAULT_PARAMS, seed: 7 });
     const base = generateCiv(world);
     const T = 1600;
@@ -71,15 +90,21 @@ describe('post-collapse truce', () => {
     for (const o of ownersAt(base, T).polity) if (o >= 0) sizes.set(o, (sizes.get(o) ?? 0) + 1);
     const id = [...sizes.entries()].sort((a, b) => b[1] - a[1])[0][0];
     const iv: Intervention = { kind: 'collapse', a: polityKey(base, id), from: T, mode: 'shatter' };
-    const civ = generateCiv(world, { interventions: [iv], endYear: T + 99 });
+    const civ = generateCiv(world, { interventions: [iv], endYear: T + 55 });
     const kids = new Set(
       civ.annals.filter((e) => e.kind === 'split' && e.cause === 'collapse' && e.b === id && Math.abs(e.year - T) < 0.01).map((e) => e.a),
     );
     expect(kids.size).toBeGreaterThan(0);
+    const sim = resumeCiv(world, civ);
+    const pm = polityModelOf(sim)!;
+    const wm = warModelOf(sim)!;
+    const years = collapseTruceYears(wm.base, pm.ptag[id], T, wm.k.COLLAPSE_TRUCE);
+    expect(years).toBeGreaterThanOrEqual(5);
+    expect(years).toBeLessThanOrEqual(50);
     const early = civ.annals.filter(
-      (e) => e.kind === 'war' && e.year < T + 100 && e.a === id && kids.has(e.b) && e.cause === 'claim',
+      (e) => e.kind === 'war' && e.year < T + years && e.a === id && kids.has(e.b) && e.cause === 'claim',
     );
-    expect(early, `claim wars before +100: ${early.map((e) => e.year)}`).toHaveLength(0);
+    expect(early, `claim wars before +${years}: ${early.map((e) => e.year)}`).toHaveLength(0);
   }, 180_000);
 });
 
@@ -101,8 +126,10 @@ describe('forbid parent reclaim (noReclaim)', () => {
     const destroySrc = readFileSync(join(__dirname, '../src/ui/DestroyPage.tsx'), 'utf8');
     expect(collapseSrc).toContain('data-act="collapse-no-reclaim"');
     expect(collapseSrc).toContain('禁止母国收复');
+    expect(collapseSrc).toContain('5–50 年不等的休战期');
     expect(destroySrc).toContain('data-act="destroy-no-reclaim"');
     expect(destroySrc).toContain('禁止母国收复');
+    expect(destroySrc).toContain('5–50 年不等的休战期');
   });
 
   it('seed7 collapse noReclaim: opt bit 4 set; parent never claim-wars children', () => {
@@ -113,7 +140,7 @@ describe('forbid parent reclaim (noReclaim)', () => {
     for (const o of ownersAt(base, T).polity) if (o >= 0) sizes.set(o, (sizes.get(o) ?? 0) + 1);
     const id = [...sizes.entries()].sort((a, b) => b[1] - a[1])[0][0];
     const iv: Intervention = { kind: 'collapse', a: polityKey(base, id), from: T, mode: 'shatter', noReclaim: true };
-    // 跑过 +100 年,确认禁收复是永久的(不是只禁 100 年)
+    // 跑过最大休战期以后,确认禁收复是永久的(不是只禁 5–50 年)
     const civ = generateCiv(world, { interventions: [iv], endYear: T + 150 });
     const e = civ.annals.find((x) => x.kind === 'intervene' && x.war === 0)!;
     expect([-8, -2]).toContain(e.b);
