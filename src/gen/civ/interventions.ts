@@ -111,6 +111,7 @@ type Move = Extract<Intervention, { kind: 'move' }>;
 type CrownIv = Extract<Intervention, { kind: 'crown' }>;
 type PolicyIv = Extract<Intervention, { kind: 'policy' }>;
 type DestroyIv = Extract<Intervention, { kind: 'destroy' }>;
+type CollapseIv = Extract<Intervention, { kind: 'collapse' }>;
 type PersonIv = Extract<Intervention, { kind: 'death' | 'temper' }>;
 type Stay = Extract<Intervention, { kind: 'stay' }>;
 
@@ -611,6 +612,40 @@ export function installInterventions(sim: CivSim, iv: InterventionModel): void {
     if (b === -1 || b === IV_WAIT) rulerAct(sim, pm, a, crownOf(v, t, i));
   };
 
+
+  /** 大崩解:a 强制崩解,核心留下,其余切成继承国(国家不亡)。b 列:−8 生效 / −3 已亡 / −7 禁止分裂护着 / −2 切不出块 */
+  const IV_COLLAPSE_OK = -8;
+  const collapseIv = (v: CollapseIv, i: number, a: number, t: number) => {
+    const sid = capitalAt(pm.polities[a], t);
+    const r = S[sid]?.region ?? -1;
+    if (!alive(a)) {
+      sim.record('intervene', { a, b: -3, region: r, settlement: sid, war: i });
+      return;
+    }
+    if (iv.unites(a, t)) {
+      sim.record('intervene', { a, b: -9, region: r, settlement: sid, war: i }); // 禁止分裂护着
+      return;
+    }
+    if (!api.politics.authorCollapse) {
+      sim.record('intervene', { a, b: -2, region: r, settlement: sid, war: i });
+      return;
+    }
+    const { successors, mode } = api.politics.authorCollapse(a, t, i, { mode: v.mode, pieces: v.pieces });
+    if (successors <= 0) {
+      sim.record('intervene', { a, b: -2, region: r, settlement: sid, war: i, opt: FRAGMENT_MODE_OPT[mode] });
+      return;
+    }
+    sim.record('intervene', {
+      a,
+      b: IV_COLLAPSE_OK,
+      region: r,
+      settlement: sid,
+      war: i,
+      n: successors,
+      opt: FRAGMENT_MODE_OPT[mode],
+    });
+  };
+
   /** 灭国:a 此刻亡,国土并入 b 或产生继承国(b 列:并入的国家 / −1 产生继承国 / −2 无可行继承国散成无主 / −3 a 已亡 / −7 后下的"不许灭"护着它) */
   const destroy = (v: DestroyIv, i: number, a: number, t: number) => {
     const sid = capitalAt(pm.polities[a], t);
@@ -764,6 +799,10 @@ export function installInterventions(sim: CivSim, iv: InterventionModel): void {
     }
     if (v.kind === 'destroy') {
       destroy(v, i, a, t);
+      return;
+    }
+    if (v.kind === 'collapse') {
+      collapseIv(v, i, a, t);
       return;
     }
     if (v.kind === 'death' || v.kind === 'temper') {

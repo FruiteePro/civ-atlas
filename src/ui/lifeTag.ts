@@ -7,7 +7,7 @@ import { useSyncExternalStore } from 'react';
 import { AUTHOR_IV_KINDS, type Intervention } from '../gen/edits';
 
 /** 国家的事十种(记在他名下) */
-export type LifeNationKind = 'ally' | 'treaty' | 'neutral' | 'move' | 'cede' | 'destroy' | 'found' | 'policy' | 'disaster' | 'trek';
+export type LifeNationKind = 'ally' | 'treaty' | 'neutral' | 'move' | 'cede' | 'destroy' | 'collapse' | 'found' | 'policy' | 'disaster' | 'trek';
 
 /** 照哪一段经历填的:人物、名字、他 / 她、那段经历的年份和那句话;kind = 国家的事开的是哪一种,polity / region = 开到哪一国 / 哪一州 */
 export interface LifeTag {

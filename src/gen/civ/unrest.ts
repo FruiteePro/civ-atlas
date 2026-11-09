@@ -811,6 +811,34 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
     return { successors: ready.length, mode: resolved.mode };
   };
 
+  // 作者大崩解:核心留下,其余切块;国家不亡。返回 kind 供发展度(0/1)
+  api.politics.authorCollapse = (pid, t, ivIndex, frag) => {
+    const P = pm.polities[pid];
+    const tag = pm.ptag[pid];
+    const mine = pm.lands[pid].slice();
+    const N = mine.length;
+    const assessed = assessPolityFragment(pid, t);
+    const resolved = resolveFragmentMode(frag?.mode, assessed, frag?.pieces);
+    const dist = pm.capDist[pid];
+    const keepFrac = resolved.keep[0] + (resolved.keep[1] - resolved.keep[0]) * keyed(um.base, tag, ivIndex, U_KEEP);
+    const byDist = mine.slice().sort((a, b) => dist[a] - dist[b] || reg.seat[a] - reg.seat[b]);
+    const keep = new Set<number>(byDist.slice(0, Math.max(1, Math.ceil(N * keepFrac))));
+    const capR = pm.settlements[capitalAt(P, t)].region;
+    keep.add(capR);
+    const rest = mine.filter((r) => !keep.has(r) && !wm.iv?.locked(r, t));
+    let ready = planPieces(pid, rest, t, resolved, assessed.lordSeats);
+    let usedMode = resolved.mode;
+    if (ready.length === 0 && resolved.mode !== 'shatter') {
+      const shatter = resolveFragmentMode('shatter', assessed);
+      ready = planPieces(pid, rest, t, shatter, assessed.lordSeats);
+      if (ready.length) usedMode = 'shatter';
+    }
+    for (const [g, sid, r0] of ready) api.politics.secede!(pid, g, sid, r0, t, 'split', 'collapse');
+    um.collapsed.set(pid, t);
+    pol.lastSplit.set(pid, t);
+    return { successors: ready.length, mode: usedMode, kind: ready.length ? 0 : 2 };
+  };
+
   const collapse = (P: Polity, k: number, t: number): boolean => {
     const pid = P.id;
     const tag = pm.ptag[pid];

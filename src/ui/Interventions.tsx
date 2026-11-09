@@ -343,6 +343,15 @@ function ivText(civ: Civ, v: Intervention, i: number, a: string | undefined): st
       const n = ivAnnal(civ, i)?.n;
       return `${A}:灭国，${n ? `${n} 州` : ''}并入${keyName(civ, v.b, v.from)}`;
     }
+    case 'collapse': {
+      const e = ivAnnal(civ, i);
+      if (e && e.b === -8 && e.n && e.n > 0) {
+        const mode = fragmentModeFromOpt(e.opt);
+        return `${A}:大崩解，裂出 ${e.n} 国${mode ? `（${fragmentModeLabel(mode)}）` : ''}`;
+      }
+      const mode = v.mode && v.mode !== 'auto' ? fragmentModeLabel(v.mode) : v.mode === 'auto' ? '自动' : null;
+      return `${A}:大崩解${mode ? `（${mode}）` : ''}`;
+    }
     case 'death':
       return `${personKeyName(civ, v.person)}:去世${parsePersonKey(v.person)?.role === 'ruler' ? '' : '（只改人物和编年史）'}`;
     case 'temper': {

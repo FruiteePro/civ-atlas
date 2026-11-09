@@ -629,6 +629,8 @@ function planFix(ctx: Ctx, S: Civ, C: Civ, p: Plot, R: Refs, Y: number): Interve
     }
     case 'fall':
       return [p.b !== undefined ? { kind: 'destroy', a: A, from: Y, b: B } : { kind: 'destroy', a: A, from: Y }];
+    case 'collapse':
+      return [{ kind: 'collapse', a: A, from: Y }];
     case 'hold': {
       if (!R.area.length) return { reason: 'missing' };
       const lived = R.area.filter((r) => S.culture[r] >= 0);

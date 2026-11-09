@@ -61,7 +61,7 @@ export const PLOT_KIND_INFO: Record<PlotKind, { name: string; desc: string }> = 
 /** 选种类那一栏的三组 */
 export const PLOT_KIND_GROUPS: { head: string; kinds: PlotKind[]; inline?: boolean }[] = [
   { head: '会查；没发生就在那一年直接改过来', kinds: ['found', 'fall', 'hold', 'war', 'ally', 'capital', 'death', 'crown', 'split', 'disaster', 'trek'] },
-  { head: '只查不改：推演里还不能直接让它发生，没发生就标「做不到」', kinds: ['submit', 'peace', 'dynasty', 'revolt', 'collapse'], inline: true },
+  { head: '只查不改：推演里还不能直接让它发生，没发生就标「做不到」', kinds: ['submit', 'peace', 'dynasty', 'revolt'], inline: true },
   { head: '不查不改', kinds: ['story'] },
 ];
 

@@ -294,7 +294,7 @@
  * | `peace`    | 议和           | a,b                        | 两国议和                                             | 同上                                 |
  * | `dynasty`  | 改朝换代       | a                          | a 改朝换代                                           | 同上                                 |
  * | `revolt`   | 民变           | a                          | a 治下饥民起事                                       | 同上                                 |
- * | `collapse` | 大崩解         | a                          | a 一下子散成几块                                     | 同上                                 |
+ * | `collapse` | 大崩解         | a                          | a 一下子散成几块                                     | 大崩解 collapse(核心留下)            |
  * | `story`    | 只讲故事       | (可选:a、region、city、person、mark 当镜头去哪)  | 不查                                       | 不改                                 |
  *
  * 逐条查的先后:按年份(after 的按它跟着的那条落在哪年),同一年按列表先后。硬改的年份不早于已经查过的情节落定的那年的下一年
@@ -741,6 +741,7 @@ export type InterventionKind =
   | 'crown'
   | 'policy'
   | 'destroy'
+  | 'collapse'
   | 'death'
   | 'temper'
   | 'disaster'
@@ -858,6 +859,7 @@ export type Intervention = (
   | { kind: 'crown'; a: string; char: number; from: number; born: number; until?: number; abdicate?: true; after?: true; keep?: true; leanings: RulerLeanings }
   | { kind: 'keep'; a: string; from: number; until?: number }
   | { kind: 'destroy'; a: string; from: number; b?: string; mode?: FragmentModeChoice; pieces?: number }
+  | { kind: 'collapse'; a: string; from: number; mode?: FragmentModeChoice; pieces?: number }
   | { kind: 'death'; a: string; person: string; from: number }
   | { kind: 'temper'; a: string; person: string; from: number; leanings: RulerLeanings }
   | { kind: 'disaster'; type: DisasterKind; level: DisasterLevel; from: number; city?: string; a?: string; regions?: string[]; region?: string; slump?: number }
@@ -901,7 +903,7 @@ export type Intervention = (
 ) & { plot?: number; guide?: true; fromTick?: number; author?: number; plugin?: string };
 
 /** 能记在作者人物名下的几种(国家的事;Intervention.author,见文件头) */
-export const AUTHOR_IV_KINDS: readonly InterventionKind[] = ['ally', 'treaty', 'neutral', 'move', 'cede', 'destroy', 'found', 'policy', 'disaster', 'trek', 'stay'];
+export const AUTHOR_IV_KINDS: readonly InterventionKind[] = ['ally', 'treaty', 'neutral', 'move', 'cede', 'destroy', 'collapse', 'found', 'policy', 'disaster', 'trek', 'stay'];
 
 /** 顺着引的方针替这国多看几眼的那一种:war 看邻国(开战)、politics 看内政(大崩解、分裂)、dynasty 看王朝 */
 export const GUIDE_LOOKS = ['war', 'politics', 'dynasty'] as const;
@@ -1966,7 +1968,7 @@ function folkRenamed(civ: Civ, f: Faith, cultures: readonly Culture[]): string |
 /** 干预年份的上限(推演引擎能预约的最远时刻) */
 export const INTERVENTION_YEAR_MAX = 65535;
 
-export const INTERVENTION_KINDS: readonly InterventionKind[] = ['protect', 'ally', 'declare', 'unity', 'cede', 'found', 'move', 'halt', 'crown', 'policy', 'destroy', 'death', 'temper', 'disaster', 'treaty', 'neutral', 'regent', 'marry', 'keep', 'boost', 'trek', 'stay', 'appoint'];
+export const INTERVENTION_KINDS: readonly InterventionKind[] = ['protect', 'ally', 'declare', 'unity', 'cede', 'found', 'move', 'halt', 'crown', 'policy', 'destroy', 'collapse', 'death', 'temper', 'disaster', 'treaty', 'neutral', 'regent', 'marry', 'keep', 'boost', 'trek', 'stay', 'appoint'];
 
 /** 人物键的几段(格式见 personKey):国家键、身份、生成时的名字、生年(取整)、同名同年的第几个(0 起);格式不对 = null */
 export interface PersonKeyParts {
@@ -2341,13 +2343,13 @@ export function tidyIntervention(x: unknown): Intervention | null {
           : { kind, a, char, from, born, ...after, ...keep, leanings };
     } else if (kind === 'policy') {
       v = cleanPolicy(o, a, from);
-    } else if (kind === 'destroy') {
+    } else if (kind === 'destroy' || kind === 'collapse') {
       const mode = (FRAGMENT_MODE_CHOICES as readonly string[]).includes(o.mode as string) ? (o.mode as FragmentModeChoice) : undefined;
       const piecesRaw = typeof o.pieces === 'number' && Number.isFinite(o.pieces) ? Math.min(12, Math.max(2, Math.round(o.pieces as number))) : undefined;
-      if (isPolityKey(o.b) && o.b !== a) {
+      if (kind === 'destroy' && isPolityKey(o.b) && o.b !== a) {
         v = { kind, a, from, b: o.b };
       } else {
-        v = { kind, a, from };
+        v = { kind, a, from } as Intervention;
         if (mode) (v as { mode?: FragmentModeChoice }).mode = mode;
         if (piecesRaw !== undefined) (v as { pieces?: number }).pieces = piecesRaw;
       }
@@ -2719,6 +2721,7 @@ export function interventionKeys(v: Intervention): string[] {
   if (v.kind === 'found' || v.kind === 'trek' || v.kind === 'stay') return [];
   if (v.kind === 'disaster') return v.a ? [v.a] : [];
   if (v.kind === 'destroy') return v.b ? [v.a, v.b] : [v.a];
+  if (v.kind === 'collapse') return [v.a];
   if (v.kind === 'treaty') return v.by ? [v.a, ...v.ps, v.by] : [v.a, ...v.ps];
   if (v.kind === 'neutral') return [v.a, ...v.ps];
   return v.kind === 'ally' || v.kind === 'declare' || v.kind === 'marry' ? [v.a, v.b] : [v.a];
@@ -2898,7 +2901,7 @@ export const OUTLINE_TRIES_MAX = 100;
 export const PLOT_KINDS = ['found', 'fall', 'hold', 'war', 'ally', 'capital', 'death', 'crown', 'split', 'disaster', 'trek', 'submit', 'peace', 'dynasty', 'revolt', 'collapse', 'story'] as const;
 export type PlotKind = (typeof PLOT_KINDS)[number];
 /** 推演里还不能直接让它发生的几种(只查不改) */
-export const PLOT_CHECK_ONLY: readonly PlotKind[] = ['submit', 'peace', 'dynasty', 'revolt', 'collapse'];
+export const PLOT_CHECK_ONLY: readonly PlotKind[] = ['submit', 'peace', 'dynasty', 'revolt'];
 
 /** 情节里的国家:稳定键,或 `plot:编号`(那一条立国 / 分裂情节立起来的国家) */
 export type PlotPolity = string;
