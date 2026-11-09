@@ -615,6 +615,8 @@ function ivText(civ: Civ, v: Intervention): string {
       return `${id(v.a, 'polity', 'P')} 定方针`;
     case 'destroy':
       return `${id(v.a, 'polity', 'P')} 灭国,${v.b ? `国土并入 ${id(v.b, 'polity', 'P')}` : '国土散成无主'}`;
+    case 'collapse':
+      return `${id(v.a, 'polity', 'P')} 大崩解${v.mode && v.mode !== 'auto' ? `(${v.mode})` : ''}`;
     case 'death':
       return `${id(v.a, 'polity', 'P')} 的人物去世`;
     case 'temper':
@@ -1461,6 +1463,7 @@ const KIND_LABEL: Record<Intervention['kind'], string> = {
   crown: '立作者的人物为君主',
   policy: '定方针',
   destroy: '灭国',
+  collapse: '大崩解',
   death: '让人物去世',
   temper: '改君主倾向',
   disaster: '降天灾',

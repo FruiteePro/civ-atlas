@@ -68,7 +68,7 @@ import { zoneChoices } from './treatyIv';
 
 let owners: Owners | undefined;
 
-type Cmd = 'policy' | 'boost' | 'protect' | 'unity' | 'keep' | 'halt' | 'ally' | 'treaty' | 'neutral' | 'declare' | 'move' | AuthorIvRole | 'destroy' | 'disaster' | 'trek';
+type Cmd = 'policy' | 'boost' | 'protect' | 'unity' | 'keep' | 'halt' | 'ally' | 'treaty' | 'neutral' | 'declare' | 'move' | AuthorIvRole | 'destroy' | 'collapse' | 'disaster' | 'trek';
 
 const CMDS: { k: Cmd; name: string; desc: string; pick: boolean; go?: string }[] = [
   { k: 'policy', name: '方针', desc: '这国从这年起照方针自己走，直到换下一条', pick: true, go: '选方针 ›' },
@@ -87,6 +87,7 @@ const CMDS: { k: Cmd; name: string; desc: string; pick: boolean; go?: string }[]
   { k: 'minister', name: '任作者的人物为臣', desc: '选一位，入朝当名臣，朝中的事他也经手', pick: true, go: '选人 ›' },
   { k: 'regent', name: '让作者的人物掌权', desc: '选一位，名义上的君主照旧在位，政出于他', pick: true, go: '选人 ›' },
   { k: 'destroy', name: '灭国', desc: '这年让它亡国，国土并入一国或散成无主', pick: true, go: '选去向 ›' },
+  { k: 'collapse', name: '大崩解', desc: '强制大崩解：核心留下，其余按模式裂成数国', pick: true, go: '选怎么崩 ›' },
   { k: 'disaster', name: '天灾', desc: '瘟疫、饥荒、地震水旱，人口锐减', pick: true, go: '选种类 ›' },
   { k: 'trek', name: '大迁徙', desc: '让国内一族分出一支远走、到别处立国，或不许它迁', pick: true, go: '选民族 ›' },
 ];
@@ -164,7 +165,7 @@ export function CommandPage({ civ, raster, world, id, year }: { civ: Civ; raster
     if (!alive) return yv < p.founded ? `${yearAt(y, era)}还没立国` : `${yearAt(y, era)}已亡`;
     if (timed(k) && limited && !ui.valid) return `持续到的年份要在${spaced(yearSpanAt(ui.lo, ui.hi, era))}之间`;
     if ((k === 'protect' || k === 'unity' || k === 'keep' || k === 'halt') && has(k)) return '已经下过这条命令';
-    if ((k === 'protect' || k === 'unity' || k === 'keep' || k === 'halt' || k === 'destroy') && queued(k)) return step ? STEP_QUEUED : '已在待推演里';
+    if ((k === 'protect' || k === 'unity' || k === 'keep' || k === 'halt' || k === 'destroy' || k === 'collapse') && queued(k)) return step ? STEP_QUEUED : '已在待推演里';
     if (k === 'ally' && !others.length) return '该年没有别的国家';
     if (k === 'treaty' && !others.length) return '该年没有别的国家';
     if (k === 'neutral' && !zoneOk) return '该年没有碰到两国以上、做得了中立地的州';
@@ -188,7 +189,7 @@ export function CommandPage({ civ, raster, world, id, year }: { civ: Civ; raster
       return;
     }
     // 方针、推一把发展、灭国、天灾、大迁徙、立约、划中立地:卡片换成那一页(生效年份带过去,返回回到这里)
-    if (k === 'policy' || k === 'boost' || k === 'destroy' || k === 'disaster' || k === 'trek' || k === 'treaty' || k === 'neutral') {
+    if (k === 'policy' || k === 'boost' || k === 'destroy' || k === 'collapse' || k === 'disaster' || k === 'trek' || k === 'treaty' || k === 'neutral') {
       openCmdPage({ kind: k, back: 'cmd', year: y });
       return;
     }

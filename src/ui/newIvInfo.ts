@@ -476,6 +476,7 @@ export function regionDisasterMark(civ: Civ, r: number, year: number): { now: nu
 export function onceOnly(v: Intervention): boolean {
   return (
     v.kind === 'destroy' ||
+    v.kind === 'collapse' ||
     v.kind === 'death' ||
     v.kind === 'temper' ||
     v.kind === 'disaster' ||
@@ -508,7 +509,7 @@ export function newIvDoneText(civ: Civ, v: Intervention, i: number, A: string, e
   if (v.kind === 'disaster') return disasterDoneText(civ, v, i, A, era);
   if (v.kind === 'boost') return boostDoneText(civ, v, i, A, era);
   if (v.kind === 'trek') return trekDoneText(civ, v, i, cultureKeyName(civ, v.folk), era);
-  if (v.kind !== 'destroy' && v.kind !== 'death' && v.kind !== 'temper' && v.kind !== 'regent' && v.kind !== 'marry' && v.kind !== 'keep' && !(v.kind === 'crown' && v.after)) return null;
+  if (v.kind !== 'destroy' && v.kind !== 'collapse' && v.kind !== 'death' && v.kind !== 'temper' && v.kind !== 'regent' && v.kind !== 'marry' && v.kind !== 'keep' && !(v.kind === 'crown' && v.after)) return null;
   const f = i >= 0 ? interventionFate(civ, i) : null;
   const e = f && f.state !== 'later' && f.annal >= 0 ? civ.annals[f.annal] : null;
   const fail = (what: string) => {
@@ -534,6 +535,15 @@ export function newIvDoneText(civ: Civ, v: Intervention, i: number, A: string, e
       const n = e?.n ? `${e.n} 州` : '国土';
       const lost = v.b ? polityIdOf(civ, v.b) : -1;
       return { ok: true, text: `${A}亡，${n}散为无主之地${v.b ? `（${lost >= 0 ? nameAt(civ.polities[lost], v.from) : '并入的那国'}那年已亡）` : ''}` };
+    }
+    case 'collapse': {
+      if (f?.state === 'void') return fail(`${A}大崩解`);
+      if (e && e.b === -8 && e.n && e.n > 0) {
+        const mode = fragmentModeFromOpt(e.opt);
+        const modeTxt = mode ? fragmentModeLabel(mode) : '';
+        return { ok: true, text: `${A}大崩解，裂出 ${e.n} 国${modeTxt ? `（${modeTxt}）` : ''}，核心留下` };
+      }
+      return { ok: true, text: `${A}大崩解未裂出继承国` };
     }
     case 'death': {
       const { name } = keyPerson(civ, v.person);

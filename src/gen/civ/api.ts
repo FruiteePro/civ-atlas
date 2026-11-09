@@ -128,6 +128,15 @@ export interface PoliticsApi {
     frag?: { mode?: import('./fragmentMode').FragmentModeChoice; pieces?: number },
   ) => { successors: number; mode: import('./fragmentMode').FragmentMode };
   /**
+   * 作者「大崩解」干预(unrest.ts):核心留下,其余按模式切成继承国;国家不亡。
+   */
+  authorCollapse?: (
+    pid: number,
+    t: Year,
+    ivIndex: number,
+    frag?: { mode?: import('./fragmentMode').FragmentModeChoice; pieces?: number },
+  ) => { successors: number; mode: import('./fragmentMode').FragmentMode; kind: number };
+  /**
    * 国家此刻的危机(hook 里填):国土太大、刚丢了国都 / 迁了都、正在打仗、这些年接连丢州。
    * 动荡(control.ts 的数表,规则见 stateTables.ts)在它上面再加边远、异族、王朝老了、饥荒、民变、割据
    */

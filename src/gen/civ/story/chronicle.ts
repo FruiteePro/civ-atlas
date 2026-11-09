@@ -1090,6 +1090,15 @@ function interveneStory(civ: Civ, e: Annal, id: number): IvStory {
       const n = e.n ? `${cnNumber(e.n)}州` : '其地';
       return done(`${A}亡,${n}散为无主之地`);
     }
+    case 'collapse': {
+      if (e.b === -3) return fail(`欲令${A}大崩解,然${A}已亡`, `那一年${A}已亡`);
+      if (e.b === -9) return fail(`欲令${A}大崩解,然有令禁其分裂`, `那一年${A}受「禁止分裂」护着`);
+      if (e.b === -8 && e.n && e.n > 0) {
+        const mode = fragmentModeFromOpt(e.opt);
+        return done(`${A}大崩解,裂出${cnNumber(e.n)}国${mode ? `（${fragmentModeLabel(mode)}）` : ''},核心尚存`);
+      }
+      return done(`${A}大崩解,未能裂出继承国`);
+    }
     case 'death':
     case 'temper':
       return personStory(civ, e, v, A, fail, done);
