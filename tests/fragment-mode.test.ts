@@ -11,6 +11,8 @@ import {
 } from '../src/gen/civ/fragmentMode';
 import { generateWorld, DEFAULT_PARAMS } from '../src/gen/world';
 import { generateCiv } from '../src/gen/civ';
+import { ownersAt } from '../src/gen/civ/engine/timeline';
+import { polityKey, cleanIntervention } from '../src/gen/edits';
 
 describe('fragmentMode assessment', () => {
   it('powers: 1–3 warlord seats + decent center (no large domain required)', () => {
@@ -107,4 +109,26 @@ describe('natural collapse records mode opt', () => {
     // 阈值按 seed7 调过:应至少出现两种模式
     expect(modes.size, `modes=${[...modes]}`).toBeGreaterThanOrEqual(2);
   }, 120_000);
+});
+
+describe('destroy partition: no orphaned exclaves', () => {
+  it('seed7 destroy mixed/shatter: contiguous polity → leftover foe ≈ 0', () => {
+    const world = generateWorld({ ...DEFAULT_PARAMS, seed: 7 });
+    const base = generateCiv(world);
+    const year = 1600;
+    const own = ownersAt(base, year).polity;
+    const cnt = new Map<number, number>();
+    for (let r = 0; r < own.length; r++) if (own[r] >= 0) cnt.set(own[r], (cnt.get(own[r]) ?? 0) + 1);
+    const pid = [...cnt.entries()].sort((a, b) => b[1] - a[1])[0]![0];
+    const N = cnt.get(pid)!;
+    expect(N).toBeGreaterThan(20);
+    for (const mode of ['mixed', 'shatter'] as const) {
+      const iv = cleanIntervention({ kind: 'destroy', a: polityKey(base, pid), from: year, mode })!;
+      const civ = generateCiv(world, { interventions: [iv], endYear: year + 30 });
+      const ie = civ.annals.find((e) => e.kind === 'intervene' && Math.abs(e.year - year) < 0.01)!;
+      expect(ie.n, mode).toBeGreaterThan(0);
+      // 连通国土不应整片散成无主;允许少量孤岛/无城
+      expect(ie.foe ?? 0, `${mode} leftover=${ie.foe}`).toBeLessThanOrEqual(Math.max(3, Math.floor(N * 0.08)));
+    }
+  }, 180_000);
 });

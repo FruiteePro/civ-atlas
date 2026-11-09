@@ -49,9 +49,9 @@
  *     (超过 HEG_0 的部分,再占 HEG_SPAN 加满 HEG_W),称霸一块大陆的国家迟早散架,过些年再被邻国、新兴的国家收拾起来。
  *     崩的时候先做局势评估(fragmentMode.ts 的 assessFragment:中央强弱 centerStrength、割据集中度 magnateConcentration),
  *     选出模式 powers 割据分治 / mixed 分崩 / shatter 碎裂(也可由灭国干预指定;auto 走同一评估)。
- *     自然崩解 / 作者大崩解:整国按模式切成 k 块(FPS 选中心 + 多源 BFS),国都所在那一块留给原国,其余自立;
+ *     自然崩解 / 作者大崩解:整国按模式切成 k 块(按陆连分量分别 FPS + 多源 BFS),国都所在那一块留给原国,其余自立;
  *     灭国无接收者:整国切块、无核心。powers 2–4 大块(国土大时至少 3)、mixed 3–6、shatter ~N/8;
- *     子块小于 minSize 的并进邻近大块;真正够不着 / 无城的才散为无主,整国散回部落只作末路。
+ *     每个有城且 ≥minSize 的陆连分量至少一块,避免飞地整片无主;海峡对岸可并入邻块;真孤岛 / 无城才散为无主。
  *     各块以块里人口最多的城为都自立(记 split,cause = collapse;故都是同族亡国国都的算复国)。
  *     史事 collapse 的 opt = 模式(0 powers / 1 mixed / 2 shatter),war = 散出去几块(继承国数);b=2 时 war=0、foe=散回部落州数。
  *     三种崩法(记在 collapse 的 b;与模式独立,管发展度损失):
@@ -619,9 +619,37 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
     return centers;
   };
 
+  /** 本国国土按陆邻连通分量切开(不穿海峡/海路、不穿外国) */
+  const landComponents = (regions: readonly number[], t: number): number[][] => {
+    const set = new Set(regions);
+    const seen = new Set<number>();
+    const out: number[][] = [];
+    for (const start of regions) {
+      if (seen.has(start)) continue;
+      const q = [start];
+      seen.add(start);
+      const comp: number[] = [];
+      for (let qi = 0; qi < q.length; qi++) {
+        const r = q[qi];
+        comp.push(r);
+        for (let e = reg.adjStart[r]; e < reg.adjStart[r + 1]; e++) {
+          const j = reg.adj[e];
+          const kind = reg.adjKind[e];
+          if (kind === AdjKind.Strait || kind === AdjKind.SeaRoute) continue;
+          if (!set.has(j) || seen.has(j)) continue;
+          if (wm.iv?.locked(j, t)) continue;
+          seen.add(j);
+          q.push(j);
+        }
+      }
+      out.push(comp);
+    }
+    return out.sort((a, b) => b.length - a.length || a[0]! - b[0]!);
+  };
+
   /**
    * 显式 k 中心(割据座优先 + 最远点采样) + 多源 BFS 切块。
-   * 小于 minSize 的碎块并进邻近大块;够不着的州留给调用方处理。
+   * 小于 minSize 的碎块并进邻近大块;海峡对岸的未分州也可并入(海路太远不算)。
    */
   const fragmentByConnectivity = (
     pid: number,
@@ -635,6 +663,8 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
     const preferred = new Set(opts.preferredSeats ?? []);
     const score = (c: FragmentationCenter) => (c.lord ? 1e6 : 0) + c.population + c.distance * 10;
     const k = Math.max(1, Math.min(opts.maxCenters, centers.length));
+    const landEdge = (kind: number) => kind !== AdjKind.Strait && kind !== AdjKind.SeaRoute;
+    const attachEdge = (kind: number) => kind !== AdjKind.SeaRoute; // 陆邻 + 海峡可并;海路不算
 
     const hopDist = (src: number): Int32Array => {
       const d = new Int32Array(R).fill(-1);
@@ -649,7 +679,7 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
         for (let e = reg.adjStart[r]; e < reg.adjStart[r + 1]; e++) {
           const j = reg.adj[e];
           const kind = reg.adjKind[e];
-          if (kind === AdjKind.Strait || kind === AdjKind.SeaRoute) continue;
+          if (!landEdge(kind)) continue;
           if (mark[j] !== st || d[j] >= 0) continue;
           if (wm.iv?.locked(j, t)) continue;
           d[j] = d[r] + 1;
@@ -713,7 +743,7 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
       for (let e = reg.adjStart[r]; e < reg.adjStart[r + 1]; e++) {
         const j = reg.adj[e];
         const kind = reg.adjKind[e];
-        if (kind === AdjKind.Strait || kind === AdjKind.SeaRoute) continue;
+        if (!landEdge(kind)) continue;
         if (mark[j] !== st || !inRegions.has(j) || piece[j] >= 0) continue;
         if (wm.iv?.locked(j, t)) continue;
         piece[j] = piece[r];
@@ -723,25 +753,48 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
     const groups: number[][] = chosen.map(() => []);
     for (const r of regions) if (piece[r] >= 0) groups[piece[r]].push(r);
 
-    // 碎块(< minSize)并进邻近更大块
+    const nearestPiece = (r: number, allowSea: boolean): number => {
+      let best = -1;
+      let bestSize = -1;
+      for (let e = reg.adjStart[r]; e < reg.adjStart[r + 1]; e++) {
+        const j = reg.adj[e];
+        const kind = reg.adjKind[e];
+        if (allowSea ? !attachEdge(kind) : !landEdge(kind)) continue;
+        const pj = piece[j];
+        if (pj < 0 || !inRegions.has(j)) continue;
+        // 邻块须在本分量已分到的组里
+        if (!groups[pj]?.length) continue;
+        const sz = groups[pj].length;
+        if (sz > bestSize || (sz === bestSize && pj < best)) {
+          bestSize = sz;
+          best = pj;
+        }
+      }
+      return best;
+    };
+
+    // 碎块(< minSize)并进邻近更大块(先陆后海峡)
     const attachCrumb = (gi: number) => {
       const g = groups[gi];
       if (!g.length || g.length >= opts.minSize) return;
       let best = -1;
       let bestSize = -1;
-      for (const r of g) {
-        for (let e = reg.adjStart[r]; e < reg.adjStart[r + 1]; e++) {
-          const j = reg.adj[e];
-          const kind = reg.adjKind[e];
-          if (kind === AdjKind.Strait || kind === AdjKind.SeaRoute) continue;
-          const pj = piece[j];
-          if (pj < 0 || pj === gi) continue;
-          const sz = groups[pj].length;
-          if (sz > bestSize || (sz === bestSize && pj < best)) {
-            bestSize = sz;
-            best = pj;
+      for (const allowSea of [false, true]) {
+        for (const r of g) {
+          for (let e = reg.adjStart[r]; e < reg.adjStart[r + 1]; e++) {
+            const j = reg.adj[e];
+            const kind = reg.adjKind[e];
+            if (allowSea ? !attachEdge(kind) : !landEdge(kind)) continue;
+            const pj = piece[j];
+            if (pj < 0 || pj === gi) continue;
+            const sz = groups[pj].length;
+            if (sz > bestSize || (sz === bestSize && pj < best)) {
+              bestSize = sz;
+              best = pj;
+            }
           }
         }
+        if (best >= 0) break;
       }
       if (best < 0) return;
       for (const r of g) {
@@ -752,26 +805,15 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
     };
     for (let i = 0; i < groups.length; i++) attachCrumb(i);
 
-    // 未分到的州:若邻接某块则并入最大邻块
-    for (const r of regions) {
-      if (piece[r] >= 0) continue;
-      let best = -1;
-      let bestSize = -1;
-      for (let e = reg.adjStart[r]; e < reg.adjStart[r + 1]; e++) {
-        const j = reg.adj[e];
-        const kind = reg.adjKind[e];
-        if (kind === AdjKind.Strait || kind === AdjKind.SeaRoute) continue;
-        const pj = piece[j];
-        if (pj < 0) continue;
-        const sz = groups[pj].length;
-        if (sz > bestSize || (sz === bestSize && pj < best)) {
-          bestSize = sz;
-          best = pj;
+    // 未分到的州:陆邻优先,再海峡并入最大邻块
+    for (const allowSea of [false, true]) {
+      for (const r of regions) {
+        if (piece[r] >= 0) continue;
+        const best = nearestPiece(r, allowSea);
+        if (best >= 0) {
+          piece[r] = best;
+          groups[best].push(r);
         }
-      }
-      if (best >= 0) {
-        piece[r] = best;
-        groups[best].push(r);
       }
     }
 
@@ -844,7 +886,29 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
   // COLLAPSE_ODDS = 0 的世界没有大崩解:大迁徙打进国都也不崩(migration.ts)
   api.politics.shatter = (P: Polity, k: number, t: number): boolean => (wm.iv?.unites(P.id, t) || !(COLLAPSE_ODDS > 0) ? false : collapse(P, k, t));
 
-  /** 按评估/指定模式算出各块(不 secede);空 = 无可行块。centers = 目标块数(含核心时由调用方 +1) */
+  /** 一块领土做成 ready 条目;无城则跳过 */
+  const pieceEntry = (pid: number, g: number[], t: number): [number[], number, number] | null => {
+    if (!g.length) return null;
+    const sid = api.politics.biggestCity!(g, t);
+    if (sid < 0) return null;
+    const dist = pm.capDist[pid];
+    let r0 = g[0];
+    let maxDist = dist[r0] ?? 0;
+    for (const r of g) {
+      const d = dist[r] ?? 0;
+      if (d > maxDist) {
+        maxDist = d;
+        r0 = r;
+      }
+    }
+    return [g.slice().sort((a, b) => a - b), sid, r0];
+  };
+
+  /**
+   * 按评估/指定模式算出各块(不 secede);空 = 无可行块。
+   * 对本国每个陆连分量分别切:有城且 ≥minSize 的分量至少 1 个中心,避免飞地整片无主。
+   * centers = 软目标块数(含核心时由调用方 +1);分量多时可超过软目标。
+   */
   const planPieces = (
     pid: number,
     regions: readonly number[],
@@ -853,31 +917,105 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
     preferredSeats: readonly number[],
     centerCount?: number,
   ): [number[], number, number][] => {
-    const lordSeatSet = new Set(preferredSeats.filter((r) => regions.includes(r)));
-    const centers = identifyFragmentationCenters(pid, regions, t, lordSeatSet);
-    const maxCenters = Math.max(1, centerCount ?? resolved.targetPieces);
-    const viable = fragmentByConnectivity(pid, regions, centers, t, {
-      mergeDist: resolved.mergeDist,
-      minSize: resolved.minSize,
-      maxCenters,
-      preferredSeats,
-    });
-    const dist = pm.capDist[pid];
+    const minSize = resolved.minSize;
+    const softK = Math.max(1, centerCount ?? resolved.targetPieces);
+    const comps = landComponents(regions, t);
+    type CompPlan = { regions: number[]; centers: FragmentationCenter[]; k: number };
+    const plans: CompPlan[] = [];
+    for (const comp of comps) {
+      const lordSeatSet = new Set(preferredSeats.filter((r) => comp.includes(r)));
+      const centers = identifyFragmentationCenters(pid, comp, t, lordSeatSet);
+      if (!centers.length) continue; // 无城:留给海峡并入 / 真无主
+      if (comp.length < minSize) continue; // 太小:后面尝试并入邻块;并不上才无主
+      plans.push({ regions: comp, centers, k: 1 });
+    }
+    // 按分量大小把软目标块数分下去(每有城大分量至少 1)
+    let left = softK - plans.length;
+    if (left > 0 && plans.length) {
+      const total = plans.reduce((s, p) => s + p.regions.length, 0) || 1;
+      const extra = plans.map((p) => ({ p, w: p.regions.length / total }));
+      // 先按比例取整,余数给最大的
+      let used = 0;
+      for (const x of extra) {
+        const add = Math.floor(left * x.w);
+        x.p.k += add;
+        used += add;
+      }
+      let rem = left - used;
+      extra.sort((a, b) => b.p.regions.length - a.p.regions.length || a.p.regions[0]! - b.p.regions[0]!);
+      for (let i = 0; rem > 0 && i < extra.length; i++, rem--) extra[i].p.k++;
+    }
+    // 分量数 > 软目标:仍每分量 1 中心(超过软目标,避免飞地 orphan)
+
     const ready: [number[], number, number][] = [];
-    for (const g of viable) {
-      if (g.length < resolved.minSize) continue;
-      const sid = api.politics.biggestCity!(g, t);
-      if (sid < 0) continue;
-      let r0 = g[0];
-      let maxDist = dist[r0] ?? 0;
-      for (const r of g) {
-        const d = dist[r] ?? 0;
-        if (d > maxDist) {
-          maxDist = d;
-          r0 = r;
+    const assigned = new Set<number>();
+    for (const plan of plans) {
+      const groups = fragmentByConnectivity(pid, plan.regions, plan.centers, t, {
+        mergeDist: resolved.mergeDist,
+        minSize,
+        maxCenters: Math.min(plan.k, plan.centers.length),
+        preferredSeats,
+      });
+      for (const g of groups) {
+        const e = pieceEntry(pid, g, t);
+        if (!e) continue;
+        ready.push(e);
+        for (const r of g) assigned.add(r);
+      }
+      // 本分量切完仍未分到、但整分量有城且够大:整块自立(保底,防 orphan)
+      const leftover = plan.regions.filter((r) => !assigned.has(r));
+      if (leftover.length >= minSize) {
+        const e = pieceEntry(pid, leftover, t);
+        if (e) {
+          ready.push(e);
+          for (const r of leftover) assigned.add(r);
         }
       }
-      ready.push([g.slice().sort((a, b) => a - b), sid, r0]);
+    }
+
+    // 跨分量:未分到的州经海峡并进已有块
+    const pieceOf = new Map<number, number>(); // region -> ready index
+    for (let i = 0; i < ready.length; i++) for (const r of ready[i][0]) pieceOf.set(r, i);
+    const tryAttach = (r: number, allowSea: boolean): boolean => {
+      let best = -1;
+      let bestSize = -1;
+      for (let e = reg.adjStart[r]; e < reg.adjStart[r + 1]; e++) {
+        const j = reg.adj[e];
+        const kind = reg.adjKind[e];
+        if (allowSea) {
+          if (kind === AdjKind.SeaRoute) continue;
+        } else if (kind === AdjKind.Strait || kind === AdjKind.SeaRoute) continue;
+        const pi = pieceOf.get(j);
+        if (pi === undefined) continue;
+        const sz = ready[pi][0].length;
+        if (sz > bestSize || (sz === bestSize && pi < best)) {
+          bestSize = sz;
+          best = pi;
+        }
+      }
+      if (best < 0) return false;
+      ready[best][0].push(r);
+      pieceOf.set(r, best);
+      assigned.add(r);
+      return true;
+    };
+    for (const allowSea of [false, true]) {
+      for (const r of regions) {
+        if (assigned.has(r)) continue;
+        tryAttach(r, allowSea);
+      }
+    }
+    // 排序各块州号
+    for (const e of ready) e[0].sort((a, b) => a - b);
+
+    // 仍未分到的有城大分量:再扫一遍(海峡并入失败后的保底)
+    for (const comp of comps) {
+      const left = comp.filter((r) => !assigned.has(r));
+      if (left.length < minSize) continue;
+      const e = pieceEntry(pid, left, t);
+      if (!e) continue;
+      ready.push(e);
+      for (const r of left) assigned.add(r);
     }
     return ready;
   };
