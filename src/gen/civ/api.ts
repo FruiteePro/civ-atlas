@@ -117,9 +117,16 @@ export interface PolityApi {
 export interface PoliticsApi {
   /**
    * 分裂改进(unrest.ts 提供):手动解散无接收者时产生继承国。
-   * 返回:成功创建的继承国数量(0 = 无可行继承国)
+   * mode / pieces 缺省 = auto(走评估);pieces 为软目标。
+   * 返回:成功创建的继承国数量与选用的模式(0 继承国 = 调用方走散成无主兜底)
    */
-  fragmentOnDestroy?: (pid: number, regions: readonly number[], t: Year, ivIndex: number) => number;
+  fragmentOnDestroy?: (
+    pid: number,
+    regions: readonly number[],
+    t: Year,
+    ivIndex: number,
+    frag?: { mode?: import('./fragmentMode').FragmentModeChoice; pieces?: number },
+  ) => { successors: number; mode: import('./fragmentMode').FragmentMode };
   /**
    * 国家此刻的危机(hook 里填):国土太大、刚丢了国都 / 迁了都、正在打仗、这些年接连丢州。
    * 动荡(control.ts 的数表,规则见 stateTables.ts)在它上面再加边远、异族、王朝老了、饥荒、民变、割据

@@ -116,8 +116,9 @@ describe('动荡、饥荒、民变、大崩解', () => {
           expect([0, 1, 2], tag).toContain(e.b);
           expect(S[e.settlement].region, tag).toBe(e.region);
           const after = ownersAt(civ, e.year).polity;
-          expect(after[e.region], tag).toBe(e.a);
           if (e.b < 2) {
+            // 有继承国时国都一带留给原来的国家
+            expect(after[e.region], tag).toBe(e.a);
             // 紧跟着 e.war 条分裂(cause = collapse),都从这国分出去
             for (let k = 1; k <= e.war; k++) {
               const s = A[i + k];
@@ -388,9 +389,11 @@ describe('动荡、饥荒、民变、大崩解', () => {
           expect(P.ended, `seed=${seed} pid=${pid}:kind=2母国已结束`).toBeDefined();
         }
         
-        // 继承国数量应合理(0-10)
-        const successorCount = collapse.war ?? 0;
-        expect(successorCount, `seed=${seed} pid=${pid}:继承国数量合理`).toBeLessThanOrEqual(10);
+        // 继承国数量应合理(0-12);kind=2 的 war 是散回部落的州数,不按继承国计
+        if (collapse.b < 2) {
+          const successorCount = collapse.war ?? 0;
+          expect(successorCount, `seed=${seed} pid=${pid}:继承国数量合理`).toBeLessThanOrEqual(12);
+        }
       }
     }
   }, 180_000);

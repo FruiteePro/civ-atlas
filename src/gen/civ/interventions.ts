@@ -77,6 +77,7 @@
  *   同一刻里照样排在别的事件前面、按列表先后 —— 所以停下来下命令接着推,和带着同样的命令一口气推完一样。纯计算,不碰 DOM。
  */
 import { GUIDE_LOOK_MAX, YEAR_TICKS, cleanInterventions, commandAt, isCommand, keyByRegion, parsePersonKey, regionOfKey, simInterventions, type Intervention } from '../edits';
+import { FRAGMENT_MODE_OPT } from './fragmentMode';
 import { Layer, type Culture, type Polity } from './types';
 import { subSeed } from './engine/rand';
 import { LOOK_K, quantize, type CivSim } from './engine/sim';
@@ -631,14 +632,25 @@ export function installInterventions(sim: CivSim, iv: InterventionModel): void {
       return;
     }
     
-    // 无接收者:尝试产生继承国而非散成无主
-    // 复用 unrest.ts 的分裂逻辑(通过 API)
+    // 无接收者:尝试产生继承国而非散成无主(评估 / 作者指定模式)
     if (api.politics.fragmentOnDestroy) {
-      const successors = api.politics.fragmentOnDestroy(a, lands, t, i);
+      const frag = v as { mode?: import('./fragmentMode').FragmentModeChoice; pieces?: number };
+      const { successors, mode } = api.politics.fragmentOnDestroy(a, lands, t, i, {
+        mode: frag.mode,
+        pieces: frag.pieces,
+      });
       if (successors > 0) {
         // 继承国切出去后,亡国不得继续占州:剩余州散成无主,邻国照 reopen 预约
         const leftover = pm.lands[a].slice();
-        sim.record('intervene', { a, b: -1, region: r, settlement: sid, war: i, n: successors });
+        sim.record('intervene', {
+          a,
+          b: -1,
+          region: r,
+          settlement: sid,
+          war: i,
+          n: successors,
+          opt: FRAGMENT_MODE_OPT[mode],
+        });
         for (const q of leftover) sim.setOwner(Layer.Polity, q, -1, Ev.Cede);
         endPolity(pm, a, t);
         fallen(a, r, t, -1);
