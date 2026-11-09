@@ -1212,13 +1212,14 @@ function collapseHit(sim: CivSim, i: number, hit: readonly number[], R: number, 
     if (log.year[mid] < e.year) lo = mid + 1;
     else hi = mid;
   }
-  // 散回部落的州:同一刻崩了几国时,日志里按史事的先后一国一段(各 e.war 条),跳过排在前面的几国
+  // 散回部落的州:同一刻崩了几国时,日志里按史事的先后一国一段(各 foe/旧 war 条),跳过排在前面的几国
+  const tribalOut = (x: { b: number; war: number; foe?: number }) => (x.b === 2 ? (x.foe ?? x.war) : 0);
   let skip = 0;
-  let take = e.b === 2 ? e.war : 0;
+  let take = tribalOut(e);
   for (let j = i - 1; j >= 0; j--) {
     const p = sim.annal(j);
     if (p.year !== e.year) break;
-    if (p.kind === 'collapse' && p.b === 2) skip += p.war;
+    if (p.kind === 'collapse' && p.b === 2) skip += tribalOut(p);
   }
   for (let k = lo; k < log.size && log.year[k] === e.year; k++) {
     if (log.layer[k] !== Layer.Polity) continue;

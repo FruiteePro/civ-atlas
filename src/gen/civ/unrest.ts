@@ -53,7 +53,7 @@
  *     灭国无接收者:整国切块、无核心。powers 2–4 大块(国土大时至少 3)、mixed 3–6、shatter ~N/8;
  *     子块小于 minSize 的并进邻近大块;真正够不着 / 无城的才散为无主,整国散回部落只作末路。
  *     各块以块里人口最多的城为都自立(记 split,cause = collapse;故都是同族亡国国都的算复国)。
- *     史事 collapse 的 opt = 模式(0 powers / 1 mixed / 2 shatter),war = 散出去几块。
+ *     史事 collapse 的 opt = 模式(0 powers / 1 mixed / 2 shatter),war = 散出去几块(继承国数);b=2 时 war=0、foe=散回部落州数。
  *     三种崩法(记在 collapse 的 b;与模式独立,管发展度损失):
  *       中央崩(0):各地自立,发展度不掉;
  *       地方崩(1):诸州残破,散出去的州发展度掉一截(development.ts 按日志找这些州);
@@ -961,9 +961,9 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
     const { ready, mode: usedMode } = partitionLand(pid, unlocked, t, assessed, resolved, true, capR);
 
     if (ready.length === 0) {
-      // 末路:整国散回部落(war 仍暂记州数;metric 提交再改成 war=0 + foe)
+      // 末路:整国散回部落 — war=继承国数(0), foe=散回部落州数(与灭国干预 leftover 同列)
       const allOut = mine.slice().sort((a, b) => a - b);
-      sim.record('collapse', { a: pid, b: 2, region: capR, settlement: capSid, war: allOut.length, opt: FRAGMENT_MODE_OPT[usedMode] });
+      sim.record('collapse', { a: pid, b: 2, region: capR, settlement: capSid, war: 0, foe: allOut.length, opt: FRAGMENT_MODE_OPT[usedMode] });
       for (const r of allOut) sim.setOwner(Layer.Polity, r, -1, Ev.Collapse);
       endPolity(pm, pid, t);
       um.collapsed.set(pid, t);

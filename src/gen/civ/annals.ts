@@ -242,12 +242,12 @@ export const ANNAL_KINDS: Readonly<Record<AnnalKind, AnnalKindInfo>> = {
     war: '−1',
   },
   collapse: {
-    desc: '大崩解:大国一下子散成几块(紧跟着记各块自立的 split,cause = collapse;散回部落的州不另记,日志原因 Ev.Collapse)。**切分模式在 Annal.opt**:0 割据分治 powers、1 分崩 mixed、2 碎裂 shatter(见 fragmentMode.ts)',
+    desc: '大崩解:大国一下子散成几块(紧跟着记各块自立的 split,cause = collapse;散回部落的州不另记,日志原因 Ev.Collapse)。**切分模式在 Annal.opt**:0 割据分治 powers、1 分崩 mixed、2 碎裂 shatter(见 fragmentMode.ts)。**b=2 时 Annal.foe = 散回部落州数**(war 仍为继承国数 0;与灭国干预 leftover 同列)',
     a: '国家',
     b: '怎么崩:0 = 中央崩(各地自立)、1 = 地方崩(诸州残破,发展度掉)、2 = 两样都崩(散回部落)',
     region: '国都所在州',
     settlement: '国都',
-    war: '**散出去几块**(借用这一列;散回部落 = 散出去的州数)',
+    war: '**散出去几块 / 继承国数**(借用这一列;b=2 时为 0,散回州数见 foe)',
   },
   plague: {
     desc: '瘟疫(plague.ts):这一年疫传到一国治下的几州(各城的折损见 Settlement.sacks 里 cause = plague 的那一条;部落地带不记)。同一场瘟疫的第一条是起疫的那城;大瘟疫 cause = great,全球大疫 cause = pandemic',

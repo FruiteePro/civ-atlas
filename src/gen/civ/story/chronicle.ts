@@ -3720,7 +3720,10 @@ function collapseEntry(ctx: Ctx, ids: number[]): ChronicleEntry {
   const civM = storm ? civ.migrations?.[storm.war]?.polity : undefined;
   const lead = storm && civM !== undefined ? `${pn(civ, civM, y)}破${cityName(civ, storm.settlement) || regionName(civ, storm.region) || '其都'},` : '';
   let text: string;
-  if (e.b === 2) text = lead ? `${lead}${P}土崩瓦解,${e.war > 0 ? `${cnNumber(e.war)}州` : '诸州'}散为部落${keep}` : `${P}土崩瓦解,${e.war > 0 ? `${cnNumber(e.war)}州` : '诸州'}散为部落${keep}`;
+  if (e.b === 2) {
+    const nOut = e.foe ?? e.war; // foe=散回州数;旧档仍可能把州数写在 war
+    text = lead ? `${lead}${P}土崩瓦解,${nOut > 0 ? `${cnNumber(nOut)}州` : '诸州'}散为部落${keep}` : `${P}土崩瓦解,${nOut > 0 ? `${cnNumber(nOut)}州` : '诸州'}散为部落${keep}`;
+  }
   else {
     const names = uniq(pieces.map((s) => s.region)).map((r) => regionName(civ, r)).filter(Boolean);
     const rose = names.length ? `${names.join('、')}各自立国` : '诸州各自立国';
