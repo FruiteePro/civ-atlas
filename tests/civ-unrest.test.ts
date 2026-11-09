@@ -126,12 +126,14 @@ describe('动荡、饥荒、民变、大崩解', () => {
             }
             expect(A[i + e.war + 1]?.kind === 'split' && A[i + e.war + 1].cause === 'collapse', tag).toBe(false);
           } else {
-            // kind=2散回部落：war字段=散回的州数，但日志可能不完整（母国保留部分领土）
+            // kind=2散回部落：war=继承国数(0), foe=散回州数(旧档可能仍写在 war)
             tribalAnnals++;
+            expect(e.war, `${tag}:b=2 war=继承国数`).toBe(0);
+            const out = e.foe ?? 0;
+            expect(out, `${tag}:b=2 foe=散回州数`).toBeGreaterThan(0);
             const rs = tribal.get(e.year);
             if (rs) {
-              // 散回部落的州应该<=war字段
-              expect(rs.length, `${tag}:散回州数`).toBeLessThanOrEqual(e.war);
+              expect(rs.length, `${tag}:散回州数`).toBeLessThanOrEqual(out);
               const before = ownersAt(civ, e.year - 1 / 512).polity;
               for (const r of rs) {
                 expect(before[r], tag).toBe(e.a);
@@ -389,10 +391,13 @@ describe('动荡、饥荒、民变、大崩解', () => {
           expect(P.ended, `seed=${seed} pid=${pid}:kind=2母国已结束`).toBeDefined();
         }
         
-        // 继承国数量应合理(0-12);kind=2 的 war 是散回部落的州数,不按继承国计
+        // 继承国数量应合理(0-12);kind=2 的 war=0、foe=散回州数
         if (collapse.b < 2) {
           const successorCount = collapse.war ?? 0;
           expect(successorCount, `seed=${seed} pid=${pid}:继承国数量合理`).toBeLessThanOrEqual(12);
+        } else {
+          expect(collapse.war, `seed=${seed} pid=${pid}:b=2 war`).toBe(0);
+          expect((collapse.foe ?? 0) > 0, `seed=${seed} pid=${pid}:b=2 foe`).toBe(true);
         }
       }
     }
