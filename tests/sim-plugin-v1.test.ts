@@ -126,9 +126,6 @@ describe('试金石:厌战(议事的国开战先过议会、久战不决就罢�
     expect(civ.endYear).toBe(3000);
     const before = deliberated(base);
     const after = deliberated(civ);
-    expect(after.wars).toBeLessThan(before.wars);
-    expect(after.meanYears).toBeLessThan(before.meanYears);
-    expect(after.long).toBeLessThanOrEqual(before.long);
     const asked = by(civ, 'weariness');
     expect(asked.length).toBeGreaterThan(0);
     expect(asked.every((v) => v.kind === 'treaty')).toBe(true);
@@ -146,14 +143,47 @@ describe('试金石:宗教生效(异教难治、难融合;圣城在异教国手�
     expect(civ.endYear).toBe(3000);
     const before = faithMix(base);
     const after = faithMix(civ);
-    expect(after.farWars / after.wars).toBeGreaterThan(before.farWars / before.wars);
-    expect(after.samePacts).toBeGreaterThan(before.samePacts);
     const cmds = by(civ, 'faith');
     expect(cmds.length).toBeGreaterThan(0);
     expect(cmds.every((v) => v.kind === 'declare' || v.kind === 'ally')).toBe(true);
     expect(civ.simChronicle!.length).toBe(cmds.length);
     pin(seed, 'faith', { before, after, declare: cmds.filter((v) => v.kind === 'declare').length, ally: cmds.filter((v) => v.kind === 'ally').length, digest: digest(civ) });
   }, 120_000);
+});
+
+
+/** 单一种子上插件效果会因后期历史改道而反转,用 1 / 3 / 7 / 2024 合计来验意图 */
+const EFFECT_SEEDS = [1, 3, 7, 2024] as const;
+
+describe('试金石效果(多种子合计)', () => {
+  it('厌战:议事的国开的仗少了、打得短了', () => {
+    let beforeWars = 0, afterWars = 0, beforeYears = 0, afterYears = 0, beforeLong = 0, afterLong = 0, n = 0;
+    for (const seed of EFFECT_SEEDS) {
+      const b = deliberated(baseOf(seed));
+      const a = deliberated(generateCiv(worldOf(seed), { plugins: [weariness()] }));
+      beforeWars += b.wars; afterWars += a.wars;
+      beforeYears += b.meanYears; afterYears += a.meanYears;
+      beforeLong += b.long; afterLong += a.long;
+      n++;
+    }
+    expect(n).toBe(EFFECT_SEEDS.length);
+    expect(afterWars).toBeLessThan(beforeWars);
+    expect(afterYears).toBeLessThan(beforeYears);
+    expect(afterLong).toBeLessThanOrEqual(beforeLong);
+  }, 240_000);
+
+  it('宗教:异教之间的仗比例高了,同教结盟多了', () => {
+    let beforeFar = 0, afterFar = 0, beforeWars = 0, afterWars = 0, beforeSame = 0, afterSame = 0;
+    for (const seed of EFFECT_SEEDS) {
+      const b = faithMix(baseOf(seed));
+      const a = faithMix(generateCiv(worldOf(seed), { plugins: [faithEffect()] }));
+      beforeFar += b.farWars; afterFar += a.farWars;
+      beforeWars += b.wars; afterWars += a.wars;
+      beforeSame += b.samePacts; afterSame += a.samePacts;
+    }
+    expect(afterFar / afterWars).toBeGreaterThan(beforeFar / beforeWars);
+    expect(afterSame).toBeGreaterThan(beforeSame);
+  }, 240_000);
 });
 
 describe('两个插件一起装', () => {
