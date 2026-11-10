@@ -16,7 +16,7 @@ import { applyCharacters, type AuthorCharacter } from '../../characters';
 import { applyNames } from '../../edits';
 import type { Civ, Polity } from '../types';
 import { polityNameForm, rootShape } from '../growth';
-import { NAME_FORM_MARK, NAME_IF_ARG, NAME_IF_RE, NAME_TOKEN_CHARS, NAME_TOKEN_RE, hasNameIf, hasNameToken, markRootShape, nameToken, testName, type NameTest } from '../nameToken';
+import { NAME_FORM_MARK, NAME_IF_ARG, NAME_IF_RE, NAME_TOKEN_CHARS, NAME_TOKEN_RE, hasNameIf, hasNameToken, markRootShape, nameToken, setSameNameTokens, testName, type NameTest } from '../nameToken';
 import { splitSurname } from '../surname';
 import { authorName, type ChronicleEntry } from './chronicle';
 import { regionLabel } from './display';
@@ -70,6 +70,23 @@ export function tokenCiv(civ: Civ): Civ {
   if (base.trade) out.trade = { ...base.trade, routes: base.trade.routes.map((r) => (r.name ? { ...r, name: nameToken(`b${r.id}`) } : r)) };
   if (base.people) out.people = base.people.map((x) => (x.name || x.author !== undefined ? { ...x, name: nameToken(`h${x.id}`), defaultName: x.defaultName ?? x.name } : x));
   if (base.authorNames) out.authorNames = Object.fromEntries(Object.keys(base.authorNames).map((k) => [k, nameToken(`a${k}`)]));
+
+  // 国名碰巧和州、城、民族等同名:记下那些占位符,来历查找时也算写到了这个国家(chronicle.ts 的 introduce)
+  const byName = new Map<string, string[]>();
+  const alias = (name: string | undefined, token: string) => {
+    if (!name) return;
+    const list = byName.get(name);
+    if (list) {
+      if (!list.includes(token)) list.push(token);
+    } else byName.set(name, [token]);
+  };
+  const namedAt = (r: number) => named[r] || base.regions.name?.[r];
+  for (let r = 0; r < count; r++) alias(namedAt(r), regionNames[r]);
+  for (const s of base.settlements) if (s.name) alias(s.name, nameToken(`s${s.id}`));
+  for (const c of base.cultures) alias(c.name, nameToken(`c${c.id}`));
+  for (const [i, x] of base.places.entries()) if (x.name) alias(x.name, nameToken(`l${i}`));
+  if (base.religion) for (const f of base.religion.faiths) if (f.name) alias(f.name, nameToken(`f${f.id}`));
+  if (byName.size) setSameNameTokens(out, { polities: base.polities, tokensByName: byName });
   return out;
 }
 
