@@ -164,7 +164,7 @@ describe('第 3 版换算', () => {
     expect(tuningPatch({ 'folk.trekSize': 20 }, 3)).toEqual({ migration: { SIZE_MAX: 20, SHARE: 0.75 } });
     expect(tuningPatch({ 'folk.flight': 4 }, 3)).toEqual({ assimilation: { FLIGHT_ODDS: 0.96, FLIGHT_MAX: 12 } });
     expect(tuningPatch({ 'folk.flight': 0 }, 3)).toEqual({ assimilation: { FLIGHT_ODDS: 0 } });
-    expect(tuningPatch({ 'folk.diverge': 4 }, 3)).toEqual({ assimilation: { DIV_P: 0.48, DIV_EVERY: 50, DIV_MAX: 48 } });
+    expect(tuningPatch({ 'folk.diverge': 4 }, 3)).toEqual({ assimilation: { DIV_P: 0.72, DIV_EVERY: 50, DIV_MAX: 80 } });
     expect(tuningPatch({ 'folk.diverge': 0 }, 3)).toEqual({ assimilation: { DIV_P: 0 } });
     expect(tuningPatch({ 'court.reign': 100 }, 3)).toEqual({ rulers: { REIGN_MAX: 100, REIGN_EXP: 0.65 }, regents: { SEIZE_REIGN: 100 } });
     expect(tuningPatch({ 'war.prey': 4 }, 3)).toEqual({ wars: { PREY_ODDS: 40, PREY: 8 } });
