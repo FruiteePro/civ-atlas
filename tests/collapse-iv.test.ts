@@ -170,11 +170,14 @@ describe('post-collapse parent weakness', () => {
 });
 
 describe('pianan ambition factor', () => {
-  it('piananAmbitionFactor: 1 at 50/50; monotone in ambition; K=0 is 1', () => {
+  it('piananAmbitionFactor: reduce-only; ambitious=1, conservative<1, monotone as ambition falls; K=0 is 1', () => {
     expect(piananAmbitionFactor(50, 50, 1.2)).toBe(1);
+    expect(piananAmbitionFactor(80, 80, 1.2)).toBe(1);
+    expect(piananAmbitionFactor(100, 100, 1.2)).toBe(1);
     expect(piananAmbitionFactor(0, 0, 1.2)).toBeLessThan(1);
-    expect(piananAmbitionFactor(100, 100, 1.2)).toBeGreaterThan(1);
-    expect(piananAmbitionFactor(80, 80, 1.2)).toBeGreaterThan(piananAmbitionFactor(60, 60, 1.2));
+    expect(piananAmbitionFactor(40, 40, 1.2)).toBeLessThan(1);
+    expect(piananAmbitionFactor(40, 40, 1.2)).toBeGreaterThan(piananAmbitionFactor(20, 20, 1.2));
+    expect(piananAmbitionFactor(20, 20, 1.2)).toBeGreaterThan(piananAmbitionFactor(0, 0, 1.2));
     expect(piananAmbitionFactor(100, 0, 1.2)).toBe(1);
     expect(piananAmbitionFactor(undefined, 100, 1.2)).toBe(1);
     expect(piananAmbitionFactor(0, 0, 0)).toBe(1);
