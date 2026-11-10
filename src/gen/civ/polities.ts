@@ -42,6 +42,7 @@ import { KIND_EXPANSIONISM } from './kinds';
 import { OwnerReplay, REF_YEAR, cultureModelOf, cultureTerrain, ownersNear, type CultureModel, type CultureTerrain } from './cultures';
 import { RESHAPE_RAMP, SETTLEMENT_RANKS, capacityAt, capitalAt, portAt, portSince, tierOf, yearReaching, yearReachingPop } from './growth';
 import { namePolities, nameSettlements, type RestoreDirection } from './naming';
+import { detectContacts } from './contact';
 import type { RouteCity } from './routes';
 import type { InterventionModel } from './interventions';
 import type { Intervention } from '../edits';
@@ -1722,9 +1723,10 @@ const COLOR_NEAR_HOPS = 5;
  * 配色的"邻国"按立国那一刻国都周围的国家(按日志,见 COLOR_NEAR_HOPS);城名、国名、朝名按出现的先后起(见 naming.ts)。
  * authored = 作者在干预"立国"时起好的国名(国家编号 → 国名);别的国名、朝名都重起(接着推时传进来的是起过名的)
  */
-export function finishPolities(world: World, m: PolityModel, log: Readonly<ChangeLog>, pins?: NamePins, authored?: ReadonlyMap<number, string>): void {
+export function finishPolities(world: World, m: PolityModel, log: Readonly<ChangeLog>, pins?: NamePins, authored?: ReadonlyMap<number, string>, endYear?: Year): void {
   const seed = m.seed;
   const reg = m.terrain.regions;
+  const contacts = endYear !== undefined ? detectContacts(m.cultures, m.polities, log, reg.count, endYear) : [];
   const nb = m.polities.map(() => new Set<number>());
   const replay = new OwnerReplay(log, Layer.Polity, reg.count);
   for (const p of m.polities) {
@@ -1732,7 +1734,7 @@ export function finishPolities(world: World, m: PolityModel, log: Readonly<Chang
   }
   assignPolityColors(m.polities, nb, subSeed(seed, 'civ-polity-color'), m.ptag, pins?.polities);
   // 城名先起:西幻的王朝名借王室根据地的城名(阶段 3 王朝更替)。城名、国名各用各的种子,先后不影响结果
-  nameSettlements(seed, m.settlements, m.cultures, pins?.settlements);
+  nameSettlements(seed, m.settlements, m.cultures, pins?.settlements, contacts);
   for (const p of m.polities) {
     p.name = authored?.get(p.id) ?? '';
     p.dynasties?.forEach((d) => (d.name = ''));
@@ -1740,7 +1742,7 @@ export function finishPolities(world: World, m: PolityModel, log: Readonly<Chang
   // 地形大事:钉住的国名先占上(和干预"立国"时作者起的国名一样不另起),朝名起完再照钉住的改回去
   if (pins) for (const [id, v] of pins.polities) if (v.name && m.polities[id]) m.polities[id].name = v.name;
   const pinned = pins ? new Set([...pins.polities.values()].map((v) => v.name ?? '')) : undefined;
-  namePolities(seed, m.polities, m.cultures, { settlements: m.settlements, regionNames: m.terrain.regions.name }, restoreDirection(world, m), pinned);
+  namePolities(seed, m.polities, m.cultures, { settlements: m.settlements, regionNames: m.terrain.regions.name }, restoreDirection(world, m), pinned, contacts);
   if (pins)
     for (const [id, v] of pins.polities) {
       const ds = m.polities[id]?.dynasties;

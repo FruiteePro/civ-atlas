@@ -9,10 +9,12 @@
  * - 按键取 keyed(kind, ...key):同 seed + styleId + kind + key → 同一串候选,和调用先后无关
  *   (文明、地理实体起名用它,key = 位置锚;改地形后远处的名字不跟着错位)。
  * 分化出来的民族仍用同一个 styleId,另传方言盐(createNamer 的 dialect):词库偏一偏,随机数的根不变。
+ * 接触语(createNamer 的 contact):底层可先做过方言,再按主次掺进同一书写系统的统治层语感;语感 id 不变。
  */
 import { mulberry32, subSeed, type Rng } from '../util';
 import { WESTERN_STYLES, westernCandidate, westernWithDialect } from './western';
 import { EASTERN_STYLES, easternCandidate, easternWithDialect, toneOf } from './eastern';
+import { contactChars, easternContactCandidate, westernWithContact, type StyleContact } from './contact';
 import { latinBlocked, zhBlocked } from './filters';
 import { NAME_KINDS, ZH_LEN, type Candidate, type NameKind } from './spec';
 import type { NameMix } from './mix';
@@ -20,6 +22,7 @@ import type { NameMix } from './mix';
 export type { NameKind } from './spec';
 export { NAME_KINDS } from './spec';
 export { createPersonNamer, type PersonNamer } from './persons';
+export type { StyleContact } from './contact';
 
 export interface NameStyle {
   id: string;
@@ -91,18 +94,24 @@ function fallbackToneOk(zh: string, eastern: boolean): boolean {
 }
 
 
-/** 同 seed + styleId + 调用顺序 → 同样的名字。dialect = 分化出来的民族的方言盐,不给或 0 = 母族原样 */
-export function createNamer(seed: number, styleId: string, dialect?: number): Namer {
+/** 同 seed + styleId + 调用顺序 → 同样的名字。dialect = 分化出来的民族的方言盐,不给或 0 = 母族原样;contact = 接触语(底层可已是方言) */
+export function createNamer(seed: number, styleId: string, dialect?: number, contact?: StyleContact): Namer {
   const style = NAME_STYLES.find((s) => s.id === styleId);
   if (!style) throw new Error(`未知的地名风格 "${styleId}",可选:${NAME_STYLES.map((s) => s.id).join(', ')}`);
-  const rng = mulberry32(subSeed(seed, 'names:' + styleId));
+  const tag = contact ? `${styleId}>${contact.style}:${contact.salt}:${contact.official ? 1 : 0}` : styleId;
+  const rng = mulberry32(subSeed(seed, 'names:' + tag));
   const west0 = WESTERN_STYLES.find((s) => s.id === styleId);
   const east0 = EASTERN_STYLES.find((s) => s.id === styleId);
-  const west = west0 && dialect ? westernWithDialect(west0, dialect) : west0;
-  const east = east0 && dialect ? easternWithDialect(east0, dialect) : east0;
-  const genWith = (kind: NameKind, r: Rng): Candidate | null => (west ? westernCandidate(west, kind, r) : easternCandidate(east!, kind, r));
+  let west = west0 && dialect ? westernWithDialect(west0, dialect) : west0;
+  let east = east0 && dialect ? easternWithDialect(east0, dialect) : east0;
+  const supW = contact ? WESTERN_STYLES.find((s) => s.id === contact.style) : undefined;
+  const supE = contact ? EASTERN_STYLES.find((s) => s.id === contact.style) : undefined;
+  if (contact && west && supW) west = westernWithContact(west, supW, contact.salt, !!contact.official);
+  const reserved = contact && east && supE ? contactChars(east, supE, contact.salt) : [];
+  const genWith = (kind: NameKind, r: Rng): Candidate | null =>
+    west ? westernCandidate(west, kind, r) : contact && east && supE ? easternContactCandidate(east, supE, kind, r, reserved, !!contact.official) : easternCandidate(east!, kind, r);
   const gen = (kind: NameKind): Candidate | null => genWith(kind, rng);
-  const keyBase = subSeed(seed, 'names-keyed:' + styleId);
+  const keyBase = subSeed(seed, 'names-keyed:' + tag);
 
   const used = new Set<string>();
   const recent = new Map<NameKind, string[]>();

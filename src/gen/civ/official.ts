@@ -272,8 +272,8 @@ function pinNames(pins: NamePins, world: World, branch: CivSim, from: number, to
   const { cm, pm } = modelsOf(branch);
   const bm = cm!;
   const bpm = pm!;
-  const planned = finishCultures(world, bm, res.log, first ? undefined : pins, mix);
-  finishPolities(world, bpm, res.log, pins, authoredNames(res.annals, interventions));
+  const planned = finishCultures(world, bm, res.log, first ? undefined : pins, mix, { polities: bpm.polities, endYear: res.endYear });
+  finishPolities(world, bpm, res.log, pins, authoredNames(res.annals, interventions), res.endYear);
   // 推演中分化出来的民族:大事以前就有的才钉住(大事以后的那份历史里未必还会这样分化);
   // 每一段都补上这一段大事以前新分出来的(前面几段钉过的照旧)
   pins.cultures ??= new Map();
@@ -360,8 +360,8 @@ function settle(run: Run, own: OfficialOwn, fin: Segment, eras: CivEra[], facts:
   const interventions = carried(fin.sim, own);
   progress('起名', 0.92);
   // 计划中的疆域:山河湖海的地名按它的语感起(推得再远地名也不变,见 cultures.ts 的 plannedOwners)
-  const planned = last.cm ? finishCultures(fin.world, last.cm, log, pins, mix) : undefined;
-  if (last.pm) finishPolities(fin.world, last.pm, log, pins, authoredNames(annals, interventions));
+  const planned = last.cm ? finishCultures(fin.world, last.cm, log, pins, mix, last.pm ? { polities: last.pm.polities, endYear: p.endYear } : undefined) : undefined;
+  if (last.pm) finishPolities(fin.world, last.pm, log, pins, authoredNames(annals, interventions), p.endYear);
   const cultures: Culture[] = last.cm?.cultures ?? [];
   const settlements: Settlement[] = last.pm?.settlements ?? [];
   const polities: Polity[] = last.pm?.polities ?? [];

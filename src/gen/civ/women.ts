@@ -101,7 +101,7 @@ export interface WomenCtx {
   /** 国家的位置锚(同 rulers.ts) */
   tag: readonly number[];
   styleOf: (p: Polity) => string;
-  namerOf: (p: Polity) => PersonNamer;
+  namerOf: (p: Polity, at?: Year) => PersonNamer;
   /** 在位表的随机数底数(rulers.ts 的 rulerBase):命里该有的儿子按它算 */
   rbase: number;
   /** 寻常君主 → 他在在位表里的那一项(rulers.ts) */
@@ -304,7 +304,7 @@ export function nameWomen(people: Person[], ctx: WomenCtx, women: ReadonlySet<Pe
     }
     const pid = home(x);
     const P = polities[pid];
-    const namer = ctx.namerOf(P);
+    const namer = ctx.namerOf(P, x.born);
     const sur = cn ? cn.sur : namer.surnamed ? splitSurname(x.name) : '';
     const at = (a: number) => sur + namer.femaleGiven(tag[pid] ?? 0, cn ? cn.kind : kind(x), qi(x.born), a);
     let name = '';
