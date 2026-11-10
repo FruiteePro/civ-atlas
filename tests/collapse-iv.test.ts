@@ -236,3 +236,28 @@ describe('forbid parent reclaim (noReclaim)', () => {
     }
   }, 180_000);
 });
+
+describe('resume rebuilds collapse families', () => {
+  it('cuts after a natural collapse and inside the claim/vigor window: resume matches a straight run; families rebuilt', () => {
+    const world = generateWorld({ ...DEFAULT_PARAMS, seed: 7 });
+    const full = generateCiv(world);
+    const collapse = full.annals.find((e) => e.kind === 'collapse' && e.b !== 2 && (e.war ?? 0) > 0);
+    expect(collapse).toBeTruthy();
+    const cuts = [collapse!.year, collapse!.year + 5, collapse!.year + 25];
+    for (const cut of cuts) {
+      if (cut >= full.endYear) continue;
+      const head = generateCiv(world, { endYear: cut });
+      const sim = resumeCiv(world, head);
+      const wm = warModelOf(sim)!;
+      expect(wm.collapsedAt.get(collapse!.a), `collapsedAt at cut ${cut}`).toBeDefined();
+      const fam = wm.families.find((f) => f.parent === collapse!.a && Math.abs(f.year - collapse!.year) < 1e-6);
+      expect(fam, `family at cut ${cut}`).toBeTruthy();
+      expect(fam!.members.size).toBeGreaterThan(1);
+      expect(fam!.regions.length).toBeGreaterThan(0);
+      sim.run(full.endYear);
+      const r = sim.result();
+      expect(r.log.size, `log size cut ${cut}`).toBe(full.log.size);
+      expect(JSON.stringify(r.annals), `annals cut ${cut}`).toBe(JSON.stringify(full.annals));
+    }
+  }, 180_000);
+});

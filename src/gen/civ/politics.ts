@@ -438,12 +438,12 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
     const P0 = pm.polities[parent];
     const sail = pm.cultures[culture[capR]].kind !== 'sea' && sailsOcean(pm, P0, t) && (P0.kind !== 'sea' || Number.isFinite(pm.k.SAIL_LEVEL)) ? { sail: t } : {};
     const p = addPolity(pm, sid, culture[capR], t, { parent, ...sail, ...extra });
+    // 先登记崩解继承国,再交第一州:看邦交的第一次预约才能用上 SIB_DIP_FIRST,和 resume 一致
+    if (kind === 'split' && cause === 'collapse') joinCollapseFamily(wm, parent, p.id, t);
     sim.setOwner(Layer.Polity, capR, p.id, Ev.Split);
     for (const r of group) if (r !== capR) sim.setOwner(Layer.Polity, r, p.id, Ev.Split);
     sim.record(kind, { a: p.id, b: parent, region: rising, settlement: sid, ...(cause ? { cause } : {}) });
     if (kind === 'split') pol.lastSplit.set(parent, t);
-    // 大崩解 / 灭国切出:记入战争模型(家族收复、禁收复期)
-    if (kind === 'split' && cause === 'collapse') joinCollapseFamily(wm, parent, p.id, t);
     return p;
   };
   api.politics.secede = (parent, group, sid, rising, t, kind, cause, extra) => {
