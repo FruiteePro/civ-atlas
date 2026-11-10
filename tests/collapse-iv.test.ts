@@ -12,7 +12,7 @@ import { fragmentModeFromOpt } from '../src/gen/civ/fragmentMode';
 import { capitalAt } from '../src/gen/civ/growth';
 import { resumeCiv } from '../src/gen/civ/modules';
 import { polityModelOf } from '../src/gen/civ/polities';
-import { WARS_KNOBS, collapseTruceYears, collapseWeakFactor, collapseVigorFactor, collapseClaimStrength, piananAmbitionFactor, warModelOf } from '../src/gen/civ/wars';
+import { WARS_KNOBS, collapseTruceYears, collapseWeakFactor, collapseVigorFactor, collapseClaimStrength, piananAmbitionFactor, warModelOf, rebuildCollapseFamilies, type WarModel } from '../src/gen/civ/wars';
 import { newIvDoneText } from '../src/ui/newIvInfo';
 import { nameAt } from '../src/ui/Interventions';
 
@@ -260,4 +260,27 @@ describe('resume rebuilds collapse families', () => {
       expect(JSON.stringify(r.annals), `annals cut ${cut}`).toBe(JSON.stringify(full.annals));
     }
   }, 180_000);
+
+  it('boost-like intervene (b=−1, n>0, no foe) does not steal familyOf from an earlier sibling family', () => {
+    const emptyLog = { size: 0, year: [], region: [], layer: [], value: [], cause: [] };
+    const civ = {
+      annals: [
+        { year: 100, kind: 'collapse' as const, a: 1, b: 0, war: 2 },
+        { year: 100, kind: 'split' as const, a: 2, b: 1, cause: 'collapse' as const },
+        { year: 110, kind: 'intervene' as const, a: 2, b: -1, n: 226, war: 1 },
+        { year: 120, kind: 'intervene' as const, a: 3, b: -1, n: 2, foe: 0, opt: 1, war: 2 },
+        { year: 120, kind: 'split' as const, a: 4, b: 3, cause: 'collapse' as const },
+      ],
+      log: emptyLog,
+      regions: { count: 0 },
+    };
+    const wm = { families: [], familyOf: new Map(), collapsedAt: new Map(), collapseChild: new Map(), noReclaim: new Map() } as unknown as WarModel;
+    rebuildCollapseFamilies(wm, civ);
+    const sib = wm.families.find((f) => f.parent === 1 && f.year === 100);
+    expect(sib?.members.has(2)).toBe(true);
+    expect(wm.familyOf.get(2)).toBe(wm.families.indexOf(sib!));
+    expect(wm.families.some((f) => f.parent === 2)).toBe(false);
+    const dest = wm.families.find((f) => f.parent === 3 && f.year === 120);
+    expect(dest?.members.has(4)).toBe(true);
+  });
 });
