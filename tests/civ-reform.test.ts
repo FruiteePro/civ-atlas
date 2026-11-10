@@ -17,9 +17,9 @@ import { evLabel, evType } from '../src/ui/timelineLayout';
 import { flagAt, flagBook } from '../src/gen/civ/story/flags';
 import { flagNote } from '../src/gen/civ/story/flagText';
 
-// 改进分裂以后复辟落在种子 21、36…;用 7(废君/革命多)、21(复辟)、1(立宪也有)盖住三种
-// (第 57 湿地是 7、13、2024;第 56 滚雪球是 2;更早是 13)
-const SEEDS = [7, 21, 1];
+// 崩解平衡以后复辟落在种子 22、6、23、25、38…;用 7(废君/革命)、21(政变)、22(复辟)盖住三种
+// (改进分裂以后是 7、21、1;第 57 湿地是 7、13、2024;第 56 滚雪球是 2;更早是 13)
+const SEEDS = [7, 21, 22];
 const worlds = new Map<number, World>();
 const world = (seed: number) => {
   let w = worlds.get(seed);
@@ -152,9 +152,8 @@ describe('改制', () => {
   }, 120_000);
 
   it('接着推:在改制那一刻以后切开、存档读回、接着推,和一口气推完一样', () => {
-    // GENERATOR_VERSION 57(湿地)以后 seed 7 没有改制(革命、政变、复辟)了(种子 1–20 里 4、6、9、11、13、14、18、20 有),
-    // 换成 18:头一回改制最早的(第 2028 年),切开以后接着推得最久
-    for (const seed of [18, 13]) {
+    // GENERATOR_VERSION 58(崩解平衡)以后 seed 18、13 没有改制了;换成 38(第 1584 年,切开以后接着推得最久)、21(第 1883 年)
+    for (const seed of [38, 21]) {
       const w = world(seed);
       const full = civOf(seed);
       const e = full.annals.find((x) => x.kind === 'reform');
