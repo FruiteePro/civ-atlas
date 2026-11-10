@@ -123,31 +123,42 @@ describe(`推演里(种子 ${seed})`, () => {
     const civ0 = base();
     const P = pid();
     const a = polityKey(civ0, P);
-    // 那年不在打的接壤邻国
-    const busy = new Set(civ0.annals.filter((e) => e.kind === 'war' && e.year <= T && (e.a === P || e.b === P)).map((e) => (e.a === P ? e.b : e.a)));
-    const Q = nearOf(civ0, P, T).find((q) => !busy.has(q)) ?? nearOf(civ0, P, T)[0];
+    // 第 58 版第 2421 年最大国和邻国只隔海,强制宣战因不接壤打不成:在他在世期间往后找一年,有陆上(或能跨过去的)接壤、没在交战的邻国
+    let y = T;
+    let Q = -1;
+    for (let t = T; t <= LIN.died! - 20; t++) {
+      const { near } = neighborsAt(civ0, P, t);
+      const { open } = declareTargets(civ0, P, t, near);
+      const q = [...open][0];
+      if (q !== undefined) {
+        y = t;
+        Q = q;
+        break;
+      }
+    }
+    expect(Q).toBeGreaterThanOrEqual(0);
     const bk = polityKey(civ0, Q);
-    expect(leadOrders(a, bk, T, null, false)).toEqual({ appoint: null, declare: { kind: 'declare', a, b: bk, from: T } });
-    expect(leadOrders(a, bk, T, LIN, true)).toEqual({ appoint: null, declare: { kind: 'declare', a, b: bk, from: T, lead: 1 } });
-    const { appoint, declare } = leadOrders(a, bk, T, LIN, false);
-    expect(appoint).toEqual({ kind: 'appoint', a, char: 1, role: 'general', born: 2398, died: 2461, from: T });
-    expect(declare).toEqual({ kind: 'declare', a, b: bk, from: T, lead: 1 });
+    expect(leadOrders(a, bk, y, null, false)).toEqual({ appoint: null, declare: { kind: 'declare', a, b: bk, from: y } });
+    expect(leadOrders(a, bk, y, LIN, true)).toEqual({ appoint: null, declare: { kind: 'declare', a, b: bk, from: y, lead: 1 } });
+    const { appoint, declare } = leadOrders(a, bk, y, LIN, false);
+    expect(appoint).toEqual({ kind: 'appoint', a, char: 1, role: 'general', born: 2398, died: 2461, from: y });
+    expect(declare).toEqual({ kind: 'declare', a, b: bk, from: y, lead: 1 });
     // 推演里:任将生效、这一仗(派他出征)由他挂帅
     const civ = applyCharacters(generateCiv(world(), { interventions: [appoint!, declare] }), [LIN]);
-    const war = civ.annals.find((e) => e.kind === 'war' && e.year === T && e.a === P && e.b === Q);
+    const war = civ.annals.find((e) => e.kind === 'war' && e.year === y && e.a === P && e.b === Q);
     expect(war).toBeDefined();
     const post = authorPostsFrom(civ).find((p) => p.iv === 0)!;
-    expect(post).toMatchObject({ char: 1, role: 'general', polity: P, from: T });
+    expect(post).toMatchObject({ char: 1, role: 'general', polity: P, from: y });
     expect(post.skip).toBeUndefined();
     expect(post.wars.find((x) => x.war === war!.war)?.sent).toBe(true);
     // 人物卡上他这一任生效了,那年已是这国将领
     const posts = characterPosts(civ, 1, [], [appoint!, declare], false, undefined);
     expect(posts.map((s) => s.kind)).toEqual(['done']);
-    expect(holdsPost(civ, posts, 'general', P, T + 1, T + 1)).toBe(true);
-    expect(holdsPost(civ, posts, 'minister', P, T + 1, T + 1)).toBe(false);
-    expect(holdsPost(civ, posts, 'general', Q, T + 1, T + 1)).toBe(false);
+    expect(holdsPost(civ, posts, 'general', P, y + 1, y + 1)).toBe(true);
+    expect(holdsPost(civ, posts, 'minister', P, y + 1, y + 1)).toBe(false);
+    expect(holdsPost(civ, posts, 'general', Q, y + 1, y + 1)).toBe(false);
     // 单子里没写卸任年、卒年的那一任:照推演的规矩到卸甲致仕的岁数为止(生于 2390、65 岁卸甲 → 2455 年)
-    const queued: AppointIv = { kind: 'appoint', a, char: 1, role: 'general', born: 2390, from: T };
+    const queued: AppointIv = { kind: 'appoint', a, char: 1, role: 'general', born: 2390, from: y };
     const q = [{ kind: 'queued' as const, v: queued, step: false, A: '' }];
     expect(holdsPost(civ, q, 'general', P, 2440, 2440)).toBe(true);
     expect(holdsPost(civ, q, 'general', P, 2460, 2460)).toBe(false);
