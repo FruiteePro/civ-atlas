@@ -1655,6 +1655,8 @@ class NameBook {
     let name = '';
     for (let a = 0; a < this.tries && !name; a++) if (!this.used.has(at(a)) && !royal(at(a))) name = at(a);
     for (let a = 0; a < this.tries && !name; a++) if (!near(at(a))) name = at(a);
+    // 长寿大国君主用过的名字可能比前 NAME_TRIES 个候选还多:再往后找一个不 near 的,找不到才退回第一个
+    for (let a = this.tries; !name && a < this.tries * 8; a++) if (!near(at(a))) name = at(a);
     name ||= at(0);
     this.use(name, born);
     return name;
