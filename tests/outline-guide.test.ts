@@ -13,8 +13,9 @@ import { playStop } from '../src/gen/civ/play';
 import { emptyPolicy, powerScale, unrestShift } from '../src/gen/civ/policy';
 import { buildChronicle } from '../src/gen/civ/story/chronicle';
 import { runOutline } from '../src/gen/outline';
-import { cleanIntervention, cleanOutline, guideNotes, polityKey, type Intervention, type Plot } from '../src/gen/edits';
-import { samplePlots } from '../scripts/lib/outlineSample';
+import { cleanIntervention, cleanOutline, guideNotes, polityKey, resolveKey, type Intervention, type Plot } from '../src/gen/edits';
+import { samplePlots, samplePlausible } from '../scripts/lib/outlineSample';
+import { declareTargets, neighborsAt } from '../src/ui/Interventions';
 
 const worlds = new Map<number, World>();
 const world = (seed: number) => {
@@ -36,13 +37,37 @@ function same(a: Civ, b: Civ, label: string) {
 }
 
 /**
- * seed 1 的随机大纲里第 2820 年那条开战(和它前面的几条):照常推没发生,引几版能引成
- * (改进分裂以后第 1554 年那条硬改也改不成了,换成第 2820 年;这条在 samplePlots 前 20 条里没有,要取 30 条;
+ * seed 1 一份像样的大纲里较晚的一条开战:照常推没发生,两国那年接壤,引几版能引成。年份按条件现找。
+ * 只带这一条(前面再塞别的情节,硬改时国家键会对不上,变成 notYet/gone)。
+ * (第 58 版 samplePlots 里的开战多半不接壤,2820 也不在 30 条里;改进分裂以后曾是 samplePlots 第 2820 年;
  * 第 57 湿地是 1554;56 滚雪球是 seed 3 第 2872 年;更早是 seed 1 第 1554 / seed 7 第 1574)
  */
 const GUIDED_SEED = 1;
-const GUIDED_YEAR = 2820;
-const guidedCase = () => samplePlots(baseCiv(GUIDED_SEED), GUIDED_SEED, 30).filter((p) => p.year <= GUIDED_YEAR && p.kind !== 'peace' && p.kind !== 'submit');
+const guidedWar = (): Plot => {
+  const civ = baseCiv(GUIDED_SEED);
+  const plots = samplePlausible(civ, GUIDED_SEED, 20);
+  const idOf = (key: string) => {
+    const r = resolveKey(civ, key);
+    return r && r.kind === 'polity' ? r.id : -1;
+  };
+  const wars = plots.filter((p) => {
+    if (p.kind !== 'war' || !p.a || !p.b) return false;
+    const a = idOf(p.a);
+    const b = idOf(p.b);
+    if (a < 0 || b < 0) return false;
+    const { open } = declareTargets(civ, a, p.year, neighborsAt(civ, a, p.year).near);
+    const natural = civ.annals.some((e) => e.kind === 'war' && Math.abs(e.year - p.year) <= 10 && ((e.a === a && e.b === b) || (e.a === b && e.b === a)));
+    return open.has(b) && !natural;
+  });
+  return wars[wars.length - 1]!;
+};
+const GUIDED_YEAR = () => guidedWar().year;
+const guidedCase = (): Plot[] => {
+  const civ = baseCiv(GUIDED_SEED);
+  // 另带一条会硬改的早期情节,编年史才有【照大纲】;开战前面再堆别的情节会把国家键带跑(notYet/gone)
+  const early = samplePlots(civ, GUIDED_SEED, 20).find((p) => p.kind === 'death')!;
+  return [early, guidedWar()];
+};
 
 describe('不引 = 和以前一样', () => {
   it('tries 不给、给 0 一样;没有 guided、tried', async () => {
@@ -84,19 +109,19 @@ describe('引了的世界 = 带着同样的干预从第 0 年一口气推完', (
 });
 
 describe('顺着引了一把', () => {
-  it(`seed ${GUIDED_SEED} 第 ${GUIDED_YEAR} 年的开战:引成了,方针引到窗口最后一年年底就换回去;编年史不写`, async () => {
+  it(`seed ${GUIDED_SEED} 随机大纲里较晚的一条开战:引成了,方针引到窗口最后一年年底就换回去;编年史不写`, async () => {
     const seed = GUIDED_SEED;
     const w = world(seed);
     const plots = guidedCase();
-    const war = plots.find((p) => p.kind === 'war' && p.year === GUIDED_YEAR)!;
+    const war = plots.find((p) => p.kind === 'war' && p.year === GUIDED_YEAR())!;
     const plain = (await runOutline(w, {}, { plots, interventions: [] }))!;
     expect(plain.review.find((r) => r.id === war.id)?.status).toBe('forced');
     const stages: { n: number; of: number }[] = [];
     const out = (await runOutline(w, {}, { plots, interventions: [], tries: 12 }, { stage: (id, _fix, t) => id === war.id && t && stages.push(t) }))!;
     const r = out.review.find((x) => x.id === war.id)!;
     expect(r, JSON.stringify(out.review)).toMatchObject({ status: 'guided' });
-    expect(r.year).toBeGreaterThanOrEqual(GUIDED_YEAR - 10);
-    expect(r.year).toBeLessThanOrEqual(GUIDED_YEAR + 10);
+    expect(r.year).toBeGreaterThanOrEqual(GUIDED_YEAR() - 10);
+    expect(r.year).toBeLessThanOrEqual(GUIDED_YEAR() + 10);
     // 第几版:从 1 起一版版往上数,最后一版就是引成的那版
     expect(stages.map((t) => t.n)).toEqual(stages.map((_, i) => i + 1));
     expect(stages.every((t) => t.of === stages[0].of)).toBe(true);
@@ -106,8 +131,8 @@ describe('顺着引了一把', () => {
     const start = gs.find((v) => v.kind === 'policy' && v.foes?.length)! as Extract<Intervention, { kind: 'policy' }>;
     expect(start).toMatchObject({ a: war.a, foes: [war.b], look: { kind: 'war' } });
     expect(start.power).toBe(2 * start.war!);
-    expect(start.look!.years.every((y) => y >= GUIDED_YEAR - 10 && y <= GUIDED_YEAR + 10)).toBe(true);
-    expect(gs.find((v) => v !== start)).toEqual({ kind: 'policy', a: war.a, from: GUIDED_YEAR + 11, plot: war.id, guide: true });
+    expect(start.look!.years.every((y) => y >= GUIDED_YEAR() - 10 && y <= GUIDED_YEAR() + 10)).toBe(true);
+    expect(gs.find((v) => v !== start)).toEqual({ kind: 'policy', a: war.a, from: GUIDED_YEAR() + 11, plot: war.id, guide: true });
     expect(guideNotes(out.interventions, war.id)).toEqual([{ a: war.a, from: start.from, war: start.war, expand: 0, peace: 0, power: start.power, unrest: 0, foes: [war.b], friends: [] }]);
     same(out.civ, generateCiv(w, { interventions: out.interventions }), `seed ${seed} 引了`);
     // 编年史:引出来的方针不写;硬改的照旧写【照大纲】
