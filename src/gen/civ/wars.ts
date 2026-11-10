@@ -849,7 +849,8 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
       for (let j = 0; j < extra && pm.size[w.b] > MIN_STATE + 1; j++) {
         const [r] = pickTarget(w, CEDE_I + j, w.a, w.b, t, false);
         if (r < 0 || r === capR) break;
-        if (!take(w, w.a, w.b, r, t)) break;
+        take(w, w.a, w.b, r, t);
+        if (owner[r] !== w.a) break; // 不许扩张拒收时没易手
         yielded++;
       }
       ceded += yielded;
@@ -876,7 +877,10 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
             }
           }
           let n = 0;
-          for (const r of give) if (take(w, y, x, r, t)) n++;
+          for (const r of give) {
+            take(w, y, x, r, t);
+            if (owner[r] === y) n++;
+          }
           ceded += n;
           changed = n > 0 && X.ended === undefined;
         }
@@ -967,13 +971,18 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     const X = pm.polities[x];
     const haltMask = ownedAtHalt(x, t);
     let last = r;
+    const canTake = (q: number) => !haltMask || !!haltMask[q];
+    const leftover = () => {
+      if (!haltMask) return pm.size[y] > 0;
+      for (let q = 0; q < R; q++) if (owner[q] === y && haltMask[q]) return true;
+      return false;
+    };
     // 由近及远:先并挨着 x 国土的州,一圈圈往外(隔海的残部最后一并归 x)
-    for (let any = true; pm.size[y] > 0; ) {
+    for (let any = true; leftover(); ) {
       const touch = any;
       any = false;
       for (let q = 0; q < R; q++) {
-        if (owner[q] !== y) continue;
-        if (haltMask && !haltMask[q]) continue;
+        if (owner[q] !== y || !canTake(q)) continue;
         if (touch) {
           let adj = false;
           for (let k = reg.adjStart[q]; k < reg.adjStart[q + 1] && !adj; k++) adj = owner[reg.adj[k]] === x && canCross(pm, X, reg.adjKind[k], t);
@@ -985,14 +994,13 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
         last = q;
         any = true;
       }
-      if (!any) break;
+      if (!any && !touch) break;
     }
     if (pm.size[y] <= 0) {
       fall(w, x, y, last, t, surrender);
       return true;
     }
-    // 禁令下没并完:y 还在,丢了国都就迁都
-    if (owner[r] === x) {
+    if (haltMask && owner[r] === x) {
       const sid = bestCapital(pm, owner, y, t, false);
       if (sid >= 0) {
         moveCapital(pm, y, sid, t);
@@ -1003,7 +1011,7 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
   };
 
   /** x、y 的国土接壤(x 能走过去的边) */
-  const borders = (x: number, y: number): boolean => polityBorders(pm, owner, x, y, sim.now);
+  const borders =  (x: number, y: number): boolean => polityBorders(pm, owner, x, y, sim.now);
 
   const declare = (x: number, y: number, t: number, ally = -1, cause?: AnnalCause, res?: { region: number; want: number }): War => {
     const w: War = { id: wm.wars.length, a: x, b: y, start: t, takes: [] };
