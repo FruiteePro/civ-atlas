@@ -45,52 +45,52 @@ interface WesternPersonStyle {
 /** 各语感的人名构词表(词根、中间音节、词尾都是自拟的,不照搬真实的名人、他人作品里的角色) */
 const WESTERN_PERSONS: Record<string, WesternPersonStyle> = {
   imperial: {
-    stems: list('aur fab flav jul luc marc max oct sev tib val vesp cass corn drus gall hadr quint serv tit aem anton aquil camil clem decim'),
-    mids: list('el en ar il in'),
+    stems: list('aur fab flav jul luc marc max oct sev tib val vesp cass corn drus gall hadr quint serv tit aem anton aquil camil clem decim prim vest hort prisc flor cels silv liv proc tert hon norv pont'),
+    mids: list('el en ar il in an or'),
     mid: 0.3,
-    ends: parts('ius:4 ian:2 us:2 inus:2 ianus:1 or:1 ens:1'),
+    ends: parts('ius:4 ian:2 us:2 inus:2 ianus:1 or:1 ens:1 elus:1 anus:1'),
   },
   kingdom: {
-    stems: list('ald ed wil rich rob hen ger wal gil theo os al ber her gal leo ray rod tris per lan ste bald arn em od'),
-    mids: list('er el an'),
+    stems: list('ald ed wil rich rob hen ger wal gil theo os al ber her gal leo ray rod tris per lan ste bald arn em od ead cuth wulf kirk glen flint thorn'),
+    mids: list('er el an en or'),
     mid: 0.15,
-    ends: parts('ric:3 bert:3 win:2 mund:2 ward:2 wald:1 frid:1 an:1 ard:2 gar:1 ulf:1 ain:1 old:1'),
+    ends: parts('ric:3 bert:3 win:2 mund:2 ward:2 wald:1 frid:1 an:1 ard:2 gar:1 ulf:1 ain:1 old:1 mer:1 ley:1'),
   },
   nordic: {
-    stems: list('har sig ulf bjor ragn tor ein gunn ol hal ket arn ing sven vid sten erl hrol as eyv thor'),
-    mids: list('e a'),
+    stems: list('har sig ulf bjor ragn tor ein gunn ol hal ket arn ing sven vid sten erl hrol as eyv thor orm brand foss stein liv yng skjold brok'),
+    mids: list('e a i'),
     mid: 0.1,
-    ends: parts('ald:3 urd:2 var:2 ulf:2 mund:1 ar:2 ir:1 grim:1 vald:1 ketil:1 leif:1 dan:1'),
+    ends: parts('ald:3 urd:2 var:2 ulf:2 mund:1 ar:2 ir:1 grim:1 vald:1 ketil:1 leif:1 dan:1 stein:1 orn:1'),
   },
   slavic: {
-    stems: list('vlad yaro svyato msti bor rad mir stan bole vela dobro lyub sudi miro rosti ole bogu zdeno vito'),
-    mids: list('o e'),
+    stems: list('vlad yaro svyato msti bor rad mir stan bole vela dobro lyub sudi miro rosti ole bogu zdeno vito les grom tich vesn orel javor drev'),
+    mids: list('o e a'),
     mid: 0.1,
-    ends: parts('slav:5 mir:3 polk:1 dan:1 gost:1 voj:1 bor:1 mil:1'),
+    ends: parts('slav:5 mir:3 polk:1 dan:1 gost:1 voj:1 bor:1 mil:1 rad:1'),
   },
   hellenic: {
-    stems: list('ari kle the dem nik kal per lys phil hip xan eu ant tim arch dio her pol sos ast meg'),
-    mids: list('o a i'),
+    stems: list('ari kle the dem nik kal per lys phil hip xan eu ant tim arch dio her pol sos ast meg glau nire phon helio selen chrys cleo lyra naus'),
+    mids: list('o a i on'),
     mid: 0.25,
-    ends: parts('as:2 es:3 on:2 os:2 ides:3 ander:1 ippos:1 kles:2 menes:1 stratos:1 machos:1'),
+    ends: parts('as:2 es:3 on:2 os:2 ides:3 ander:1 ippos:1 kles:2 menes:1 stratos:1 machos:1 ion:1'),
   },
   desert: {
-    stems: list('rash khal sal mus jaf zay tar nas ham kar mah far sul has bas mun qas hak ab wal'),
-    mids: list('a i'),
+    stems: list('rash khal sal mus jaf zay tar nas ham kar mah far sul has bas mun qas hak ab wal nur badr fajr najm raml fayz qays layl rih'),
+    mids: list('a i u'),
     mid: 0.1,
-    ends: parts('id:3 il:2 im:3 an:2 ud:1 ir:2 af:1 un:1 ar:1 ad:1'),
+    ends: parts('id:3 il:2 im:3 an:2 ud:1 ir:2 af:1 un:1 ar:1 ad:1 uns:1'),
   },
   steppe: {
-    stems: list('bat tog kub men ok ar bor kai qut yes tem chag jo ol sub mun bil tol al alt ur bek'),
-    mids: list('a u i'),
+    stems: list('bat tog kub men ok ar bor kai qut yes tem chag jo ol sub mun bil tol al alt ur bek khas chul nara buya ochi zaya tulg suke baar jir noka yesu khish merkh'),
+    mids: list('a u i ai e'),
     mid: 0.1,
-    ends: parts('u:3 ul:2 ai:1 ar:2 ei:1 an:2 gul:1 dai:1 tai:1 lun:1 tur:1'),
+    ends: parts('u:3 ul:2 ai:1 ar:2 ei:1 an:2 gul:1 dai:1 tai:1 lun:1 tur:1 tem:1'),
   },
   elven: {
-    stems: list('ael sil thal cael ith mir nim fael lir aer vael ser tir fin eir lith nar len myr sael aen ior'),
-    mids: list('a e i an el'),
+    stems: list('ael sil thal cael ith mir nim fael lir aer vael ser tir fin eir lith nar len myr sael aen ior loe faer loth orme gwen cele raen glin laer'),
+    mids: list('a e i an el ie'),
     mid: 0.3,
-    ends: parts('ion:3 iel:2 orin:2 is:1 ar:2 en:1 ethil:1 wyn:1 as:2 andir:1 aen:1 or:2'),
+    ends: parts('ion:3 iel:2 orin:2 is:1 ar:2 en:1 ethil:1 wyn:1 as:2 andir:1 aen:1 or:2 ien:1'),
   },
 };
 
@@ -103,14 +103,14 @@ const WESTERN_FAMOUS = new Set(
 
 /** 女名:各语感的词尾(词根、中间音节照男名的用) */
 const WESTERN_FEMALE_ENDS: Record<string, Weighted<Part>[]> = {
-  imperial: parts('ia:4 ina:2 illa:2 ana:1 iana:1 ella:1'),
-  kingdom: parts('ena:2 ina:2 ella:2 wen:2 ilda:2 ith:1 is:1 a:1'),
-  nordic: parts('hild:3 run:2 dis:2 a:2 gerd:1 frid:1'),
-  slavic: parts('slava:4 mila:3 na:1 ka:1 ena:1'),
-  hellenic: parts('ia:3 ippe:1 ea:1 one:1 ene:1 ope:1'),
-  desert: parts('ida:2 ila:2 ima:2 iya:2 a:1 ah:1 ina:1 ara:1'),
-  steppe: parts('guli:4 ai:1 a:1 ana:1 ra:1'),
-  elven: parts('iel:2 wen:2 eth:1 ia:2 ith:1 wyn:1 ara:1'),
+  imperial: parts('ia:4 ina:2 illa:2 ana:1 iana:1 ella:1 ola:1'),
+  kingdom: parts('ena:2 ina:2 ella:2 wen:2 ilda:2 ith:1 is:1 a:1 wyn:1'),
+  nordic: parts('hild:3 run:2 dis:2 a:2 gerd:1 frid:1 grid:1'),
+  slavic: parts('slava:4 mila:3 na:1 ka:1 ena:1 ra:1'),
+  hellenic: parts('ia:3 ippe:1 ea:1 one:1 ene:1 ope:1 isa:1'),
+  desert: parts('ida:2 ila:2 ima:2 iya:2 a:1 ah:1 ina:1 ara:1 una:1'),
+  steppe: parts('guli:4 ai:1 a:1 ana:1 ra:1 sai:1'),
+  elven: parts('iel:2 wen:2 eth:1 ia:2 ith:1 wyn:1 ara:1 rien:1'),
 };
 
 /** 女名的译字(盖在各语感的译音表上):中文译女名的习惯 */
@@ -211,29 +211,29 @@ interface EasternPersonStyle {
 
 const EASTERN_PERSONS: Record<string, EasternPersonStyle> = {
   central: {
-    surnames: '李王张刘陈杨赵黄周吴徐孙胡朱高林何郭马罗梁宋郑谢韩唐冯董萧程曹袁邓许傅沈彭吕苏卢蒋蔡贾魏薛叶阎潘杜戴夏钟汪田任姜范方石姚谭邹熊陆孔白崔康秦江顾侯邵孟段雷钱汤尹易常乔贺',
-    compound: ['司马', '欧阳', '上官', '慕容', '宇文', '长孙', '独孤', '皇甫', '令狐', '尉迟'],
+    surnames: '李王张刘陈杨赵黄周吴徐孙胡朱高林何郭马罗梁宋郑谢韩唐冯董萧程曹袁邓许傅沈彭吕苏卢蒋蔡贾魏薛叶阎潘杜戴夏钟汪田任姜范方石姚谭邹熊陆孔白崔康秦江顾侯邵孟段雷钱汤尹易常乔贺丁黎郝龚祁闵卜颜韦骆',
+    compound: ['司马', '欧阳', '上官', '慕容', '宇文', '长孙', '独孤', '皇甫', '令狐', '尉迟', '司徒', '拓跋'],
     compoundChance: 0.06,
     single: 0.45,
-    chars: '昭恒怀煜晟珩琰瑾璋昱晖熙承弘宏泰康宁靖安定允恪慎谦敬晏曜旻晔炜烨焕桓楷栋渊泓澈涵洵濂浚湛润峻岳崇嵩修仪信俊佑德徽彰显景曦朗明晨昶睿哲彦毅勋骏骥驰鹏翔翊霆霖震鸿晋绍继统绪谟询遥逸远迪琮瑜琛璟钧铉锐镇',
+    chars: '昭恒怀煜晟珩琰瑾璋昱晖熙承弘宏泰康宁靖安定允恪慎谦敬晏曜旻晔炜烨焕桓楷栋渊泓澈涵洵濂浚湛润峻岳崇嵩修仪信俊佑德徽彰显景曦朗明晨昶睿哲彦毅勋骏骥驰鹏翔翊霆霖震鸿晋绍继统绪谟询遥逸远迪琮瑜琛璟钧铉锐镇祁彬翰诚泽梁楠瀚博',
   },
   xianxia: {
-    surnames: '沈叶楚萧苏云白洛凌墨顾夜风林温谢江陆宁柳慕司君景燕裴晏',
-    compound: ['慕容', '南宫', '司空', '东方', '上官', '独孤', '端木', '百里'],
+    surnames: '沈叶楚萧苏云白洛凌墨顾夜风林温谢江陆宁柳慕司君景燕裴晏冷青离淮秋寒简',
+    compound: ['慕容', '南宫', '司空', '东方', '上官', '独孤', '端木', '百里', '闻人', '夏侯'],
     compoundChance: 0.15,
     single: 0.5,
-    chars: '玄清尘寒渊霄羽澈墨离辰弦霜夜青冥珏曦霁弈遥衍霆渺沧溟曜烬月星岚雪云风尧泠琅瑶珩璃缈鸾翎昀',
+    chars: '玄清尘寒渊霄羽澈墨离辰弦霜夜青冥珏曦霁弈遥衍霆渺沧溟曜烬月星岚雪云风尧泠琅瑶珩璃缈鸾翎昀澜朔予归晚澄',
   },
   frontier: {
     single: 0,
-    first: '阿伊苏尉莫贺咄骨吐伏拔达支失毕屈沙钵那罗摩提婆迦耶勒斤颉曷萨乌车鞠',
-    chars: '苾啜利达罗那支伽提斤勒设特毗婆尼斯延陀陵鞬罕密迦拉',
+    first: '阿伊苏尉莫贺咄骨吐伏拔达支失毕屈沙钵那罗摩提婆迦耶勒斤颉曷萨乌车鞠纥库独步厍',
+    chars: '苾啜利达罗那支伽提斤勒设特毗婆尼斯延陀陵鞬罕密迦拉浑贺禄干',
     third: 0.35,
   },
   mythic: {
     single: 0,
-    first: '少太颛帝共祝后伯仲叔季夸句烛应契稷鸿重羲陶皋玄青白赤',
-    chars: '昊顼喾工融羿益夷父龙芒阴鸿皋陶明光华丘翼鸾桑熊虎鹿',
+    first: '少太颛帝共祝后伯仲叔季夸句烛应契稷鸿重羲陶皋玄青白赤苍金玉',
+    chars: '昊顼喾工融羿益夷父龙芒阴鸿皋陶明光华丘翼鸾桑熊虎鹿辰石羽瑶',
     third: 0,
     famous: ['少昊', '太昊', '帝喾', '共工', '祝融', '后羿', '夸父', '句芒', '烛阴', '伯益', '皋陶', '应龙', '帝俊', '重黎', '太一', '后土'],
   },
@@ -243,22 +243,22 @@ const EASTERN_PERSONS: Record<string, EasternPersonStyle> = {
 const EASTERN_FEMALE: Record<string, EasternPersonStyle> = {
   central: {
     single: 0.3,
-    chars: '婉淑婧嫣妍姝娴瑶琬蘅芷蕙薇萱莹霜凝素柔令仪容宁静婷媛锦绣兰秀玉珠琳琴曼雅慧敏菡茹筠妙宛韵黛绮月贞懿',
+    chars: '婉淑婧嫣妍姝娴瑶琬蘅芷蕙薇萱莹霜凝素柔令仪容宁静婷媛锦绣兰秀玉珠琳琴曼雅慧敏菡茹筠妙宛韵黛绮月贞懿茜珮荷澄秋',
   },
   xianxia: {
     single: 0.3,
-    chars: '清雪月灵璃绮萦绾鸢霓汐漪黛弦卿若烟晚歌瑶素芊落紫音霜婳笙璎岚澜',
+    chars: '清雪月灵璃绮萦绾鸢霓汐漪黛弦卿若烟晚歌瑶素芊落紫音霜婳笙璎岚澜棠萝夜晴',
   },
   frontier: {
     single: 0,
-    first: '阿伊古帕迪萨娜莎乌塔',
-    chars: '丽娜依莎罕兰提雅朵曼',
+    first: '阿伊古帕迪萨娜莎乌塔叶可',
+    chars: '丽娜依莎罕兰提雅朵曼姬芙',
     third: 0.3,
   },
   mythic: {
     single: 0,
-    first: '女姮宓嫘瑶素青玄白赤',
-    chars: '华英姬丹霓鸾凰兰芷桑',
+    first: '女姮宓嫘瑶素青玄白赤金紫',
+    chars: '华英姬丹霓鸾凰兰芷桑羽瑶辰',
     third: 0,
     famous: ['女娲', '嫦娥', '羲和', '常羲', '精卫', '瑶姬', '女魃', '宓妃', '娥皇', '女英', '嫘祖', '西王母', '素女', '玄女', '青女'],
   },

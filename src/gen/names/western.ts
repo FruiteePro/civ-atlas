@@ -197,10 +197,12 @@ const k = (ends: string, mid = 0, stems?: string): KindRule => ({ ends: parts(en
 const EP_SEA = [
   '风暴海|Sea of Storms', '迷雾海|Sea of Mists', '寂静海|Silent Sea', '晨曦海|Dawn Sea', '暮光海|Twilight Sea',
   '群星海|Sea of Stars', '翡翠海|Emerald Sea', '琥珀海|Amber Sea', '珍珠海|Pearl Sea', '落日海|Sunset Sea',
+  '银沙海|Silversand Sea', '长风海|Longwind Sea', '夜光海|Nightglow Sea', '晴澜海|Clearwave Sea',
 ];
 const EP_MOUNTAIN = [
   '龙脊山脉|Dragonspine Mountains', '灰岩山脉|Greystone Mountains', '铁脊山脉|Ironspine Mountains', '白峰山脉|Whitepeak Mountains',
   '雷鸣山脉|Thunder Mountains', '鹰巢山脉|Eyrie Mountains', '断剑山脉|Brokenblade Mountains', '巨人山脉|Giants’ Mountains',
+  '雾角山脉|Mistcap Mountains', '石冠山脉|Stonecrown Mountains', '苍岩山脉|Palecliff Mountains',
 ];
 
 export const WESTERN_STYLES: WesternStyle[] = [
@@ -210,22 +212,23 @@ export const WESTERN_STYLES: WesternStyle[] = [
     desc: '古罗马式的庄重感,多以 -ia、-ona、-entia 收尾,如 阿尔多里亚、塞雷诺纳',
     tr: {},
     stems: list(
-      'ald aur val cast cor ser ver mer tor lun sol ner ter vic cal ost ard arg luc fal tir ven sal bel lav cap vel sev tar fer pal cel clar sab vesp aquil cir lum orv tib fab corv drus',
+      'ald aur val cast cor ser ver mer tor lun sol ner ter vic cal ost ard arg luc fal tir ven sal bel lav cap vel sev tar fer pal cel clar sab vesp aquil cir lum orv tib fab corv drus ' +
+      'prim vest cliv norv pont prisc flor cels silv hort liv rubr nival austr sept cael proc tert gaud hon flav quint',
     ),
-    mids: list('en or an er al in ar el is ic it iv on'),
+    mids: list('en or an er al in ar el is ic it iv on es ul io ae'),
     link: 'e',
     kinds: {
-      state: k('oria:3 enia:2 avia:2 icia:1 entia:2 aria:2 onia:2 ania:1 eria:2 elia:2 antia:1 inia:1 uria:1 ora:1 ea:1', 0.25),
-      city: k('ona:3 enna:2 ano:2 ino:1 era:1 ica:1 ella:1 ara:2 ola:1 is:1', 0.3),
-      mountain: k('ine:2 or:2 an:2 en:2 is:1 ic:1 ar:1', 0.15),
-      sea: k('ian:3 ine:1 or:1 en:1 a:1', 0.2),
-      river: k('a:3 o:2 is:1 on:1 er:1 us:1 en:1', 0.1),
-      region: k('ia:2 ina:2 ica:1 ana:2 aria:1', 0.3),
+      state: k('oria:3 enia:2 avia:2 icia:1 entia:2 aria:2 onia:2 ania:1 eria:2 elia:2 antia:1 inia:1 uria:1 ora:1 ea:1 atia:1 evia:1', 0.25),
+      city: k('ona:3 enna:2 ano:2 ino:1 era:1 ica:1 ella:1 ara:2 ola:1 is:1 ina:1 une:1', 0.3),
+      mountain: k('ine:2 or:2 an:2 en:2 is:1 ic:1 ar:1 us:1', 0.15),
+      sea: k('ian:3 ine:1 or:1 en:1 a:1 um:1', 0.2),
+      river: k('a:3 o:2 is:1 on:1 er:1 us:1 en:1 ina:1', 0.1),
+      region: k('ia:2 ina:2 ica:1 ana:2 aria:1 uma:1', 0.3),
     },
     epithet: {
       chance: 0.12,
-      sea: [...EP_SEA, '帝王海|Imperial Sea', '金冠海|Sea of Crowns'],
-      mountain: [...EP_MOUNTAIN, '鹰旗山脉|Eaglebanner Mountains'],
+      sea: [...EP_SEA, '帝王海|Imperial Sea', '金冠海|Sea of Crowns', '凯歌海|Sea of Triumphs', '桂冠海|Laurel Sea'],
+      mountain: [...EP_MOUNTAIN, '鹰旗山脉|Eaglebanner Mountains', '青铜山脉|Bronzeridge Mountains'],
     },
   },
   {
@@ -234,12 +237,13 @@ export const WESTERN_STYLES: WesternStyle[] = [
     desc: '中世纪骑士王国,城镇多带 -顿、-维尔、-堡、-福德,如 卡斯特维尔、雷文福德',
     tr: {},
     stems: list(
-      'ash bran wen bel rav hart mor pen lan car ald her ast ros stan ever wyn gil kel dun hal wil ard cal dor fen gar lor nor ren tam ver cor dar ken lyn mer sel bri',
+      'ash bran wen bel rav hart mor pen lan car ald her ast ros stan ever wyn gil kel dun hal wil ard cal dor fen gar lor nor ren tam ver cor dar ken lyn mer sel bri ' +
+      'glen shaw wych reed flint moss barg cuth wulf ead kirk beck croft ston thorn elm ivy wool',
     ),
-    mids: list('er en el an ar in'),
+    mids: list('er en el an ar in es on le ye or'),
     link: 'e',
     kinds: {
-      state: k('ia:3 land=兰:2 mere=米尔:1 wen:1 or:1 dell=戴尔:1', 0.4),
+      state: k('ia:3 land=兰:2 mere=米尔:1 wen:1 or:1 dell=戴尔:1 ric:1', 0.4),
       city: k(
         'ton=顿:3 ford=福德:2 wick=威克:2 bury=伯里:2 ville=维尔:3 mont=蒙特:1 bourg=堡:1 field=菲尔德:1 stead=斯特德:1 worth=沃思:1 ' +
           'gate=盖特:1 mouth=茅斯:1 chester=切斯特:1 dale=代尔:1 more=莫尔:1 by=比:1 port=港!:2 haven=黑文:1 well=韦尔:1 ' +
@@ -251,7 +255,11 @@ export const WESTERN_STYLES: WesternStyle[] = [
       river: k('a:2 on:2 en:2 ey:1 is:1 ar:1 el:1 ow:1', 0.1),
       region: k('shire=郡!:3 land=兰:2 mark=马克:1 dale=代尔:1 moor=莫尔:1 wold=沃尔德:1', 0.3),
     },
-    epithet: { chance: 0.12, sea: [...EP_SEA, '狮心海|Lionheart Sea'], mountain: [...EP_MOUNTAIN, '王冠山脉|Crown Mountains'] },
+    epithet: {
+      chance: 0.12,
+      sea: [...EP_SEA, '狮心海|Lionheart Sea', '灰帆海|Greysail Sea', '卫湾海|Shieldbay Sea'],
+      mountain: [...EP_MOUNTAIN, '王冠山脉|Crown Mountains', '松脊山脉|Oakridge Mountains'],
+    },
   },
   {
     id: 'nordic',
@@ -259,9 +267,10 @@ export const WESTERN_STYLES: WesternStyle[] = [
     desc: '维京与冰原,常见 -海姆、-加德、-维克、-霍尔姆,如 斯卡尔海姆、拉夫维克',
     tr: { jAsY: true },
     stems: list(
-      'skal ulf rav bjor jot vin sig ask eir grim hald kol lund nor osk ran sval tor vald brim dag gunn hrim isk ost rog skog stav trond varg hjal aud eid geir har jarn mund ragn sten',
+      'skal ulf rav bjor jot vin sig ask eir grim hald kol lund nor osk ran sval tor vald brim dag gunn hrim isk ost rog skog stav trond varg hjal aud eid geir har jarn mund ragn sten ' +
+      'orm skjold brand solvi typ foss stein liv yng hvit jok njor brok run aesa gerd',
     ),
-    mids: list('e a ar en un'),
+    mids: list('e a ar en un i o ul'),
     link: 'e',
     kinds: {
       state: k('heim=海姆:3 gard=加德:3 land=兰:2 mark=马克:2 ia:1 rike=里克:1', 0.3),
@@ -273,8 +282,8 @@ export const WESTERN_STYLES: WesternStyle[] = [
     },
     epithet: {
       chance: 0.15,
-      sea: ['寒霜海|Frost Sea', '冰牙海|Icefang Sea', '鲸歌海|Whalesong Sea', '灰浪海|Greywave Sea', '风暴海|Sea of Storms', '极光海|Aurora Sea'],
-      mountain: ['霜巨人山脉|Frostgiant Mountains', '冰牙山脉|Icefang Mountains', '雷鸣山脉|Thunder Mountains', '巨人之脊|Giant’s Spine', '白狼山脉|Whitewolf Mountains'],
+      sea: ['寒霜海|Frost Sea', '冰牙海|Icefang Sea', '鲸歌海|Whalesong Sea', '灰浪海|Greywave Sea', '风暴海|Sea of Storms', '极光海|Aurora Sea', '盐礁海|Saltreef Sea', '鸦角海|Ravencape Sea'],
+      mountain: ['霜巨人山脉|Frostgiant Mountains', '冰牙山脉|Icefang Mountains', '雷鸣山脉|Thunder Mountains', '巨人之脊|Giant’s Spine', '白狼山脉|Whitewolf Mountains', '铁壁山脉|Anvil Mountains'],
     },
   },
   {
@@ -286,13 +295,14 @@ export const WESTERN_STYLES: WesternStyle[] = [
       table: { be: '别', de: '杰', te: '捷', ne: '涅', le: '列', re: '列', se: '谢', di: '季', ti: '季', cha: '恰', e: '叶', ye: '叶' },
     },
     stems: list(
-      'vol bel dar gor kras mil mir nov rad slav vlad yar zor bor dob lub sved tver yas zlat ost prav stan svet bog dub vel vis kol mor sev chern bran drag',
+      'vol bel dar gor kras mil mir nov rad slav vlad yar zor bor dob lub sved tver yas zlat ost prav stan svet bog dub vel vis kol mor sev chern bran drag ' +
+      'les grom zvezd tich hor vesn bur orel sokol javor smol rosh drev poln',
     ),
-    mids: list('o e a en ar in'),
+    mids: list('o e a en ar in ov el'),
     link: 'o',
     kinds: {
-      state: k('ia:2 avia:2 ovia:1 ina:1 ania:1 ovina:1', 0.4),
-      city: k('grad=格勒:3 gorod=哥罗德:2 sk:3 ovo:2 evo:1 ets:1 ava:1 in:1 ov:2 ka:1 itsa:1', 0.35),
+      state: k('ia:2 avia:2 ovia:1 ina:1 ania:1 ovina:1 eva:1', 0.4),
+      city: k('grad=格勒:3 gorod=哥罗德:2 sk:3 ovo:2 evo:1 ets:1 ava:1 in:1 ov:2 ka:1 itsa:1 ino:1', 0.35),
       mountain: k('ar:1 an:1 in:1 ov:1 ava:1 ets:1', 0.1),
       sea: k('ar:1 ov:2 en:1 in:1 ets:1', 0.1),
       river: k('a:3 ava:2 na:1 ets:1 ina:1', 0.1),
@@ -300,8 +310,8 @@ export const WESTERN_STYLES: WesternStyle[] = [
     },
     epithet: {
       chance: 0.1,
-      sea: ['冰封海|Frozen Sea', '雪狼海|Snowwolf Sea', '寒鸦海|Jackdaw Sea'],
-      mountain: ['熊脊山脉|Bearspine Mountains', '冰冠山脉|Icecrown Mountains', '黑松山脉|Blackpine Mountains'],
+      sea: ['冰封海|Frozen Sea', '雪狼海|Snowwolf Sea', '寒鸦海|Jackdaw Sea', '白松海|Birch Sea', '雾泽海|Mistfen Sea'],
+      mountain: ['熊脊山脉|Bearspine Mountains', '冰冠山脉|Icecrown Mountains', '黑松山脉|Blackpine Mountains', '松心山脉|Oakheart Mountains'],
     },
   },
   {
@@ -310,9 +320,10 @@ export const WESTERN_STYLES: WesternStyle[] = [
     desc: '爱琴海城邦与神话,常见 -斯、-波利斯、-亚,如 塞罗斯、卡利波利斯',
     tr: {},
     stems: list(
-      'ther kal ast mel ker pel kor lyk dor ith kyth myr phal ster lamp pyr tel syr thal zak xan oph kas pha lem mes ol eph kyr nis per ser thes tyr',
+      'ther kal ast mel ker pel kor lyk dor ith kyth myr phal ster lamp pyr tel syr thal zak xan oph kas pha lem mes ol eph kyr nis per ser thes tyr ' +
+      'glau nire phon helio selen argyr chrys pter aith hidr antr cleo lyra naus plem',
     ),
-    mids: list('o a e i on an ar y'),
+    mids: list('o a e i on an ar y il or'),
     link: 'o',
     kinds: {
       state: k('ia:3 is:2 os:2 eia:1 ene:1 onia:1 aia:1', 0.35),
@@ -325,8 +336,8 @@ export const WESTERN_STYLES: WesternStyle[] = [
     mount: 0.5,
     epithet: {
       chance: 0.12,
-      sea: ['海妖海|Siren Sea', '群岛海|Sea of Isles', '晨曦海|Dawn Sea', '珍珠海|Pearl Sea'],
-      mountain: ['众神山|Mount of the Gods', '雷霆山|Mount Thunder', '白峰山脉|Whitepeak Mountains'],
+      sea: ['海妖海|Siren Sea', '群岛海|Sea of Isles', '晨曦海|Dawn Sea', '珍珠海|Pearl Sea', '青果海|Olive Sea', '紫果海|Vine Sea'],
+      mountain: ['众神山|Mount of the Gods', '雷霆山|Mount Thunder', '白峰山脉|Whitepeak Mountains', '铜壁山脉|Bronzeshield Mountains'],
     },
   },
   {
@@ -335,9 +346,10 @@ export const WESTERN_STYLES: WesternStyle[] = [
     desc: '沙漠、绿洲与商队,常见 -斯坦、-阿巴德、-尔,如 扎希尔、卡斯拉巴德',
     tr: { table: { me: '麦', ha: '哈', kha: '哈', ai: '艾' } },
     stems: list(
-      'zah qas sham khal rash tam sul kar bas nas jaz faz sab tar ruz dar sar mir haz bah had jab kad mas nab qad rab saf tab wad yas zar sal amr ghar',
+      'zah qas sham khal rash tam sul kar bas nas jaz faz sab tar ruz dar sar mir haz bah had jab kad mas nab qad rab saf tab wad yas zar sal amr ghar ' +
+      'nur badr fajr najm raml bir fayz yam qamar qays layl rih tibr waha',
     ),
-    mids: list('a i u ar ir am an'),
+    mids: list('a i u ar ir am an im ul'),
     link: 'a',
     kinds: {
       state: k('iya:2 stan=斯坦:3 an:2 ar:1 ah:1 id:1', 0.35),
@@ -349,8 +361,8 @@ export const WESTERN_STYLES: WesternStyle[] = [
     },
     epithet: {
       chance: 0.12,
-      sea: ['流沙海|Sea of Shifting Sands', '烈日海|Sunscorch Sea', '绿洲海|Oasis Sea', '香料海|Spice Sea', '珍珠海|Pearl Sea'],
-      mountain: ['烈日山脉|Sunscorch Mountains', '赤岩山脉|Redrock Mountains', '驼峰山脉|Camelback Mountains'],
+      sea: ['流沙海|Sea of Shifting Sands', '烈日海|Sunscorch Sea', '绿洲海|Oasis Sea', '香料海|Spice Sea', '珍珠海|Pearl Sea', '盐风海|Saltwind Sea', '星泉海|Starwell Sea'],
+      mountain: ['烈日山脉|Sunscorch Mountains', '赤岩山脉|Redrock Mountains', '驼峰山脉|Camelback Mountains', '赤沙山脉|Redsand Mountains'],
     },
   },
   {
@@ -361,18 +373,25 @@ export const WESTERN_STYLES: WesternStyle[] = [
     stems: list(
       'kara=喀拉 ak=阿克 kok=科克 sary=萨热 kyzyl=克孜勒 altan=阿勒坦 ulaan=乌兰 khokh=呼和 tsagaan=查干 khar=哈尔 shar=沙尔 temir=铁木尔 ' +
         'bayan=巴彦 mongon=孟根 tengri=腾格里 ikh=伊克 ongon=翁贡 arslan=阿尔斯兰 bori=博热 boz=博孜 tash=塔什 kum=库姆 ay=阿依 ' +
-        'yulduz=尤勒都斯 tegin=特勤 batur=巴图尔 shira=西拉 nomin=诺敏 sain=赛音 bugha=布哈 altyn=阿勒屯 erdene=额尔德尼 mergen=莫日根 khatun=可敦',
+        'yulduz=尤勒都斯 tegin=特勤 batur=巴图尔 shira=西拉 nomin=诺敏 sain=赛音 bugha=布哈 altyn=阿勒屯 erdene=额尔德尼 mergen=莫日根 khatun=可敦 ' +
+        'khad=哈德 chuluu=楚鲁 gal=加勒 chono=乔诺 morin=莫林 odon=奥敦 nar=纳尔 nogoon=诺贡 khuren=库林 munkh=蒙赫 ' +
+        'salkhin=萨勒 buyan=布彦 galuut=加鲁 burged=布勒 khol=霍尔 tavan=塔万 jargal=扎尔 tulga=图勒 ochir=奥奇 zayaa=扎雅 ' +
+        'narin=纳林 khishig=希格 delger=德尔格 undur=温都尔 tarkhan=塔尔汗 sharga=沙尔加',
     ),
-    mids: list('a u i'),
+    mids: list('a u i ai e o'),
     link: 'a',
     kinds: {
       // 国名走部落名的路子(克烈、乃蛮、塔塔尔一类),按译音表转写
-      state: k('ait:2 an:2 it:1 ut:1 ar:2 gin:1 ir:1 at:1 un:1', 0.2, 'ker nai tat ong jal mer bar kip kan tol sal tur kel dur ogh bay khar ur sor'),
-      city: k('khot=浩特!:3 balik=八里:2 kent=肯特:1 sumu=苏木:1 bulak=布拉克:2 bazar=巴扎:1 kurgan=库尔干:1 ordu=斡鲁朵:1'),
-      mountain: k('tag=塔格!:3 ula=乌拉!:3'),
-      sea: k('tengis=腾吉斯:2 dalai=达来:2'),
-      river: k('gol=郭勒:3 su=苏:2 muren=木伦:2 darya=达里雅:1'),
-      region: k('tal=塔拉!:2 gobi=戈壁!:2 kum=库姆:1 dala=达拉:1 bulun=布伦:1'),
+      state: k(
+        'ait:2 an:2 it:1 ut:1 ar:2 gin:1 ir:1 at:1 un:1',
+        0.2,
+        'ker nai tat ong jal mer bar kip kan tol sal tur kel dur ogh bay khar ur sor jun yuz hun bul oir chir nok yam dor kut tok lur',
+      ),
+      city: k('khot=浩特!:3 balik=八里:2 kent=肯特:1 sumu=苏木:1 bulak=布拉克:2 bazar=巴扎:1 kurgan=库尔干:1 ordu=斡鲁朵:1 nor=诺尔:2 khudag=呼达:1 otok=斡托:1 baishin=白申:1'),
+      mountain: k('tag=塔格!:3 ula=乌拉!:3 daban=达班!:2 khad=哈德!:1'),
+      sea: k('tengis=腾吉斯:2 dalai=达来:2 nor=诺尔:2'),
+      river: k('gol=郭勒:3 su=苏:2 muren=木伦:2 darya=达里雅:1 us=乌斯:1'),
+      region: k('tal=塔拉!:2 gobi=戈壁!:2 kum=库姆:1 dala=达拉:1 bulun=布伦:1 nutag=努塔:1 khol=霍勒:1 nor=诺尔:1'),
     },
     epithet: undefined,
   },
@@ -382,9 +401,10 @@ export const WESTERN_STYLES: WesternStyle[] = [
     desc: '轻柔流动的精灵语感,多用 瑟、希、艾、林,如 艾尔瑟里昂、希尔瓦兰',
     tr: { table: { e: '艾', the: '瑟', se: '瑟', si: '希', thi: '希', ai: '艾', lai: '莱', lin: '琳' } },
     stems: list(
-      'ael sil thal cel el ith mir nim gal fal eld ar lin sylv ery aer vael il naer ser tir fin aran eir lith nar cael len myr sael thar ven al',
+      'ael sil thal cel el ith mir nim gal fal eld ar lin sylv ery aer vael il naer ser tir fin aran eir lith nar cael len myr sael thar ven al ' +
+      'loe faer loth orme gwen cele raen iath glin tath van loa laer firen',
     ),
-    mids: list('a e i ar en el in an on il ir'),
+    mids: list('a e i ar en el in an on il ir ae ie'),
     link: 'e',
     kinds: {
       state: k('ion:2 thas:1 ath:2 eth:1 dor:1 wen:1 lond:1 ara:1 iel:1 anor:1 ea:1 ia:1 aria:1', 0.45),
@@ -396,8 +416,8 @@ export const WESTERN_STYLES: WesternStyle[] = [
     },
     epithet: {
       chance: 0.15,
-      sea: ['星辉海|Starlit Sea', '月语海|Moonwhisper Sea', '银波海|Silverwave Sea', '暮歌海|Evensong Sea', '晨星海|Morningstar Sea'],
-      mountain: ['星穹山脉|Starvault Mountains', '月影山脉|Moonshadow Mountains', '晨星山脉|Morningstar Mountains', '银冠山脉|Silvercrown Mountains'],
+      sea: ['星辉海|Starlit Sea', '月语海|Moonwhisper Sea', '银波海|Silverwave Sea', '暮歌海|Evensong Sea', '晨星海|Morningstar Sea', '叶语海|Leafwhisper Sea', '清歌海|Clearsong Sea'],
+      mountain: ['星穹山脉|Starvault Mountains', '月影山脉|Moonshadow Mountains', '晨星山脉|Morningstar Mountains', '银冠山脉|Silvercrown Mountains', '绿冠山脉|Greencrown Mountains'],
     },
   },
 ];

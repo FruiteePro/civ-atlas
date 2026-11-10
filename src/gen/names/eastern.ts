@@ -139,31 +139,31 @@ const W = (...xs: Array<[Pattern, number]>): Weighted<Pattern>[] => xs.map(([ite
  * - 古国字 + 国(淮国、潍国)。
  * 古国字取常用的水名用字;方位只配古国字,不配吉字(免得拼成"南昌""北平"这类现代城市名)。
  */
-const C_HAO = '宁靖昭乾康安定兴隆昌景瑞雍顺嘉宣崇恒启承';
+const C_HAO = '宁靖昭乾康安定兴隆昌景瑞雍顺嘉宣崇恒启承泰乐正德端保丰';
 const C_GUGUO = '沂漳沁滦潍淄汝汾渭洛淮济漓湘';
 /** 州名用字:吉字 + 地理意象 */
-const C_ZHOU = '宁安平恒永庆瑞嘉和兴顺昌隆定靖怀明丰康云青沧丹翠松雁鹤龙凤石金玉银霜桑梧岚';
+const C_ZHOU = '宁安平恒永庆瑞嘉和兴顺昌隆定靖怀明丰康云青沧丹翠松雁鹤龙凤石金玉银霜桑梧岚桃竹莲霞月风津';
 /** "山南水北为阳":前字取山水景物 */
-const C_YANG = '云青丹平昭清松丰霞岚桑柳鹤雁霜石翠';
-const C_AUSP1 = '永长泰广安嘉宣延承宁兴建顺昌隆怀靖德崇丰定乐清万昭端元咸保正启景瑞';
-const C_AUSP2 = '安宁平定昌兴丰和康泰乐庆寿德远化';
+const C_YANG = '云青丹平昭清松丰霞岚桑柳鹤雁霜石翠桃梅竹桂月星风';
+const C_AUSP1 = '永长泰广安嘉宣延承宁兴建顺昌隆怀靖德崇丰定乐清万昭端元咸保正启景瑞康和明';
+const C_AUSP2 = '安宁平定昌兴丰和康泰乐庆寿德远化靖顺明瑞';
 /** 陵 / 门 / 川 / 津:景物、颜色、鸟兽 */
-const C_LING = '丹云石鹿金玉翠松苍青龙凤竹桂';
-const C_MEN = '石铁云风霜雪松鹤鹿龙虎雁剑月';
-const C_CHUAN = '云平清丰秀翠碧青';
-const C_JIN = '平龙渔桃柳白松石';
+const C_LING = '丹云石鹿金玉翠松苍青龙凤竹桂鹤雁霜月梧桑';
+const C_MEN = '石铁云风霜雪松鹤鹿龙虎雁剑月金玉星雷';
+const C_CHUAN = '云平清丰秀翠碧青丹岚松竹';
+const C_JIN = '平龙渔桃柳白松石金玉雁鹤';
 
 // 山:动物(伏虎、鸣凤)/ 颜色 + 形状(翠屏)/ 数 + 物(五峰)三种路数
-const M_BEAST = combos('伏卧盘腾回飞跃:龙 伏卧:虎牛 驻回跃飞:马 栖鸣舞引来飞:凤 归栖鸣:鹤鸿雁 白青苍:鹿牛');
-const M_COLOR = '翠玉金紫碧青苍白赤丹铁石';
-const M_SHAPE = '屏顶岩柱冠';
+const M_BEAST = combos('伏卧盘腾回飞跃:龙 伏卧:虎牛 驻回跃飞:马 栖鸣舞引来飞:凤 归栖鸣:鹤鸿雁 白青苍:鹿牛 飞栖鸣:鹰 苍白:狼');
+const M_COLOR = '翠玉金紫碧青苍白赤丹铁石玄银霜云';
+const M_SHAPE = '屏顶岩柱冠峰壁台';
 const M_NUM = '三五七九千万双';
-const M_NUMOBJ = '峰叠泉台';
+const M_NUMOBJ = '峰叠泉台岩岭';
 
 /** 地区:"某地 + 方位"(河东、岭南一类的构词法),某地取地理通名或景物 */
 const C_REGION = either(
   [combos('河江山关岭海湖:东西南北 江山河关:左右'), 1],
-  [combos('云雁松霜雪丹苍鹿桑梧岚霞:东西南北'), 2],
+  [combos('云雁松霜雪丹苍鹿桑梧岚霞桃梅竹桂月星:东西南北'), 2],
 );
 
 const central: EasternStyle = {
@@ -184,6 +184,8 @@ const central: EasternStyle = {
       [named(oneOf(C_MEN), '门'), 1],
       [named(oneOf(C_CHUAN), '川'), 1],
       [named(oneOf(C_JIN), '津'), 1],
+      [named(oneOf(C_LING), '亭'), 1],
+      [named(oneOf(C_MEN), '堡'), 1],
     ),
     mountain: W(
       [named(M_BEAST, '山:3 岭:2'), 4],
@@ -191,13 +193,13 @@ const central: EasternStyle = {
       [named(pair(M_NUM, M_NUMOBJ), '山:3 岭:1'), 1],
     ),
     sea: W(
-      [named(pair('沧苍碧青玄澄镜静长广明金银鲸瀚', '澜波涛潮渊'), '海'), 5],
+      [named(pair('沧苍碧青玄澄镜静长广明金银鲸瀚寒霜雪', '澜波涛潮渊'), '海'), 5],
       [named(combos('明映孤望:月 星云:河 云雪烟:涛 霞珠星:光 金银白:沙'), '海'), 2],
       [named(oneOf('镜澄鲸'), '海'), 1],
     ),
     river: W(
-      [named(oneOf('清浊白青碧金玉丹桃柳兰桑灵澄涟沧蒲枫鹿'), '水:4 河:3 江:1 川:1'), 5],
-      [named(combos('白金银黄:沙 青白赤:石 清柳桃:溪 碧金玉:泉 双九:溪 九:曲 白青:马牛 桃梅:花 玉:带'), '河'), 2],
+      [named(oneOf('清浊白青碧金玉丹桃柳兰桑灵澄涟沧蒲枫鹿梅竹桂霜云'), '水:4 河:3 江:1 川:1'), 5],
+      [named(combos('白金银黄:沙 青白赤:石 清柳桃梅:溪 碧金玉:泉 双九:溪 九:曲 白青:马牛 桃梅:花 玉:带 青白:龙'), '河'), 2],
     ),
     region: W(
       [named(C_REGION, '-:5 道:3 郡:2'), 5],
@@ -210,13 +212,13 @@ const central: EasternStyle = {
 // ---------------------------------------------------------------------------
 // 江南(仙侠风)
 
-const X_FALL = '落流飞归栖留眠浮映';
-const X_FALL_N = '云霞雪霜烟月星花叶雁鹤鸿';
-const X_HEAR = '听闻观望';
-const X_HEAR_N = '雪雨涛潮澜泉松竹风月';
+const X_FALL = '落流飞归栖留眠浮映宿';
+const X_FALL_N = '云霞雪霜烟月星花叶雁鹤鸿雾雨剑峰';
+const X_HEAR = '听闻观望问';
+const X_HEAR_N = '雪雨涛潮澜泉松竹风月雷雁鹤雾';
 const X_REACH = '摘揽追问凌踏';
-const X_REACH_N = '星月云霄风雪霞';
-const X_COLOR = '青苍碧翠紫赤丹素白玄金银玉琼墨朱';
+const X_REACH_N = '星月云霄风雪霞雾峰澜';
+const X_COLOR = '青苍碧翠紫赤丹素白玄金银玉琼墨朱霜月霞';
 
 /** 仙侠专名:按用途挑不同的名词组(海名不要"松风",山名不要"静湖") */
 function xianxiaCore(o: { color: string; hear?: string; qual: Gen; image: Gen; reach?: boolean }): Gen {
@@ -231,12 +233,12 @@ function xianxiaCore(o: { color: string; hear?: string; qual: Gen; image: Gen; r
 }
 
 /** 形容字 + 景物(清风、寒江、空谷、孤鸿) */
-const XQ_LAND = combos('清长:风 寒空远千孤青灵:山 清静寒幽碧明:溪泉江湖 幽空:谷 幽:兰 孤:鸿 明孤:月 长:河');
-const XQ_MTN = combos('清长:风 孤:鸿云月 明:月 灵:泉 凌:云霄 九青:霄 千:秋');
-const XQ_SEA = combos('明孤:月 长:风天 千万:澜顷 无:涯 浩:渺');
+const XQ_LAND = combos('清长:风 寒空远千孤青灵:山 清静寒幽碧明:溪泉江湖 幽空:谷 幽:兰 孤:鸿 明孤:月 长:河 寒:烟 清:云');
+const XQ_MTN = combos('清长:风 孤:鸿云月 明:月 灵:泉 凌:云霄 九青:霄 千:秋 飞:雪 栖:鹤');
+const XQ_SEA = combos('明孤:月 长:风天 千万:澜顷 无:涯 浩:渺 寒:潮 碧:波');
 /** 景物 + 景物(烟雨、松涛、星河、霜林) */
-const XW_LAND = combos('烟:雨波 风梅:雪 松竹:风涛影溪 星月:河华辉 枫霜松梅:林 桃梅:花 雾云:隐 云:水 霞:光');
-const XW_SEA = combos('星月:河华辉 烟:波 云:水涛 霞:光 雪:浪 鲸:波涛 晨:曦');
+const XW_LAND = combos('烟:雨波 风梅:雪 松竹:风涛影溪 星月:河华辉 枫霜松梅:林 桃梅:花 雾云:隐 云:水 霞:光 鹤:影 兰:溪');
+const XW_SEA = combos('星月:河华辉 烟:波 云:水涛 霞:光 雪:浪 鲸:波涛 晨:曦 霜:潮 月:波');
 
 const xianxia: EasternStyle = {
   id: 'xianxia',
@@ -244,20 +246,20 @@ const xianxia: EasternStyle = {
   desc: '诗意的仙侠地名,如 落霞关、听雪城、苍澜海、摘星峰、烟波泽',
   kinds: {
     state: W(
-      [named(pair('天玄紫太元乾坤苍青灵云九景', '元武霄华阳宁渊澜岳衍罗虚灵辰辉羽'), '国:3 王朝:1'), 1],
+      [named(pair('天玄紫太元乾坤苍青灵云九景霜月星', '元武霄华阳宁渊澜岳衍罗虚灵辰辉羽霞'), '国:3 王朝:1'), 1],
     ),
-    city: W([named(xianxiaCore({ color: '云霞月竹枫莲梅松泉石', qual: XQ_LAND, image: XW_LAND }), '城:9 镇:3 关:2 渡:3 庄:1 坞:1'), 1]),
+    city: W([named(xianxiaCore({ color: '云霞月竹枫莲梅松泉石霜鹤兰', qual: XQ_LAND, image: XW_LAND }), '城:9 镇:3 关:2 渡:3 庄:1 坞:1 亭:1'), 1]),
     mountain: W([
-      named(xianxiaCore({ color: '云霞雪月松竹鹤鹿岩石', hear: '雪雨涛松竹风月', qual: XQ_MTN, image: XW_LAND }), '山:5 峰:3 岭:2 崖:1'),
+      named(xianxiaCore({ color: '云霞雪月松竹鹤鹿岩石霜梅兰', hear: '雪雨涛松竹风月雷', qual: XQ_MTN, image: XW_LAND }), '山:5 峰:3 岭:2 崖:1 台:1'),
       1,
     ]),
     sea: W(
-      [named(xianxiaCore({ color: '澜波涛潮月星云', hear: '涛潮澜风月', qual: XQ_SEA, image: XW_SEA, reach: false }), '海:9 洋:1'), 9],
+      [named(xianxiaCore({ color: '澜波涛潮月星云霜雪', hear: '涛潮澜风月雷', qual: XQ_SEA, image: XW_SEA, reach: false }), '海:9 洋:1'), 9],
       [named(oneOf('北南东西沧苍碧寒霜雪'), '冥'), 0.5],
     ),
-    river: W([named(xianxiaCore({ color: '泉溪波月花柳桃枫云烟雨', qual: XQ_LAND, image: XW_LAND }), '江:3 河:2 川:2 溪:2 水:1'), 1]),
+    river: W([named(xianxiaCore({ color: '泉溪波月花柳桃枫云烟雨梅竹兰', qual: XQ_LAND, image: XW_LAND }), '江:3 河:2 川:2 溪:2 水:1'), 1]),
     region: W(
-      [named(xianxiaCore({ color: '云霞月松竹鹤鹿枫', qual: XQ_LAND, image: XW_LAND }), '原:1 泽:2 谷:2 林:1 洲:2 域:1 境:1'), 5],
+      [named(xianxiaCore({ color: '云霞月松竹鹤鹿枫兰梅霜', qual: XQ_LAND, image: XW_LAND }), '原:1 泽:2 谷:2 林:1 洲:2 域:1 境:1 坞:1'), 5],
       [named(oneOf('东西南北中'), '荒:2 洲:2 原:1 漠:1 岭:1'), 1],
     ),
   },
@@ -266,17 +268,17 @@ const xianxia: EasternStyle = {
 // ---------------------------------------------------------------------------
 // 边塞(西域风)
 
-const F_GUARD = '镇定靖安宁威平抚御怀固';
-const F_GUARD_T = '北西东远边朔沙漠海川';
-const F_ADJ = '黄白黑赤金铁青苍寒';
-const F_NATURE = '沙草水石泉岩崖峡风烟霜雪门旗';
-const F_BEAST_ADJ = '苍孤野飞白黑黄赤回落';
-const F_BEAST = '狼鹰雁马驼雕';
+const F_GUARD = '镇定靖安宁威平抚御怀固静';
+const F_GUARD_T = '北西东远边朔沙漠海川关塞';
+const F_ADJ = '黄白黑赤金铁青苍寒霜雪烈';
+const F_NATURE = '沙草水石泉岩崖峡风烟霜雪门旗云火日河';
+const F_BEAST_ADJ = '苍孤野飞白黑黄赤回落寒金';
+const F_BEAST = '狼鹰雁马驼雕虎熊羊龙';
 /** 唐诗边塞意象:孤烟、长风、落日、烽火 */
-const F_BLEAK = combos('孤:烟城 长:风河 朔寒烈秋:风 大:漠 寒飞黄:沙 白:草 黄:云 落:日 狼:烟 烽:火烟 雷:霆');
+const F_BLEAK = combos('孤:烟城 长:风河 朔寒烈秋:风 大:漠 寒飞黄:沙 白:草 黄:云 落:日 狼:烟 烽:火烟 雷:霆 野:马');
 /** 西域风的读音字:按西域古国名的音节感挑的单字,两两随机组合(楼勒、伊昌、姑兹) */
-const XY_A = '楼疏莎精且温姑乌伊康于高尉蒲卑依渠焉贺居昆喀库巴轮善阿';
-const XY_B = '兰勒绝末宿墨孙吾昌犁耐支延仑善兹罗陀提那弥耶';
+const XY_A = '楼疏莎精且温姑乌伊康于高尉蒲卑依渠焉贺居昆喀库巴轮善阿车都安石';
+const XY_B = '兰勒绝末宿墨孙吾昌犁耐支延仑善兹罗陀提那弥耶斯津';
 const xiyu = pair(XY_A, XY_B);
 
 function frontierImage(): Gen {
@@ -318,8 +320,8 @@ const frontier: EasternStyle = {
 // 山海(神话风)
 
 /** 《山海经》式的读音字:两两随机组合,读着古奥(翼留、玄冒、桂台) */
-const MY_A = '鹿龙凤鸟翼乐积长章三符槐泰崇钱松太石竹天高众皇中丹青白玄金玉招堂浮苍九常羊虎熊鹊桃桂柳梧蓬瑶帝';
-const MY_B = '首台床望游石留危江器吾来果华帝涂历兽皇吴冒时次摇庭丘翼羽角尾鸣歌舞泉光明门柱屏渊周母';
+const MY_A = '鹿龙凤鸟翼乐积长章三符槐泰崇钱松太石竹天高众皇中丹青白玄金玉招堂浮苍九常羊虎熊鹊桃桂柳梧蓬瑶帝鹤雁鹰狐云雷';
+const MY_B = '首台床望游石留危江器吾来果华帝涂历兽皇吴冒时次摇庭丘翼羽角尾鸣歌舞泉光明门柱屏渊周母牙脊渊光野';
 const myXY = pair(MY_A, MY_B);
 
 /**
@@ -327,9 +329,9 @@ const myXY = pair(MY_A, MY_B);
  * 数 + 身体(千目国、长眉国)、颜色 + 身体(赤鳞国)、"有" + 鸟兽树木(有鹿、有桑)、景物 + 民(雪民、星民)。
  * ("民"字句后面不加"国",加了会被屏蔽表拦下)
  */
-const MY_NUM = '一两三四五六七九千百长双';
+const MY_NUM = '一两三四五六七九千百长双万';
 const MY_BODY = '首目臂身尾翼齿角股眉脊牙';
-const MY_COLOR = '白黑青赤玄金苍紫';
+const MY_COLOR = '白黑青赤玄金苍紫丹翠';
 const MY_SKIN = '羽鳞齿股角翼眉牙';
 
 const mythic: EasternStyle = {
@@ -340,26 +342,26 @@ const mythic: EasternStyle = {
     state: W(
       [named(pair(MY_NUM, MY_BODY), '国'), 3],
       [named(pair(MY_COLOR, MY_SKIN), '国'), 3],
-      [prefixed('有', oneOf('鹿虎熊狐龙凤鹤雁鹊鸿鹰雕桑梧桂'), ''), 1],
-      [named(oneOf('云雪星月霞羽鳞桑竹岩'), '民'), 1],
+      [prefixed('有', oneOf('鹿虎熊狐龙凤鹤雁鹊鸿鹰雕桑梧桂桃柳羊'), ''), 1],
+      [named(oneOf('云雪星月霞羽鳞桑竹岩霜鹤石'), '民'), 1],
     ),
     city: W(
-      [named(oneOf('幽玄青丹紫苍碧赤瑶灵云霞星羽雷雪桑梧鹤凤'), '都:2 丘:2 台:2 邑:1'), 3],
+      [named(oneOf('幽玄青丹紫苍碧赤瑶灵云霞星羽雷雪桑梧鹤凤金玉石'), '都:2 丘:2 台:2 邑:1 墟:1'), 3],
       [named(myXY, '之丘:2 之台:1'), 2],
     ),
     mountain: W(
       [named(myXY, '之山'), 6],
-      [named(oneOf('玉石竹松桂槐桑鹿熊凤鹤雷'), '山'), 2],
+      [named(oneOf('玉石竹松桂槐桑鹿熊凤鹤雷云龙虎'), '山'), 2],
       [named(myXY, '山'), 2],
     ),
     sea: W(
       [named(oneOf('北南东西沧苍碧寒霜雪'), '冥'), 0.5],
-      [named(oneOf('玄幽沧苍碧青赤金云星雷鲸鳞'), '墟:1 渊:1'), 4],
+      [named(oneOf('玄幽沧苍碧青赤金云星雷鲸鳞霜月'), '墟:1 渊:1'), 4],
       [named(myXY, '之海:2 之渊:1'), 3],
       [named(oneOf('沧玄幽苍碧鲸鳞星'), '海'), 2],
     ),
     river: W(
-      [named(oneOf('赤黑白青丹苍玄金玉甘浊清桂桑兰'), '水'), 5],
+      [named(oneOf('赤黑白青丹苍玄金玉甘浊清桂桑兰桃梅霜'), '水'), 5],
       [named(myXY, '之水'), 3],
       [named(myXY, '水'), 2],
     ),
