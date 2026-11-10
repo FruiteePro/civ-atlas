@@ -239,7 +239,7 @@ export const BIOMES: readonly BiomeInfo[] = [
     grain: 0.3, pasture: 0, timber: 1, oil: 0.2,
     tags: ['forest', 'wilds', 'cold', 'bogIron', 'coalBasin'],
     frontier: 'taiga',
-    nameStyles: ['nordic', 'slavic'],
+    nameStyles: ['nordic', 'slavic', 'haedong'],
   },
   {
     id: Biome.ColdDesert,
@@ -273,7 +273,7 @@ export const BIOMES: readonly BiomeInfo[] = [
     tags: ['arid', 'nomad'],
     desert: 'temperate',
     frontier: 'desert',
-    nameStyles: ['desert', 'steppe', 'frontier'],
+    nameStyles: ['desert', 'steppe', 'frontier', 'persian'],
   },
   {
     id: Biome.Steppe,
@@ -288,7 +288,7 @@ export const BIOMES: readonly BiomeInfo[] = [
     grain: 0.5, pasture: 1, timber: 0, oil: 0.5,
     tags: ['arid', 'nomad', 'coalBasin'],
     frontier: 'grass',
-    nameStyles: ['kingdom', 'desert', 'steppe', 'central', 'frontier'],
+    nameStyles: ['kingdom', 'desert', 'steppe', 'central', 'frontier', 'persian', 'haedong', 'sahel'],
   },
   {
     id: Biome.TemperateForest,
@@ -303,7 +303,7 @@ export const BIOMES: readonly BiomeInfo[] = [
     grain: 1, pasture: 0.2, timber: 1, oil: 0,
     tags: ['forest', 'coalBasin'],
     frontier: 'forest',
-    nameStyles: ['imperial', 'kingdom', 'slavic', 'hellenic', 'elven', 'central'],
+    nameStyles: ['imperial', 'kingdom', 'slavic', 'hellenic', 'elven', 'central', 'yamato', 'haedong', 'persian'],
   },
   {
     id: Biome.TemperateRainforest,
@@ -318,7 +318,7 @@ export const BIOMES: readonly BiomeInfo[] = [
     grain: 0.7, pasture: 0, timber: 1, oil: 0,
     tags: ['forest', 'wilds', 'coalBasin'],
     frontier: 'rainforest',
-    nameStyles: ['kingdom', 'elven', 'central', 'xianxia', 'mythic'],
+    nameStyles: ['kingdom', 'elven', 'central', 'xianxia', 'mythic', 'yamato', 'haedong'],
   },
   {
     id: Biome.HotDesert,
@@ -349,7 +349,7 @@ export const BIOMES: readonly BiomeInfo[] = [
     grain: 0.6, pasture: 0.8, timber: 0.2, oil: 0.3,
     tags: ['arid'],
     frontier: 'grass',
-    nameStyles: ['hellenic', 'desert', 'frontier'],
+    nameStyles: ['hellenic', 'desert', 'frontier', 'sahel', 'indic', 'persian'],
   },
   {
     id: Biome.TropicalDryForest,
@@ -364,7 +364,7 @@ export const BIOMES: readonly BiomeInfo[] = [
     grain: 1, pasture: 0.2, timber: 0.7, oil: 0,
     tags: ['forest'],
     frontier: 'forest',
-    nameStyles: ['imperial', 'hellenic', 'elven', 'xianxia', 'mythic'],
+    nameStyles: ['imperial', 'hellenic', 'elven', 'xianxia', 'mythic', 'indic', 'nusantara', 'sahel', 'yamato'],
   },
   {
     id: Biome.Rainforest,
@@ -379,7 +379,7 @@ export const BIOMES: readonly BiomeInfo[] = [
     grain: 0.5, pasture: 0, timber: 0.8, oil: 0,
     tags: ['forest', 'wilds'],
     frontier: 'rainforest',
-    nameStyles: ['elven', 'xianxia', 'mythic'],
+    nameStyles: ['elven', 'xianxia', 'mythic', 'indic', 'nusantara', 'yamato'],
   },
   {
     id: Biome.Wetland,
@@ -395,7 +395,7 @@ export const BIOMES: readonly BiomeInfo[] = [
     grain: 0.5, pasture: 0, timber: 0.3, oil: 0.8,
     tags: ['wetland', 'wilds', 'bogIron', 'coalBasin'],
     frontier: 'wetland',
-    nameStyles: [],
+    nameStyles: ['nusantara', 'indic', 'xianxia'],
   },
 ];
 

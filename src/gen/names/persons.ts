@@ -2,7 +2,7 @@
  * 人名生成器:君主、统帅的名字,和地名用同一套语感。
  *
  * - 西幻风:先拼拉丁字母原形(词根 + 可选的中间音节 + 词尾),再按这种语感的译音表转成中文(Aldric → 阿尔德里克)。
- * - 东方风:中原、仙侠是"姓 + 名"(名一两个字);边塞是西域音译式的名(两三个字);山海是上古式的两字名。都不带姓的语感,姓为空串。
+ * - 东方风:中原、仙侠、和风、海东是"姓 + 名"(名一两个字);边塞是西域音译式的名(两三个字);山海是上古式的两字名。都不带姓的语感,姓为空串。
  * - 女名(femaleGiven):东方各语感另有一套用字;西幻词根照用、换女名的词尾,译音时按中文译女名的习惯换几个字
  *   (ia → 娅、na → 娜、li → 莉、ri → 丽、va → 娃、wen → 雯……,词尾的 s / th 写"丝")。
  *
@@ -21,7 +21,7 @@ import { list, parts, pick, wpick, type Part, type Weighted } from './spec';
 export interface PersonNamer {
   readonly style: string;
   readonly family: 'western' | 'eastern';
-  /** 这种语感的人名带不带姓(中原、仙侠带;边塞、山海、西幻不带) */
+  /** 这种语感的人名带不带姓(中原、仙侠、和风、海东带;边塞、山海、西幻不带) */
   readonly surnamed: boolean;
   /** 姓;不带姓的语感 = 空串 */
   surname(...key: number[]): string;
@@ -92,6 +92,30 @@ const WESTERN_PERSONS: Record<string, WesternPersonStyle> = {
     mid: 0.3,
     ends: parts('ion:3 iel:2 orin:2 is:1 ar:2 en:1 ethil:1 wyn:1 as:2 andir:1 aen:1 or:2 ien:1'),
   },
+  indic: {
+    stems: list('vira pala kavi rasa hari mitra ravi guna tala suta mahi nila purna kusha bhadra sena vara dina lata naga'),
+    mids: list('a i'),
+    mid: 0.2,
+    ends: parts('an:2 a:1 ev:1 ish:1 as:1 ut:1'),
+  },
+  persian: {
+    stems: list('rosh mehr azar gol yas shad darb visp nav khur far=法尔 dena sur nava boran gash zar spah'),
+    mids: list('a i e'),
+    mid: 0.15,
+    ends: parts('an:3 ar:2 ad:1 sh:1 in:1'),
+  },
+  nusantara: {
+    stems: list('sila rata bulan pasir kayu batu angin sari padi mutia nusa laut bunga'),
+    mids: list('a i u'),
+    mid: 0.15,
+    ends: parts('an:2 in:1 un:1 wan:1'),
+  },
+  sahel: {
+    stems: list('kuma sula fama bala tama wolo sibe kela mori tene daba jala soro kene fara buma loma sewa'),
+    mids: list('a e o'),
+    mid: 0.15,
+    ends: parts('a:3 e:1 o:1 ba:1 la:1'),
+  },
 };
 
 /** 他人作品里、现实里太有名的西幻名字(拼出来正好撞上就重抽) */
@@ -111,6 +135,10 @@ const WESTERN_FEMALE_ENDS: Record<string, Weighted<Part>[]> = {
   desert: parts('ida:2 ila:2 ima:2 iya:2 a:1 ah:1 ina:1 ara:1 una:1'),
   steppe: parts('guli:4 ai:1 a:1 ana:1 ra:1 sai:1'),
   elven: parts('iel:2 wen:2 eth:1 ia:2 ith:1 wyn:1 ara:1 rien:1'),
+  indic: parts('a:3 i:1 ani:2 vati:1 ini:1'),
+  persian: parts('eh:3 ine:2 ana:2 iya:2 yeh:1'),
+  nusantara: parts('a:3 i:1 wati:2 ani:1'),
+  sahel: parts('ina:3 iya:2 tu:1 we:1 si:1'),
 };
 
 /** 女名的译字(盖在各语感的译音表上):中文译女名的习惯 */
@@ -237,6 +265,18 @@ const EASTERN_PERSONS: Record<string, EasternPersonStyle> = {
     third: 0,
     famous: ['少昊', '太昊', '帝喾', '共工', '祝融', '后羿', '夸父', '句芒', '烛阴', '伯益', '皋陶', '应龙', '帝俊', '重黎', '太一', '后土'],
   },
+  yamato: {
+    surnames: '山川森林石高松田原野青藤津浦崎岛',
+    compound: ['青木', '石川', '松原', '高山', '川野', '白石', '森川', '津田', '浦野', '山田'],
+    compoundChance: 0.35,
+    single: 0.2,
+    chars: '健勇诚浩翔悠树佑晴朗仁义信忠明辉光宏正和',
+  },
+  haedong: {
+    surnames: '朴韩申洪尹禹安姜崔金李郑赵曹闵成吕',
+    single: 0.15,
+    chars: '正浩俊民秀贤英哲承宇勇植桓泰勋尚洙晟镐元',
+  },
 };
 
 /** 女名(东方;带姓的语感姓照用男名那一张) */
@@ -261,6 +301,14 @@ const EASTERN_FEMALE: Record<string, EasternPersonStyle> = {
     chars: '华英姬丹霓鸾凰兰芷桑羽瑶辰',
     third: 0,
     famous: ['女娲', '嫦娥', '羲和', '常羲', '精卫', '瑶姬', '女魃', '宓妃', '娥皇', '女英', '嫘祖', '西王母', '素女', '玄女', '青女'],
+  },
+  yamato: {
+    single: 0.2,
+    chars: '美樱奈织葵月花澄香雪叶子慧兰纱',
+  },
+  haedong: {
+    single: 0.15,
+    chars: '贤秀英美娜芝兰慧贞淑妍恩雅瑞珠',
   },
 };
 

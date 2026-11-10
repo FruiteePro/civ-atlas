@@ -37,6 +37,12 @@ const AFFINITY: Record<string, { t: [number, number]; kinds: CultureKind[] }> = 
   xianxia: { t: [14, 27], kinds: ['river', 'lake', 'highland'] },
   frontier: { t: [2, 18], kinds: ['nomad', 'highland'] },
   mythic: { t: [10, 30], kinds: ['forest', 'highland', 'lake'] },
+  indic: { t: [18, 32], kinds: ['river', 'farm', 'forest'] },
+  persian: { t: [10, 24], kinds: ['highland', 'farm', 'river'] },
+  nusantara: { t: [20, 32], kinds: ['sea', 'river', 'forest'] },
+  sahel: { t: [18, 34], kinds: ['nomad', 'farm'] },
+  yamato: { t: [8, 22], kinds: ['sea', 'forest', 'river'] },
+  haedong: { t: [2, 16], kinds: ['farm', 'river', 'highland', 'sea'] },
 };
 /** 打分权重:类型对口、气温合适、群落对口、随机、全世界已用过(每次)、和邻族撞了 */
 const W_KIND = 1.5;

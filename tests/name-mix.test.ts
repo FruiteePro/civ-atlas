@@ -154,7 +154,7 @@ describe('按份数起名(seed 7、2024)', () => {
 
   it('中式、音译的占比接近份数(按推演结束时各民族住的州算)', () => {
     // [份数, 中式该占的百分比, 最多差几个百分点]。差多少按种子 1–19、2024 里差得最多的定(GENERATOR_VERSION 13):
-    // 12 种都配的那一组,活着的民族只有七到十个、大的一个常占三成,凑不准(最多差 9.2);另两组最多差 5.7、7.6
+    // 全部语感都配的那一组,活着的民族只有七到十个、大的一个常占三成,凑不准(最多差 9.2);另两组最多差 5.7、7.6
     // (种子 2024 只活下八个民族,中式只配 2 份时最合适的那个民族一个就占了两成八)。
     // GENERATOR_VERSION 18 再量:三组最多差 4.0、3.7、10.9(最后一组还是种子 2024)
     // GENERATOR_VERSION 19 再量:6.0、5.0、12.6(还是种子 2024)
@@ -194,18 +194,19 @@ describe('按份数起名(seed 7、2024)', () => {
     const total = a.reduce((x, y) => x + y, 0);
     const share = new Map<string, number>();
     auto.cultures.forEach((cu, i) => share.set(cu.style, (share.get(cu.style) ?? 0) + a[i]));
-    expect(share.get('desert')).toBeGreaterThan(0);
+    const drop = share.get('desert') ? 'desert' : [...share.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    expect(share.get(drop)).toBeGreaterThan(0);
     // 照自动:每种大约 5% 一份(界面上的「照自动」也这么折)
     const mix: Record<string, number> = {};
     for (const [s, n] of share) if (n > 0) mix[s] = Math.max(1, Math.round(((n / total) * 100) / 5));
     // 份数按 5% 取整,和自动配的不总是一模一样(有上面那种民族的种子会低不少;GENERATOR_VERSION 46 大迁徙以后 75%:下限放到 0.7)
     const same = generateCiv(world, { names: mix }).cultures.filter((c, i) => c.style === auto.cultures[i].style).length;
     expect(same / auto.cultures.length).toBeGreaterThanOrEqual(0.7);
-    delete mix.desert;
+    delete mix[drop];
     const civ = generateCiv(world, { names: mix });
-    expect(civ.cultures.some((c) => c.style === 'desert')).toBe(false);
+    expect(civ.cultures.some((c) => c.style === drop)).toBe(false);
     // 分化出来的民族跟着母族的语感,母族换了它也换,分化本身也跟着历史变:只比一开始就有的民族
-    const others = auto.cultures.map((cu, i) => i).filter((i) => auto.cultures[i].style !== 'desert' && auto.cultures[i].parent === undefined);
+    const others = auto.cultures.map((cu, i) => i).filter((i) => auto.cultures[i].style !== drop && auto.cultures[i].parent === undefined);
     const kept = others.filter((i) => civ.cultures[i].style === auto.cultures[i].style).length;
     expect(kept / others.length).toBeGreaterThanOrEqual(0.8);
   });
@@ -234,9 +235,9 @@ describe('地形大事', () => {
     const auto = generateCiv(world, { upheavals });
     const civ = generateCiv(world, { upheavals, names: { central: 3, imperial: 7 } });
     expect(history(civ)).toBe(history(auto));
-    // 照没有大事的那份结局凑时,这里只有 15%(民族一整块一整块地分,凑不到正好 30%;GENERATOR_VERSION 46 大迁徙以后是 41%:放宽到 12;
-    // 57 湿地以后是 42.6%:放宽到 13,照旧挡得住 15% 那种)
-    expect(Math.abs(easternShare(civ) - 30)).toBeLessThanOrEqual(13);
+    // 配了 30% 中式;民族成块,凑不齐。加入新语感并叠上民族更密之后,这颗带沉陷的种子大约 37%
+    // (没有大事的同一配比大约 46%)。数字会随对口分再变,但应跟没有大事的那份不是同一档。
+    expect(Math.abs(easternShare(civ) - 37)).toBeLessThanOrEqual(8);
     expect(civ.eras?.[0].places.length).toBeGreaterThan(0);
   });
 
@@ -292,9 +293,12 @@ describe('存档', () => {
 });
 
 describe('界面上的地名风格', () => {
-  it('12 种都有颜色和例子,中式在前', () => {
+  it('每种语感都有颜色和例子,中式在前', () => {
     expect(MIX_STYLES.map((s) => s.id).sort()).toEqual(NAME_STYLES.map((s) => s.id).sort());
-    expect(MIX_STYLES.slice(0, 4).every((s) => s.family === 'eastern')).toBe(true);
+    const east = MIX_STYLES.filter((s) => s.family === 'eastern').length;
+    expect(east).toBeGreaterThanOrEqual(4);
+    expect(MIX_STYLES.slice(0, east).every((s) => s.family === 'eastern')).toBe(true);
+    expect(MIX_STYLES.slice(east).every((s) => s.family === 'western')).toBe(true);
     for (const s of MIX_STYLES) {
       expect(s.color).toMatch(/^#[0-9A-F]{6}$/);
       expect(s.examples).not.toBe('');
@@ -314,7 +318,7 @@ describe('界面上的地名风格', () => {
     const civ = generateCiv(worldOf(7), { names: { central: 1, imperial: 1 } });
     expect(autoMix(civ)).toEqual(m);
     // 没有文明:每种 1 份
-    expect(Object.values(autoMix(null))).toEqual(new Array(12).fill(1));
+    expect(Object.values(autoMix(null))).toEqual(new Array(NAME_STYLES.length).fill(1));
   });
 
   it('摘要和快捷按钮', () => {
@@ -325,6 +329,6 @@ describe('界面上的地名风格', () => {
     expect(mixSummary(east.mix)).toBe('全中式');
     expect(mixSummary(west.mix)).toBe('全音译');
     expect(mixSummary(half.mix)).toBe('中式 50%、音译 50%');
-    expect(Object.keys(west.mix).length).toBe(8);
+    expect(Object.keys(west.mix).length).toBe(NAME_STYLES.filter((s) => s.family === 'western').length);
   });
 });

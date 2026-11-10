@@ -1,6 +1,6 @@
 /**
  * 地名风格(新建世界的「地名风格」页、创建前的确认框、世界设定里那一行)用的东西:
- * 12 种语感在界面上的顺序、颜色、例子;这颗星球上各种语感占了多少地方;「自己配」一开始的份数和快捷按钮;一句话的摘要。
+ * 各种语感在界面上的顺序、颜色、例子;这颗星球上各种语感占了多少地方;「自己配」一开始的份数和快捷按钮;一句话的摘要。
  * 份数怎么变成各民族的语感见 gen/civ/naming.ts 的 assignStyles。
  */
 import type { Civ } from '../gen/civ/types';
@@ -30,6 +30,12 @@ const LOOK: Record<string, [color: string, examples: string]> = {
   desert: ['#A78BFA', '卡斯拉巴德'],
   steppe: ['#7DD3B0', '查干浩特'],
   elven: ['#3FB98A', '希尔瓦兰'],
+  indic: ['#5C8F9E', '那伽补罗'],
+  persian: ['#8B62A8', '罗什沙赫尔'],
+  nusantara: ['#2A8F7A', '室利补罗'],
+  sahel: ['#8A9B4E', '库马杜古'],
+  yamato: ['#E07080', '青原、松津'],
+  haedong: ['#C49A5A', '云邑、松津'],
 };
 
 /** 界面上的顺序:中式在前(条上中式在左、音译在右),各自按 NAME_STYLE_META 的顺序 */
@@ -99,7 +105,7 @@ export function autoMix(civ: Civ | null): NameMix {
 export const MIX_PRESETS: { id: string; name: string; mix: NameMix }[] = [
   { id: 'eastern', name: '全中式', mix: even((s) => (s.family === 'eastern' ? 1 : 0)) },
   { id: 'western', name: '全音译', mix: even((s) => (s.family === 'western' ? 1 : 0)) },
-  // 中式 4 种、音译 8 种:中式每种 2 份,两边各 8 份
+  // 中式每种 2 份、音译每种 1 份,两边份数相同
   { id: 'half', name: '中西各半', mix: even((s) => (s.family === 'eastern' ? 2 : 1)) },
 ];
 

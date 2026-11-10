@@ -7,6 +7,7 @@ import { DEFAULT_PARAMS, generateWorld } from '../src/gen/world';
 import { generateCiv, type Civ } from '../src/gen/civ';
 import type { Person } from '../src/gen/civ/types';
 import { splitSurname } from '../src/gen/civ/story/peopleText';
+import { NAME_STYLES } from '../src/gen/names';
 import { createPersonNamer } from '../src/gen/names/persons';
 import { buildChronicle } from '../src/gen/civ/story/chronicle';
 
@@ -26,7 +27,7 @@ const styleOf = (c: Civ, x: Person) => c.cultures[c.polities[x.polity].culture]?
 
 describe('女名', () => {
   it('各语感的女名:东方用另一套字、带姓的不含姓;西幻三到六个字;同一个键同一个名字,和男名是两套', () => {
-    for (const st of ['central', 'xianxia', 'frontier', 'mythic', 'imperial', 'kingdom', 'nordic', 'slavic', 'hellenic', 'desert', 'steppe', 'elven']) {
+    for (const st of NAME_STYLES.map((s) => s.id)) {
       const n = createPersonNamer(7, st);
       const names = Array.from({ length: 40 }, (_, i) => n.femaleGiven(3, i, 0));
       expect(names.map((_, i) => n.femaleGiven(3, i, 0))).toEqual(names);

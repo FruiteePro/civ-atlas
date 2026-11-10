@@ -7,7 +7,7 @@ import { transcribe } from '../src/gen/names/transcribe';
 
 /**
  * 常用字表:GB2312 一级汉字(3755 个,标准里就叫"常用汉字"),用 Node 自带的 GBK 解码现场算出来。
- * 另外放行几个一级表外、但日常词里人人认识的字(雷霆、苍穹、翡翠、琥珀、晨曦、浩瀚、冥想、山岚)。
+ * 另外放行几个一级表外、但日常词里人人认识的字(雷霆、苍穹、翡翠、琥珀、晨曦、浩瀚、冥想、山岚、那伽、天竺、梵风)。
  */
 function commonChars(): Set<string> {
   const dec = new TextDecoder('gbk');
@@ -18,7 +18,7 @@ function commonChars(): Set<string> {
       set.add(dec.decode(new Uint8Array([hi, lo])));
     }
   }
-  for (const c of '霆穹翡琥珀曦瀚冥岚') set.add(c);
+  for (const c of '霆穹翡琥珀曦瀚冥岚伽竺梵') set.add(c);
   return set;
 }
 const COMMON = commonChars();

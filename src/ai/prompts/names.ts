@@ -5,7 +5,7 @@
  * - 对象(NameTarget):国家(东方改朝换代过的,可以指定第几朝 —— 改 / 释的是那一朝的国号)、城、地理实体
  *   (山河湖海岛漠)、民族、州。nameInfo 给出它的稳定键、现在的名字、语感(界面用,很便宜)
  * - 材料(nameMaterial):和时间轴拖到哪一年无关,讲的是它的一生 ——
- *   语感(12 种,见 STYLE_GUIDES:中式讲字义典故、西幻讲拟造的词源)、地理(位置、地貌、气候、临近的山川)、
+ *   语感(见 STYLE_GUIDES:中式讲字义典故、西幻讲拟造的词源)、地理(位置、地貌、气候、临近的山川)、
  *   历史(建城 / 立国年份、国号变迁、国都、兴衰、归属变迁、编年史里和它有关的几条)、同一语感的其他名字(给 AI 找语感)
  * - 释名:explainRequest → 120–180 字的"名字由来"(流式;写超了用 shortenRequest 压一次);起名:suggestRequest(json: true)→ parseSuggestions
  * - 过时检查:nameStamp 只由年份、地块等数字拼成(不含任何名字),历史改写 / 改地形后会变,改名不会变;
@@ -36,7 +36,7 @@ import type { AiMessage, AiRequest } from '../types';
 import type { ScanOptions } from '../realWords';
 
 // ---------------------------------------------------------------------------
-// 语感(12 种):和 gen/names 的 NAME_STYLES 一一对应、顺序一致(单测核对 id、label、desc)
+// 语感:和 gen/names 的 NAME_STYLES 一一对应、顺序一致(单测核对 id、label、desc)
 
 export interface StyleGuide {
   id: string;
@@ -150,6 +150,54 @@ export const STYLE_GUIDES: readonly StyleGuide[] = [
     suggest: '音译,轻柔绵长,多用 瑟、希、艾、林、尔、恩(如 艾尔瑟里昂、希尔瓦兰)',
   },
   {
+    id: 'indic',
+    label: '天竺(梵风)',
+    family: 'western',
+    desc: '南亚式的音译地名,常见 -补罗、-伐底,如 那伽补罗、维拉伐底',
+    aiLabel: '天竺(梵风)',
+    aiDesc: '南亚式的音译地名,常见 -补罗、-伐底,如 那伽补罗、维拉伐底',
+    explain:
+      '拟造语言绵长响亮,词尾和词根规则如下:-pura / -补罗 城与聚落、-vati / -伐底 有……之地、-nadi 河、-giri 山、-sagar 海;' +
+      '词根如 naga 那伽(蛇与水)、vira 勇、padma 莲、hari 绿与日。讲词源要写出原形并拆开讲。',
+    suggest: '音译,常见 -补罗、-伐底、-纳加尔(如 那伽补罗、维拉伐底),绵长、带南亚语感',
+  },
+  {
+    id: 'persian',
+    label: '波斯(伊兰风)',
+    family: 'western',
+    desc: '高原与绿洲的音译地名,常见 -沙赫尔、-万德、-甘,如 罗什沙赫尔、阿扎尔万德',
+    aiLabel: '高原(伊兰风)',
+    aiDesc: '高原与绿洲的音译地名,常见 -沙赫尔、-万德、-甘,如 罗什沙赫尔、阿扎尔万德',
+    explain:
+      '拟造语言清亮顿挫,词尾和词根规则如下:-shahr / -沙赫尔 城、-vand / -万德 所属与地方、-gan 园地与乡、-kuh 山、-rud 河、-darya 海与大河;' +
+      '词根多与光、火、花、风、金有关。讲词源要写出原形并拆开讲。不要用 -stan、al- 一类的构词当主号。',
+    suggest: '音译,常见 -沙赫尔、-万德、-甘(如 罗什沙赫尔、阿扎尔万德),有高原与绿洲的味道',
+  },
+  {
+    id: 'nusantara',
+    label: '南洋(马来风)',
+    family: 'western',
+    desc: '海岛与海峡的音译地名,常见 室利、-补罗,如 室利补罗、努沙科塔',
+    aiLabel: '南洋(岛屿风)',
+    aiDesc: '海岛与海峡的音译地名,常见 室利、-补罗,如 室利补罗、努沙科塔',
+    explain:
+      '拟造语言圆转起伏,词尾和词根规则如下:sri / 室利 吉祥的前缀、-pura / -补罗 城、-kota 城镇、-nusa 岛、-laut 海、-sungai 河、-gunung 山;' +
+      '词根多与岛、风、花、林、石、金有关。讲词源要写出原形并拆开讲。',
+    suggest: '音译,常见 室利、-补罗、-科塔、-努沙(如 室利补罗、努沙科塔),有海岛与海峡的味道',
+  },
+  {
+    id: 'sahel',
+    label: '萨赫勒(西非风)',
+    family: 'western',
+    desc: '疏林草原的音译地名,城镇多带 -杜古、-索,如 库马杜古、苏拉索',
+    aiLabel: '萨赫勒(疏林风)',
+    aiDesc: '疏林草原的音译地名,城镇多带 -杜古、-索,如 库马杜古、苏拉索',
+    explain:
+      '拟造语言短促开朗,词尾和词根规则如下:-dugu / -杜古 城与聚落、-so 家园、-kulu 山、-ba 河;' +
+      '词根多与热风、疏林、河湾、金沙有关。讲词源要写出原形并拆开讲。不要写成沙漠绿洲或草原游牧那种词尾。',
+    suggest: '音译,常见 -杜古、-索、-库卢(如 库马杜古、苏拉索),短促、有疏林草原的味道',
+  },
+  {
     id: 'central',
     label: '中原(古风)',
     family: 'eastern',
@@ -195,6 +243,30 @@ export const STYLE_GUIDES: readonly StyleGuide[] = [
     aiDesc: '《山海经》式的奇异地名,如 玄冒之山、翼留之台、雷墟、千目国、桂台之野',
     explain: '《山海经》式的奇异地名:"X之山""X之野""X之台""X国"(千目国)、"X墟",常带异兽、神木、奇石。讲字义时像给《山海经》作注,讲其中的神怪、物产、异兽传说(可以编,写明"相传")。',
     suggest: '古奥奇异:"X之山""X之野""X墟""X国"(如 玄冒之山、雷墟、千目国、桂台之野)',
+  },
+  {
+    id: 'yamato',
+    label: '和风(扶桑风)',
+    family: 'eastern',
+    desc: '岛国式的汉字地名,多用 津、浦、原、川、湾、城、庄,如 青原、松津、白崎湾',
+    aiLabel: '和风(岛国风)',
+    aiDesc: '岛国式的汉字地名,多用 津、浦、原、川、湾、城、庄,如 青原、松津、白崎湾',
+    explain:
+      '和风:专名取山川花木字(松、樱、藤、崎、森、岛),城名多是"X津""X浦""X原""X川""X湾""X城""X庄",山名常配"岳",河名以"川"为主。' +
+      '讲字义要讲本义和画面,不要写成中原的州府或仙侠的关城。',
+    suggest: '汉字组名,通名用 津、浦、原、川、湾、城、庄、岳(如 青原、松津、白崎湾),两三个字',
+  },
+  {
+    id: 'haedong',
+    label: '海东(半岛风)',
+    family: 'eastern',
+    desc: '汉字半岛地名,城邑多用 邑、津、浦、城、州,如 云邑、松津、青浦',
+    aiLabel: '海东(半岛风)',
+    aiDesc: '汉字半岛地名,城邑多用 邑、津、浦、城、州,如 云邑、松津、青浦',
+    explain:
+      '海东风:专名取山川德字(松、云、青、平、德、泽),城名多是"X邑""X津""X浦""X城""X州",地区常配"道"。' +
+      '讲字义要讲本义和地名惯例,不要写成中原的"大"字国号或"X阳"城。',
+    suggest: '汉字组名,通名用 邑、津、浦、城、州、道(如 云邑、松津、青浦),两三个字',
   },
 ];
 
@@ -243,6 +315,10 @@ export const WESTERN_TR: Record<string, TranscribeOptions> = {
   desert: { table: { me: '麦', ha: '哈', kha: '哈', ai: '艾' } },
   steppe: { table: { ka: '喀', te: '铁', mu: '木' } },
   elven: { table: { e: '艾', the: '瑟', se: '瑟', si: '希', thi: '希', ai: '艾', lai: '莱', lin: '琳' } },
+  indic: { table: { ga: '伽', va: '伐', pu: '补', na: '那' } },
+  persian: {},
+  nusantara: {},
+  sahel: {},
 };
 
 const TR_ONSETS = ['', 'b', 'p', 'd', 't', 'g', 'k', 'f', 'v', 's', 'z', 'sh', 'ch', 'j', 'm', 'n', 'l', 'r', 'h', 'th', 'kh', 'y', 'w', 'ts'];
@@ -272,6 +348,12 @@ const FIXED_PARTS: Record<string, string> = {
     'tag=塔格 ula=乌拉 daban=达班 tengis=腾吉斯 dalai=达来 gol=郭勒 su=苏 muren=木伦 darya=达里雅 us=乌斯 ' +
     'tal=塔拉 gobi=戈壁 dala=达拉 bulun=布伦 nutag=努塔 khol=霍勒',
   elven: 'duin=杜因',
+  indic:
+    'naga=那伽 pura=补罗 vati=伐底 desa=德沙 nagar=纳加尔 pur=普尔 gram=格拉姆 giri=吉里 achal=阿查尔 sagar=萨加尔 nadi=纳迪 khand=坎德',
+  persian: 'shahr=沙赫尔 vand=万德 gan=甘 kuh=库赫 darya=达尔亚 rud=鲁德 zar=扎尔 far=法尔',
+  nusantara:
+    'sri=室利 nusa=努沙 pura=补罗 nagara=纳加拉 raya=拉亚 kota=科塔 karta=卡尔塔 jaya=查亚 gunung=古农 laut=劳特 sungai=松盖 tanah=塔纳',
+  sahel: 'dugu=杜古 nke=恩凯 so=索 koro=科罗 bugu=布古 kulu=库卢 ba=巴 dun=敦 folo=福洛',
 };
 /** 各语感的固定译法:中文 → 拉丁(长的在前;同一个中文有两种写法的取第一种) */
 export const FIXED_LATIN: Readonly<Record<string, ReadonlyMap<string, string>>> = Object.fromEntries(

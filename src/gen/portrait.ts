@@ -99,6 +99,12 @@ export const STYLE_GROUP: Record<string, PortraitGroupId> = {
   slavic: 'north',
   desert: 'desert',
   elven: 'elf',
+  indic: 'latin',
+  persian: 'desert',
+  nusantara: 'latin',
+  sahel: 'desert',
+  yamato: 'zhongyuan',
+  haedong: 'zhongyuan',
 };
 
 /** 从后往前的层序 */
@@ -321,14 +327,32 @@ function leanOf(x: Person): PortraitLean | undefined {
 
 /**
  * 血缘(长相往下传)按哪个键算:一般就是人物的稳定键;女的按她原来的男名(推演先按男的排过一遍,见 civ/women.ts),
- * 这样换成女的以后,她的子孙长相和原来一样
+ * 这样换成女的以后,她的子孙长相和原来一样。
+ * 要整份名单都换回男名再取键:只改这一个名字对不上 personKey 的避重编号(#n),
+ * 几个女的原男名撞了、或和本来就是男的撞了,键就不一样,后人的脸会跟着变。
  */
+const maleKeyCache = new WeakMap<object, string[]>();
+
+function maleKeys(civ: Civ): string[] {
+  const list = civ.people ?? [];
+  const hit = maleKeyCache.get(list);
+  if (hit && hit.length === list.length) return hit;
+  if (!list.some((x) => x.maleName)) {
+    const keys = list.map((x) => personKey(civ, x.id));
+    maleKeyCache.set(list, keys);
+    return keys;
+  }
+  const asMen: Civ = {
+    ...civ,
+    people: list.map((x) => (x.maleName ? { ...x, name: x.maleName, female: undefined, maleName: undefined } : x)),
+  };
+  const keys = asMen.people!.map((x) => personKey(asMen, x.id));
+  maleKeyCache.set(list, keys);
+  return keys;
+}
+
 function bloodKey(civ: Civ, p: Person): string {
-  const k = personKey(civ, p.id);
-  if (!p.maleName) return k;
-  const parts = k.split('|');
-  if (parts.length >= 4) parts[2] = p.maleName;
-  return parts.join('|');
+  return maleKeys(civ)[p.id] ?? personKey(civ, p.id);
 }
 
 /** 推演里的人在某一年的头像(去世以后 = 去世那年的样子);部件还没有(女性的部件还没画)= null */

@@ -11,7 +11,7 @@ export interface NameStyleMeta {
   family: 'western' | 'eastern';
 }
 
-/** 12 种语感(和 NAME_STYLES 同一个顺序:先 8 种音译,后 4 种中式) */
+/** 语感清单(和 NAME_STYLES 同一个顺序:先音译,后中式) */
 export const NAME_STYLE_META: readonly NameStyleMeta[] = [
   { id: 'imperial', label: '帝国(拉丁风)', family: 'western' },
   { id: 'kingdom', label: '王国(英法风)', family: 'western' },
@@ -21,10 +21,16 @@ export const NAME_STYLE_META: readonly NameStyleMeta[] = [
   { id: 'desert', label: '沙海(阿拉伯风)', family: 'western' },
   { id: 'steppe', label: '草原(突厥蒙古风)', family: 'western' },
   { id: 'elven', label: '林语(精灵风)', family: 'western' },
+  { id: 'indic', label: '天竺(梵风)', family: 'western' },
+  { id: 'persian', label: '波斯(伊兰风)', family: 'western' },
+  { id: 'nusantara', label: '南洋(马来风)', family: 'western' },
+  { id: 'sahel', label: '萨赫勒(西非风)', family: 'western' },
   { id: 'central', label: '中原(古风)', family: 'eastern' },
   { id: 'xianxia', label: '江南(仙侠风)', family: 'eastern' },
   { id: 'frontier', label: '边塞(西域风)', family: 'eastern' },
   { id: 'mythic', label: '山海(神话风)', family: 'eastern' },
+  { id: 'yamato', label: '和风(扶桑风)', family: 'eastern' },
+  { id: 'haedong', label: '海东(半岛风)', family: 'eastern' },
 ];
 
 /**
@@ -57,7 +63,7 @@ export function sameMix(a: unknown, b: unknown): boolean {
   return JSON.stringify(cleanMix(a) ?? null) === JSON.stringify(cleanMix(b) ?? null);
 }
 
-/** 按份数挑一种语感(r = [0,1) 的随机数);自动 = 全部语感等可能(和加这一项以前一样:NAME_STYLES[⌊r × 12⌋]) */
+/** 按份数挑一种语感(r = [0,1) 的随机数);自动 = 全部语感等可能(NAME_STYLE_META[⌊r × 种数⌋]) */
 export function pickStyle(mix: NameMix | undefined, r: number): string {
   if (!mix) return NAME_STYLE_META[Math.floor(r * NAME_STYLE_META.length)].id;
   let list = NAME_STYLE_META.map((s) => ({ id: s.id, share: mix[s.id] ?? 0 })).filter((x) => x.share > 0);
