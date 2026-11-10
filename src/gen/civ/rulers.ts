@@ -14,7 +14,7 @@
  * **倾向**(RulerLeanings;每位君主都有,各 0–100,50 是寻常,越高越容易做对应的事):
  *   - expand 开拓:越高越不计较划不划算,偏远、贫瘠的地方也去开垦;越低越只要富庶、离国都近的地方
  *   - war 好战:越高越容易开战,仗打得越久、想多拿几州,打输了越不肯称臣,越常亲征(50 以下不亲征);越低越早想议和
- *     开拓、好战还一起缩放收复失地的开战加成(wars.ts 的 PIANAN_K:守成之君不思收复,雄主北伐)
+ *     开拓、好战还一起缩放收复失地的开战加成(wars.ts 的 PIANAN_K:只减不加,守成之君不思收复,雄主仍照常收复)
  *   - develop 发展:越高越重视领地内的建设(推演里还没有建设,先留着,不影响推演)
  *   - trade 重商:越高越看重沿海、大河、港口,内陆的地方越不想要(重视贸易的一面等有了商路再加)
  *   开拓、好战都低就是守成之君。每项按"国家的位置锚 + 第几位"随机取(两个均匀数取平均,多数在 30–70),
@@ -88,7 +88,7 @@ const LEANING_BIAS: Record<'default' | 'nomad' | 'sea' | 'republic', RulerLeanin
  * - 重商:沿海、大河、港口的州门槛再 × e^(-TRADE_COAST·x重商),内陆的 × e^(TRADE_INLAND·x重商)
  * - 好战:宣战的赔率 × e^(WAR_DECLARE·x好战);一场仗最多打多少年 × e^(WAR_LENGTH·x好战);想拿的州数 + round(WAR_GOAL·x好战);
  *   打得很惨时奉表称臣的机会 × e^(-WAR_SUE·x好战);亲征的机会 × (好战 - 50) / LEAD_SPAN(夹到 0–1)
- * - 开拓+好战:收复失地开战加成再乘 e^(PIANAN_K·x),x 为两项倾向均值((项-50)/50),见 wars.ts
+ * - 开拓+好战:收复失地开战加成再乘 min(1, e^(PIANAN_K·x))(只减不加),x 为两项倾向均值((项-50)/50),见 wars.ts
  * - 发展:还不影响推演
  * settle = 算"打多久、想拿几州、肯不肯称臣"用的好战(不给 = 好战本身;国家方针的和谈底线加在这上面,见 policy.ts)
  */
@@ -105,7 +105,7 @@ const LEAD_SPAN = 40;
  * 倾向对推演的影响:
  * - worth / coast:扩张算账的门槛倍数(内陆 / 沿海、大河、港口的州),越小越不计较划不划算(polities.ts 的 wants)
  * - declare:宣战赔率的倍数(wars.ts 的看邻国)
- * - 开拓+好战还缩放收复失地开战加成(wars.ts 的 PIANAN_K;不进 LeaningEffect,用 rulingLeanings 现算)
+ * - 开拓+好战还缩放收复失地开战加成(wars.ts 的 PIANAN_K,只减不加;不进 LeaningEffect,用 rulingLeanings 现算)
  * - war:一场仗最多打多少年(厌战)的倍数;goal:这场仗想拿下几州多几州(wars.ts 的议和)
  * - sue:打得很惨时奉表称臣的机会倍数(diplomacy.ts)
  * - lead:亲征的机会倍数(people.ts;0 = 不亲征)

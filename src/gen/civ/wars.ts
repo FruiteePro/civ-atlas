@@ -7,7 +7,7 @@
  *   看邻国(Ev.WarCheck)每个国家立国 CHECK_FIRST 年后,每 CHECK_EVERY 年看一眼(每段里随机一个时刻)。
  *     自己没在打仗(帝国级的大国可以两线作战)、上次议和过了 REST 年,就在接壤的邻国里挑一个最"值得打"的:
  *       赔率 = WAR_ODDS × 扩张性 × 边境胜算^LOCAL_EXP × 异族 FOREIGN × 收复失地 × 小国 PREY_ODDS × 边界长短
- *       收复失地再乘偏安因子 e^(PIANAN_K·x)(x 为开拓与好战倾向的均值:守成之君不思收复,雄主北伐;寻常之君 = 1)
+ *       收复失地再乘偏安因子 min(1, e^(PIANAN_K·x))(x 为开拓与好战倾向的均值:只减不加,守成之君不思收复,雄主与寻常之君 = 1)
  *       挑好了打谁,开不开战再乘此刻在位君主的好战倍数(rulers.ts:越好战越容易开战)
  *       国家方针(policy.ts):倍数是君主倾向加上方针的;亲国不打,仇国的赔率 × FOE_ODDS(先打它)
  *       动荡(unrest.ts):邻国大乱的格外招人(趁虚而入),自己国内乱也更想对外开战(转移矛盾;动荡到 DIVERT_U 再上调一档)
@@ -186,7 +186,7 @@ export const WARS_KNOBS = defineKnobs('wars', {
   /** 收复失地:邻国手里每有一州原是本国的,宣战赔率 × (1 + REVANCHE × 偏安因子)(最多算 4 州);打仗时先打这些州 */
   REVANCHE: 0.8,
   REGAIN: 2.5,
-  /** 偏安:守成之君不思收复,雄主北伐;收复失地宣战加成再乘 e^(PIANAN_K·x),x 为开拓与好战倾向的均值((项-50)/50,−1…1);寻常之君(50/50)=1 */
+  /** 偏安:只减不加;守成之君不思收复,雄主仍照常收复;收复失地宣战加成再乘 min(1, e^(PIANAN_K·x)),x 为开拓与好战倾向的均值((项-50)/50,−1…1);雄主与寻常之君=1 */
   PIANAN_K: 1.2,
   /** 阶段 4 结盟:盟国被第三国宣战时,另一方(和攻方接壤)援盟参战的机会 */
   ALLY_JOIN: 0.8,
@@ -410,11 +410,11 @@ export function collapseVigorFactor(founded: Year | undefined, isCollapseChild: 
   return vigor + (1 - vigor) * (age / years);
 }
 
-/** 偏安因子:守成之君不思收复,雄主北伐。x = 开拓与好战倾向的均值((项-50)/50,夹到 −1…1);因子 = e^(k·x)。无倾向或 k=0 时为 1 */
+/** 偏安因子:只减不加。x = 开拓与好战倾向的均值((项-50)/50,夹到 −1…1);因子 = min(1, e^(k·x))(守成之君 < 1,雄主与寻常之君 = 1)。无倾向或 k=0 时为 1 */
 export function piananAmbitionFactor(expand: number | undefined, war: number | undefined, k: number): number {
   if (expand === undefined || war === undefined || !Number.isFinite(k) || k === 0) return 1;
   const x = Math.max(-1, Math.min(1, ((expand - 50) / 50 + (war - 50) / 50) / 2));
-  return fexp(k * x);
+  return Math.min(1, fexp(k * x));
 }
 
 /** 崩解家族主张强度:满额 FULL 年,之后线性降到 FADE 年为 0 */
