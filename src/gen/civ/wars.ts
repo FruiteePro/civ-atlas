@@ -75,7 +75,7 @@
  *   强制宣战、结盟时当即议和走 接口 war.declare / makePeace。
  *   永久划给某国的州(干预"划州"带"永久",还在那国手里时)攻不下、议和时不割让;手里有这种州的国家丢了国都也不会被并掉残部
  *   (迁都到剩下的城,那一块里没城就到别的块里挑;一座城都没有才照旧被并 —— 极少见);
- *   不许扩张的国家不主动宣战、不援盟(被打时照常防守、反攻夺回自己的州)。
+ *   不许扩张的国家不主动宣战、不援盟(被打时照常防守、反攻夺回禁令开始时自己的州,不并掉来犯者余下的国土)。
  *
  * **不存内存状态**:进行中的战争、厌战、停战冷却都能由 Civ 重建(resumeWars,resumeCiv 调用)——
  *   战争 = 史事里的 war(没有对应 peace 的就还在打);每场战争攻占了哪些州 = 带战争编号的 conquer;
@@ -639,6 +639,29 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
   const culture = sim.owners[Layer.Culture];
   const owner = sim.owners[Layer.Polity];
 
+  /**
+   * 不许扩张开始时这国手里的州(按日志重放,接着推也能重建)。没有禁令 = null。
+   * 禁令期间只准夺回这些州,不得顺手并掉来犯者后来扩张的国土。
+   */
+  const haltOwned = new Map<string, Uint8Array>();
+  const ownedAtHalt = (p: number, t: number): Uint8Array | null => {
+    const from = wm.iv?.haltFrom(p, t);
+    if (from === undefined) return null;
+    const key = `${p}\t${from}`;
+    let mask = haltOwned.get(key);
+    if (!mask) {
+      mask = new Uint8Array(R);
+      const log = sim.logView;
+      const own = new Int16Array(R).fill(-1);
+      for (let i = 0; i < log.size && log.year[i] <= from; i++) {
+        if (log.layer[i] === Layer.Polity) own[log.region[i]] = log.value[i];
+      }
+      for (let r = 0; r < R; r++) if (own[r] === p) mask[r] = 1;
+      haltOwned.set(key, mask);
+    }
+    return mask;
+  };
+
   // 州换了国家:记下年份;新立的国家(立国、分裂 / 复国出来的,拿到第一州时)预约第一次看邻国
   sim.onChange(Layer.Polity, (r, v, prev, cause) => {
     wm.since[r] = sim.now;
@@ -733,6 +756,7 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     const famRegions = famI !== undefined && wm.families[famI].members.has(y) ? new Set(wm.families[famI].regions) : null;
     const isFamilyClaim = (r: number) => !!famRegions && famRegions.has(r);
     const cand: [number, number, number][] = [];
+    const haltMask = ownedAtHalt(x, t);
     // 刚迁都的国家,新国都 CAPITAL_GRACE 年内攻不下(残兵收拢、新都严防):不会几年里一迁再迁
     // 讨伐民变不等(见 接口 war.revolt)
     const free = !!api.war.revolt?.(w);
@@ -750,6 +774,7 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     for (const r of pm.lands[y]) {
       if (t - wm.since[r] < hold || r === graceR || r === guardR) continue;
       if (wm.iv?.locked(r, t)) continue; // 阶段 4 干预:永久划给它的州攻不下
+      if (haltMask && !haltMask[r]) continue; // 不许扩张:只打禁令开始时自己的州
       if (guardR >= 0 && nextTo(r, guardR, Y, t)) continue;
       if (lost && !lost.has(r) && wm.prev[r] !== x && !isFamilyClaim(r)) continue;
       let att = 0;
@@ -824,7 +849,7 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
       for (let j = 0; j < extra && pm.size[w.b] > MIN_STATE + 1; j++) {
         const [r] = pickTarget(w, CEDE_I + j, w.a, w.b, t, false);
         if (r < 0 || r === capR) break;
-        take(w, w.a, w.b, r, t);
+        if (!take(w, w.a, w.b, r, t)) break;
         yielded++;
       }
       ceded += yielded;
@@ -850,9 +875,10 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
               }
             }
           }
-          for (const r of give) take(w, y, x, r, t);
-          ceded += give.length;
-          changed = give.length > 0 && X.ended === undefined;
+          let n = 0;
+          for (const r of give) if (take(w, y, x, r, t)) n++;
+          ceded += n;
+          changed = n > 0 && X.ended === undefined;
         }
       }
     }
@@ -890,6 +916,8 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
    * assault = 战役里打下来的(阶段 3 城市兴衰:城可能被洗劫、被毁,见 接口 war.onAssault;议和时割让的不算)
    */
   const take = (w: War, x: number, y: number, r: number, t: number, assault = false): boolean => {
+    const haltMask = ownedAtHalt(x, t);
+    if (haltMask && !haltMask[r]) return false; // 不许扩张:不拿禁令开始时没有的州
     const Y = pm.polities[y];
     const capital = pm.settlements[capitalAt(Y, t)].region === r;
     const city = pm.cityOf[r];
@@ -934,9 +962,10 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     return annex(w, x, y, r, t);
   };
 
-  /** y 丢了国都 r、撑不下去(surrender = 破都纳降):余下的州一并归 x,亡国 */
+  /** y 丢了国都 r、撑不下去(surrender = 破都纳降):余下的州一并归 x,亡国。不许扩张的攻方只收回禁令开始时自己的州,余下的留给 y */
   const annex = (w: War, x: number, y: number, r: number, t: number, surrender = false): boolean => {
     const X = pm.polities[x];
+    const haltMask = ownedAtHalt(x, t);
     let last = r;
     // 由近及远:先并挨着 x 国土的州,一圈圈往外(隔海的残部最后一并归 x)
     for (let any = true; pm.size[y] > 0; ) {
@@ -944,6 +973,7 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
       any = false;
       for (let q = 0; q < R; q++) {
         if (owner[q] !== y) continue;
+        if (haltMask && !haltMask[q]) continue;
         if (touch) {
           let adj = false;
           for (let k = reg.adjStart[q]; k < reg.adjStart[q + 1] && !adj; k++) adj = owner[reg.adj[k]] === x && canCross(pm, X, reg.adjKind[k], t);
@@ -955,8 +985,20 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
         last = q;
         any = true;
       }
+      if (!any) break;
     }
-    fall(w, x, y, last, t, surrender);
+    if (pm.size[y] <= 0) {
+      fall(w, x, y, last, t, surrender);
+      return true;
+    }
+    // 禁令下没并完:y 还在,丢了国都就迁都
+    if (owner[r] === x) {
+      const sid = bestCapital(pm, owner, y, t, false);
+      if (sid >= 0) {
+        moveCapital(pm, y, sid, t);
+        sim.record('capital', { a: y, region: pm.settlements[sid].region, settlement: sid, war: w.id });
+      }
+    }
     return true;
   };
 

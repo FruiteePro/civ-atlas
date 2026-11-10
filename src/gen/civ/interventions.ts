@@ -349,8 +349,16 @@ export class InterventionModel {
 
   /** 国家 p 此刻"不许扩张" */
   halted(p: number, t: number): boolean {
-    for (const v of this.haltRules) if (haltActive(v, t) && this.resolve(v.a) === p) return true;
-    return false;
+    return this.haltFrom(p, t) !== undefined;
+  }
+
+  /** 国家 p 此刻这条不许扩张是从哪一年起的(几条叠着 = 最早的那条;没有 = undefined) */
+  haltFrom(p: number, t: number): number | undefined {
+    let from: number | undefined;
+    for (const v of this.haltRules) {
+      if (haltActive(v, t) && this.resolve(v.a) === p && (from === undefined || v.from < from)) from = v.from;
+    }
+    return from;
   }
 
   /** 州 r 此刻是"永久划给"它现在的主人的(战争、分裂、复国、议和割地都拿不走) */
