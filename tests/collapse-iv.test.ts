@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_PARAMS, generateWorld } from '../src/gen/world';
-import { generateCiv } from '../src/gen/civ';
+import { generateCiv, type Civ } from '../src/gen/civ';
 import { ownersAt } from '../src/gen/civ/engine/timeline';
 import { cleanIntervention, polityKey, type Intervention } from '../src/gen/edits';
 import { fragmentModeFromOpt } from '../src/gen/civ/fragmentMode';
@@ -262,7 +262,7 @@ describe('resume rebuilds collapse families', () => {
   }, 180_000);
 
   it('boost-like intervene (b=−1, n>0, no foe) does not steal familyOf from an earlier sibling family', () => {
-    const emptyLog = { size: 0, year: [], region: [], layer: [], value: [], cause: [] };
+    const emptyLog = { size: 0, year: new Float32Array(), region: new Int32Array(), layer: new Int32Array(), value: new Int16Array(), cause: new Int32Array() };
     const civ = {
       annals: [
         { year: 100, kind: 'collapse' as const, a: 1, b: 0, war: 2 },
@@ -273,7 +273,7 @@ describe('resume rebuilds collapse families', () => {
       ],
       log: emptyLog,
       regions: { count: 0 },
-    };
+    } as unknown as Pick<Civ, 'annals' | 'log' | 'regions'>;
     const wm = { families: [], familyOf: new Map(), collapsedAt: new Map(), collapseChild: new Map(), noReclaim: new Map() } as unknown as WarModel;
     rebuildCollapseFamilies(wm, civ);
     const sib = wm.families.find((f) => f.parent === 1 && f.year === 100);
