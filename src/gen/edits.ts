@@ -646,6 +646,8 @@
  *      地形、疆域、兴亡、战争不变
  *  63:分化出来的民族仍用母族语感,但按分出方位和这一支做方言,通名、词尾和一批独有词根会偏一点;族名仍是母名加方位。
  *      地形、疆域、兴亡、战争不变
+ *  64:同一书写系统里,外族统治够久后,被统治民族的后来地名、国号、人名会按主次比例混入统治层语感(日常地名多留底层,国号都城多借上层),族和语感编号不变。
+ *      地形、疆域、兴亡、战争不变
  */
 import type { Civ, Culture, Faith, MigrationDir, Person, Place, Polity, Regions, RulerLeanings, Settlement } from './civ/types';
 import { FRAGMENT_MODE_CHOICES, type FragmentModeChoice } from './civ/fragmentMode';
@@ -662,7 +664,7 @@ import { SLUMP_CHOICES, SLUMP_DEFAULT, type Calamity } from './civ/calamity';
 import { stampCalc, type RuleSet } from './civ/ruleSet';
 
 /** 生成器版本:生成算法有改动、同种子会得到不同世界时加一(存档读档时核对);加一时在 GENERATOR_CHANGES 里补一条 */
-export const GENERATOR_VERSION = 63;
+export const GENERATOR_VERSION = 64;
 
 /**
  * 一版生成器的改动有多大(从小到大):打开旧存档、旧链接时,按跨过的几版里最大的那一种说清变了什么(savefile.ts 的 versionNote)
@@ -746,6 +748,7 @@ export const GENERATOR_CHANGES: Readonly<Record<number, { change: GeneratorChang
   61: { change: 'names' },
   62: { change: 'people' },
   63: { change: 'names' },
+  64: { change: 'names' },
 };
 
 /** 干预的种类(见文件头的表) */

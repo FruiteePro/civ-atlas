@@ -242,7 +242,7 @@ export interface OfficialsCtx {
   /** 语感 */
   styleOf: (p: Polity) => string;
   /** 带不带姓、起名 */
-  namerOf: (p: Polity) => { surnamed: boolean; surname(...k: number[]): string; given(...k: number[]): string };
+  namerOf: (p: Polity, at?: Year) => { surnamed: boolean; surname(...k: number[]): string; given(...k: number[]): string };
   /** 作者让名臣去世(干预 death):身份 m国家:第几朝:slot → 那一刻、第几条干预(people.ts);没有 = 没有 */
   kills?: ReadonlyMap<string, { t: Year; iv: number }>;
   /** 排出来的名臣记上身份(同上),people.ts 按它找回作者要让他去世的那位 */
@@ -455,7 +455,8 @@ export function buildOfficials(input: OfficialsInput, ctx: OfficialsCtx, general
         if (ended.died !== undefined) x.died = ended.died;
         x.posts = civilPosts(input.knobs.get(OFFICIALS_KNOBS), p, sys, d, ended.until ?? endYear, tops[p.id], r);
         const sur = f?.surname;
-        nameAt.set(x, (a) => (sur ?? namer.surname(ctx.tag[p.id], 3, i, d.slot, a)) + namer.given(ctx.tag[p.id], 3, i, d.slot, a));
+        const nm = ctx.namerOf(p, x.born);
+        nameAt.set(x, (a) => (sur ?? nm.surname(ctx.tag[p.id], 3, i, d.slot, a)) + nm.given(ctx.tag[p.id], 3, i, d.slot, a));
         if (f) forcedOut.set(f, x);
         else {
           const slot = d.slot;

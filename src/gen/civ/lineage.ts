@@ -80,7 +80,7 @@ export function buildLineage(
   generals: readonly Person[],
   opts: {
     tag: readonly number[];
-    namerOf: (p: Polity) => LineageNamer;
+    namerOf: (p: Polity, at?: Year) => LineageNamer;
     surnameOf: (ruler: Person) => string;
     /** 君主的诸子(royals.ts;没即位的在这里起名、算进返回的宗室,出道那一刻 = Son.debut) */
     sons?: ReadonlyMap<Person, readonly Son[]>;
@@ -316,7 +316,8 @@ export function buildLineage(
       const sur = namer.surnamed && r ? opts.surnameOf(r) : '';
       // 名字少的语感(几百个、抽出来常重复)一国用过的名字多了,24 次常常凑不出没用过的:多试几次;
       // 宗室多的国家用满了,就只求和前后 NAME_GAP 年里出生的同名人物不撞
-      const at = (a: number) => sur + namer.given(opts.tag[p.id], 2, i, a);
+      const gn = opts.namerOf(p, n.born);
+      const at = (a: number) => sur + gn.given(opts.tag[p.id], 2, i, a);
       const near = (x: string) => !!used.get(x)?.some((y) => Math.abs(y - n.born) < NAME_GAP);
       let name = '';
       for (let a = 0; a < PRINCE_NAME_TRIES && !name; a++) if (!used.has(at(a))) name = at(a);

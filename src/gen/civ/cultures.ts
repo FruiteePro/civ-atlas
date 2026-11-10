@@ -6,7 +6,7 @@
  *                  → 按世界标定"走一步要几年"(默认到第 3000 年,约 90% 的可居州有人住)
  *   installCultures 挂到 CivSim 上:民族诞生、民族到达;州归属变了就预约邻州的到达
  *   (sim.run)
- *   finishCultures  给民族配色、分语感、起族名和州名(只看各自出现以前的历史,接着往后推也不变;分化出来的沿用母族语感,地名再按这一支做方言)
+ *   finishCultures  给民族配色、分语感、起族名和州名(只看各自出现以前的历史,接着往后推也不变;分化出来的沿用母族语感,地名再按这一支做方言;同一书写系统里外族统治够久的,接触年以后的州名走接触语)
  *
  * 走几年 = 标定的年数 × 路程 × 地形系数(B) × 过界系数(A→B) × 类型修正 × 水土 × 随机抖动 ÷ 扩张性
  *   - 路程:两治所间的路程(regions.adjLen)÷ 一个标准值
@@ -24,12 +24,13 @@
 import { biomeTagged } from '../biomes';
 import type { World } from '../world';
 import { MinHeap } from '../util';
-import { AdjKind, Layer, type ChangeLog, type Civ, type CivParams, type Culture, type CultureKind, type Habitat, type NamePins, type Regions, type Year } from './types';
+import { AdjKind, Layer, type ChangeLog, type Civ, type CivParams, type Culture, type CultureKind, type Habitat, type NamePins, type Polity, type Regions, type Year } from './types';
 import { BIOME_COST, MAJOR_RIVER } from './habitat';
 import { fpow, keyed, subSeed } from './engine/rand';
 import { refCellArea, refSpacing } from './geo';
 import { quantize, type CivSim } from './engine/sim';
 import { assignStyles, lastIfPioneer, nameCultures, nameKin, nameRegions } from './naming';
+import { detectContacts } from './contact';
 import type { NameMix } from '../names';
 import { HABITABLE_SUIT, KIND_EXPANSIONISM } from './kinds';
 import { cleanFrontier, frontierFx, originRegion, terrainChanged, type Frontier, type FrontierFx, type Origins } from './frontier';
@@ -1122,7 +1123,7 @@ export function rootsAcross(owner: Int16Array, from: readonly Culture[], to: rea
  * names = 整个世界的地名风格(CivParams.names,清理过的;自动 = 不给):份数按计划中的疆域凑。
  * 返回计划中的疆域(山河湖海的地名按它的语感起,见 official.ts)
  */
-export function finishCultures(world: World, m: CultureModel, log: Readonly<ChangeLog>, pins?: NamePins, names?: NameMix): Int16Array {
+export function finishCultures(world: World, m: CultureModel, log: Readonly<ChangeLog>, pins?: NamePins, names?: NameMix, hist?: { polities: readonly Polity[]; endYear: Year }): Int16Array {
   const seed = m.seed;
   const reg = m.terrain.regions;
   const planned = plannedOwners(m);
@@ -1165,7 +1166,8 @@ export function finishCultures(world: World, m: CultureModel, log: Readonly<Chan
   nameCultures(seed, m.cultures, reg.seat);
   if (pinned) m.cultures.forEach((cu, i) => pinned[i] && (cu.name = pinned[i]!.name));
   nameKin(m.cultures, isPinned, seed, reg.seat);
-  reg.name = nameRegions(seed, m.cultures, settlers(log, reg.count), reg.seat);
+  const contacts = hist?.polities?.length ? detectContacts(m.cultures, hist.polities, log, reg.count, hist.endYear) : [];
+  reg.name = nameRegions(seed, m.cultures, settlers(log, reg.count), reg.seat, contacts);
   if (pins) pins.regionNames.forEach((x, r) => x !== undefined && r < reg.count && (reg.name![r] = x));
   return planned;
 }

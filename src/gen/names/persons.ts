@@ -8,16 +8,18 @@
  *
  * 按键取:同一个 seed + 语感 + 用途 + 键 → 同一个名字,和调用先后无关(键 = 国家的位置锚、第几位……,见 gen/civ/people.ts)。
  * 不查重:调用方自己挑(同一朝的君主不重名时换下一个键)。
+ * 接触语(createPersonNamer 的 contact):底层可先做过方言,再按约六四掺进统治层的词根、词尾和一批过渡成分;带不带姓仍跟底层。
  *
  * 人名只在编年史、面板里出现,不上地图:这个文件的字不收进地图字体的字表(见 scripts/lib/charset.ts)。
  * 纯计算,不碰 DOM;随机数来自 subSeed(seed, 'persons:风格')。
  */
-import { mulberry32, subSeed, type Rng } from '../util';
+import { keyed, mulberry32, subSeed, type Rng } from '../util';
 import { WESTERN_STYLES } from './western';
 import { transcribe, type TranscribeOptions } from './transcribe';
 import { latinBlocked, zhBlocked } from './filters';
 import { list, parts, pick, wpick, type Part, type Weighted } from './spec';
 import { preferChars, preferSlice, shiftWeights } from './dialect';
+import { mixParts, mixWeighted, type StyleContact } from './contact';
 
 export interface PersonNamer {
   readonly style: string;
@@ -381,14 +383,77 @@ function westPersonDialect(st: WesternPersonStyle, salt: number): WesternPersonS
   };
 }
 
-/** 某种语感的人名生成器(不认识的语感按"王国"风)。dialect = 分化出来的民族的方言盐,不给或 0 = 母族原样 */
-export function createPersonNamer(seed: number, styleId: string, dialect?: number): PersonNamer {
-  const base = subSeed(seed, 'persons:' + styleId);
+function mixCharPool(sub: string | undefined, sup: string | undefined, salt: number, subRatio: number, lane: number): string | undefined {
+  if (!sub && !sup) return undefined;
+  if (!sup) return sub;
+  if (!sub) return sup;
+  const a = preferChars(sub, salt, lane);
+  const b = preferChars(sup, salt, lane + 40);
+  const n = Math.max(8, [...a].length);
+  const nSub = Math.max(2, Math.round(n * subRatio));
+  const nSup = Math.max(2, Math.round(n * (1 - subRatio)));
+  const take = (s: string, k: number) => {
+    const cs = [...s];
+    return Array.from({ length: k }, (_, i) => cs[i % cs.length]).join('');
+  };
+  const trans = transitionalChars(sub, sup, salt, lane, 4);
+  return take(a, nSub) + take(b, nSup) + trans + trans;
+}
+
+function transitionalChars(sub: string, sup: string, salt: number, lane: number, n: number): string {
+  const a = [...sub];
+  const b = [...sup];
+  let s = '';
+  const seen = new Set<string>();
+  for (let i = 0; i < n * 3 && s.length < n; i++) {
+    const ch = keyed(salt, lane, i) < 0.5 ? a[Math.floor(keyed(salt, lane, i, 1) * a.length)] : b[Math.floor(keyed(salt, lane, i, 2) * b.length)];
+    if (!ch || seen.has(ch)) continue;
+    seen.add(ch);
+    s += ch;
+  }
+  return s;
+}
+
+function eastPersonContact(sub: EasternPersonStyle, sup: EasternPersonStyle, salt: number, lane = 0): EasternPersonStyle {
+  const r = 0.65;
+  return {
+    ...sub,
+    surnames: mixCharPool(sub.surnames, sup.surnames, salt, 0.7, lane) ?? sub.surnames,
+    compound: sub.compound && sup.compound ? [...preferSlice(sub.compound, salt, lane + 1), ...preferSlice(sup.compound, salt, lane + 41).slice(0, Math.max(1, Math.round(sup.compound.length * 0.3)))] : sub.compound,
+    chars: mixCharPool(sub.chars, sup.chars, salt, r, lane + 2) ?? sub.chars,
+    first: mixCharPool(sub.first, sup.first, salt, r, lane + 3) ?? sub.first,
+    single: sub.single * r + (sup.single ?? sub.single) * (1 - r),
+    third: sub.third !== undefined || sup.third !== undefined ? (sub.third ?? 0) * r + (sup.third ?? 0) * (1 - r) : sub.third,
+  };
+}
+
+function westPersonContact(sub: WesternPersonStyle, sup: WesternPersonStyle, salt: number): WesternPersonStyle {
+  const r = 0.6;
+  return {
+    stems: mixParts(sub.stems, sup.stems, salt, r, 1, true),
+    mids: mixParts(sub.mids, sup.mids, salt, 0.7, 2, false),
+    mid: sub.mid * r + sup.mid * (1 - r),
+    ends: mixWeighted(sub.ends, sup.ends, salt, r, 3, true),
+  };
+}
+
+/** 某种语感的人名生成器(不认识的语感按"王国"风)。dialect = 分化出来的民族的方言盐,不给或 0 = 母族原样;contact = 接触语 */
+export function createPersonNamer(seed: number, styleId: string, dialect?: number, contact?: StyleContact): PersonNamer {
+  const tag = contact ? `${styleId}>${contact.style}:${contact.salt}` : styleId;
+  const base = subSeed(seed, 'persons:' + tag);
   const east0 = EASTERN_PERSONS[styleId];
-  const east = east0 && dialect ? eastPersonDialect(east0, dialect) : east0;
+  let east = east0 && dialect ? eastPersonDialect(east0, dialect) : east0;
+  if (east && contact) {
+    const supE = EASTERN_PERSONS[contact.style];
+    if (supE) east = eastPersonContact(east, eastPersonDialect(supE, contact.salt, 20), contact.salt);
+  }
   if (east) {
     const surnamed = !!east.surnames;
-    const female = dialect && EASTERN_FEMALE[styleId] ? eastPersonDialect(EASTERN_FEMALE[styleId], dialect, 11) : EASTERN_FEMALE[styleId];
+    let female = dialect && EASTERN_FEMALE[styleId] ? eastPersonDialect(EASTERN_FEMALE[styleId], dialect, 11) : EASTERN_FEMALE[styleId];
+    if (female && contact) {
+      const supF = EASTERN_FEMALE[contact.style] ?? EASTERN_PERSONS[contact.style];
+      if (supF) female = eastPersonContact(female, eastPersonDialect(supF, contact.salt, 31), contact.salt, 11);
+    }
     return {
       style: styleId,
       family: 'eastern',
@@ -419,10 +484,18 @@ export function createPersonNamer(seed: number, styleId: string, dialect?: numbe
     };
   }
   const west0 = WESTERN_PERSONS[styleId] ?? WESTERN_PERSONS.kingdom;
-  const west = dialect ? westPersonDialect(west0, dialect) : west0;
+  let west = dialect ? westPersonDialect(west0, dialect) : west0;
+  if (contact) {
+    const supW = WESTERN_PERSONS[contact.style];
+    if (supW) west = westPersonContact(west, westPersonDialect(supW, contact.salt), contact.salt);
+  }
   const ws = WESTERN_STYLES.find((s) => s.id === styleId) ?? WESTERN_STYLES.find((s) => s.id === 'kingdom')!;
   const femaleEnds0 = WESTERN_FEMALE_ENDS[styleId] ?? WESTERN_FEMALE_ENDS.kingdom;
-  const femaleEnds = dialect ? shiftWeights(femaleEnds0, dialect, 7) : femaleEnds0;
+  let femaleEnds = dialect ? shiftWeights(femaleEnds0, dialect, 7) : femaleEnds0;
+  if (contact) {
+    const supFe = WESTERN_FEMALE_ENDS[contact.style] ?? WESTERN_FEMALE_ENDS.kingdom;
+    femaleEnds = mixWeighted(femaleEnds, shiftWeights(supFe, contact.salt, 17), contact.salt, 0.6, 7, true);
+  }
   return {
     style: styleId,
     family: 'western',
