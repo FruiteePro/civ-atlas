@@ -1,0 +1,100 @@
+name: 发布到自建服务器
+
+# 把 main 构建出来,rsync 到 42.192.36.156 的网站目录(/var/www/civ-atlas),打开 http://42.192.36.156/ 就能看。
+#
+# 只在 FruiteePro/civ-atlas 这个 fork 里跑:上游 guaner-334/civ-atlas 有自己的发布流程(deploy.yml / deploy-beta.yml),
+# 那两个文件都带 if: github.repository == 'guaner-334/civ-atlas',在这里不会动。
+#
+# 服务器上用的是发布专用密钥 ~/.ssh/deploy_civ_atlas,authorized_keys 里那一行限定成
+#   command="/usr/bin/rrsync -wo /var/www/civ-atlas",restrict
+# 也就是只能往网站目录传文件,不能登录、不能执行别的命令。
+#
+# 仓库里要配三个 Secret(Settings → Secrets and variables → Actions):
+# - DEPLOY_SSH_KEY:那把发布专用私钥(服务器上 ~/.ssh/deploy_civ_atlas)
+# - DEPLOY_KNOWN_HOSTS:服务器的主机指纹,known_hosts 的一行:42.192.36.156 ssh-ed25519 AAAA...
+# - DEPLOY_DEST:rsync 的目标,junpeng@42.192.36.156:(结尾的冒号表示网站的根目录)
+# 另有可选的 DEPLOY_PORT(不是 22 时才配)。
+on:
+  push:
+    branches: [main]
+    # 只改文档(*.md)的不发;网站上的使用教程 public/guide.md 是网页内容,改了照样发
+    paths:
+      - '**'
+      - '!**/*.md'
+      - 'public/guide.md'
+  workflow_dispatch:
+
+# 同一时间只发一份,后跑的排队等前一份传完
+concurrency:
+  group: deploy-vm156
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: 构建并发布
+    if: github.repository == 'FruiteePro/civ-atlas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: 生产构建
+        env:
+          # 账号那些(登录、传到账号、短链接)在这台服务器上没配后端,关着
+          VITE_ACCOUNTS: 'off'
+        run: pnpm build
+      # 记下这次发的是哪个提交(公开可见,只有这一项),方便对照页面上是不是最新
+      - name: 写 version.json
+        run: |
+          jq -n --arg commit "$GITHUB_SHA" '{commit: $commit}' > dist/version.json
+          cat dist/version.json
+      - name: 准备 SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_DEST: ${{ secrets.DEPLOY_DEST }}
+        run: |
+          if [ -z "$DEPLOY_SSH_KEY" ] || [ -z "$DEPLOY_KNOWN_HOSTS" ] || [ -z "$DEPLOY_DEST" ]; then
+            echo "没配发布用的密钥(见本文件开头),不发布" >&2
+            exit 1
+          fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+      # 先传带哈希的文件(开着的旧页面还能加载到),最后才换页面本身,避免有人拿到半新半旧的网页。
+      # 到服务器的 SSH 偶尔握手超时:每一步失败重试几次(rsync 重跑是安全的)
+      - name: 上传
+        env:
+          DEPLOY_DEST: ${{ secrets.DEPLOY_DEST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          export RSYNC_RSH="ssh -p ${DEPLOY_PORT:-22} -i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=10"
+          retry() { local n; for n in 1 2 3 4; do "$@" && return 0; echo "第 $n 次失败,10 秒后重试" >&2; sleep 10; done; return 1; }
+          retry rsync -rltz --chmod=D755,F644 --delete --exclude='/index.html' --exclude='/version.json' dist/ "$DEPLOY_DEST"
+          retry rsync -ltz --chmod=F644 dist/*.html "$DEPLOY_DEST"
+          # 页面换好了才换 version.json:中途失败的话,它还写着原来那一版
+          retry rsync -ltz --chmod=F644 dist/version.json "$DEPLOY_DEST"
+          echo "已发布 ${COMMIT::7} → http://42.192.36.156/" >> "$GITHUB_STEP_SUMMARY"
+      # 打开看看:页面和它引用的主程序都拿得到
+      - name: 检查网址能打开
+        continue-on-error: true
+        run: |
+          url="http://42.192.36.156/"
+          js=$(grep -oE '\./assets/index-[A-Za-z0-9_-]+\.js' dist/index.html | head -n1)
+          html=$(curl -fsSL --retry 3 --max-time 30 "$url?t=$(date +%s)")
+          if [ -z "$js" ] || ! printf '%s' "$html" | grep -qF "$js"; then
+            echo "$url 拿到的不是刚传上去的页面" >&2
+            exit 1
+          fi
+          type=$(curl -fsS --retry 3 --max-time 60 -o /dev/null -w '%{content_type}' "$url${js#./}")
+          echo "$url 能打开(主程序 ${js#./assets/},$type)" >> "$GITHUB_STEP_SUMMARY"
