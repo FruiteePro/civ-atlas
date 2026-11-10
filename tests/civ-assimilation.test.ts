@@ -245,7 +245,8 @@ describe('同化与迁徙', () => {
       expect(s.assimilated, tag).toBeGreaterThan(30);
       migrations += s.migrations;
       expect(s.migrated, tag).toBeGreaterThanOrEqual(s.migrations);
-      expect(s.alive, tag).toBeGreaterThanOrEqual(Math.ceil(civ.cultures.length * 0.7));
+      // GENERATOR_VERSION 60(民族更密、分化稍易)以后分支出得多,有的种子留下六成五:下限放到 0.6
+      expect(s.alive, tag).toBeGreaterThanOrEqual(Math.ceil(civ.cultures.length * 0.6));
       expect(s.alive + s.vanished, tag).toBe(civ.cultures.length);
       // GENERATOR_VERSION 16(航海时代:大国在海外拿下别族的州)以后 20 个种子 0.70–0.98(以前 0.86–0.98),seed 2024 最低;
       // GENERATOR_VERSION 46(大迁徙:迁来入主的一族在本国是少数)以后 20 个种子(1–20)0.60–0.92,seed 7 最低:下限放宽到 0.55
@@ -362,10 +363,11 @@ describe('同化与迁徙', () => {
       // GENERATOR_VERSION 56 滚雪球(破都纳降,纳降的那一仗算大事)以后大事 20 个种子 86–199 条、2024 号 140 条:上限放到 210;
       // 57(湿地)以后大事 20 个种子(1–20)84–198 条;同化与迁徙自己的大事 11–55 条(15 号 55 条、3 号 41 条),2024 号 29 条:上限放到 60;
       // 改进分裂以后 seed 3 255 条:大事上限放到 280;
-      // GENERATOR_VERSION 58 崩解平衡以后 seed 3 327 条:上限放到 400)
+      // GENERATOR_VERSION 58 崩解平衡以后 seed 3 327 条:上限放到 400;
+      // GENERATOR_VERSION 60 民族更密、分化稍易以后同化与迁徙自己的大事 seed 3 有 64 条:上限放到 80)
       expect(filterChronicle(list, { major: true }).length, `seed ${seed}`).toBeLessThanOrEqual(400);
       const mineMajor = filterChronicle(list, { major: true }).filter((e) => e.kind === 'migrate' || e.kind === 'assimilate' || e.kind === 'vanish');
-      expect(mineMajor.length, `seed ${seed}`).toBeLessThanOrEqual(60);
+      expect(mineMajor.length, `seed ${seed}`).toBeLessThanOrEqual(80);
     }
   }, 60_000);
 });

@@ -506,9 +506,10 @@ describe('地图上写族名:开关、主角和配角、一族几片', () => {
       const lead = cultureItems(at(c, { cultures: true }));
       const byText = new Map<string, LabelItem[]>();
       for (const i of lead) byText.set(i.text, [...(byText.get(i.text) ?? []), i]);
-      // 只剩一州的小族(GENERATOR_VERSION 46 种子 2024 的杜比亚族:被迁来的一族入主以后渐被同化,剩一小州)排不下族名,不算
+      // 只剩一两州的小族排不下族名,不算(GENERATOR_VERSION 46 种子 2024 的杜比亚族剩一州;
+      // GENERATOR_VERSION 60 民族更密以后 2024 号的东卢马里亚族剩两州,也排不下)
       const cu = [...ownersAt(c.civ, c.civ.endYear).culture];
-      const alive = new Set(cu.filter((k) => k >= 0 && cu.filter((x) => x === k).length >= 2));
+      const alive = new Set(cu.filter((k) => k >= 0 && cu.filter((x) => x === k).length >= 3));
       for (const k of alive) expect(byText.has(cultureLabel(c.civ.cultures[k])), cultureLabel(c.civ.cultures[k])).toBe(true);
       for (const items of byText.values()) {
         expect(items.filter((i) => i.minZoom === 1 && i.priority > 101)).toHaveLength(1);

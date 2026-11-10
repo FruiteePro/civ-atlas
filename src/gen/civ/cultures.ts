@@ -48,11 +48,11 @@ export const BIRTH_SPAN = 400;
 /** 晚出现的民族,诞生年份不晚于"别族最早能走到它发源地的年份"的这个倍数(免得刚出生就被挤得只剩一两个州) */
 const BIRTH_HEADSTART = 0.5;
 /** 自动数量:每多少个可居州一个民族,夹在 [MIN, MAX] */
-const REGIONS_PER_CULTURE = 70;
+const REGIONS_PER_CULTURE = 40;
 const MIN_CULTURES = 4;
-const MAX_CULTURES = 16;
+const MAX_CULTURES = 28;
 /** 发源地间距(州图跳数)= 这个系数 × √(可居州数 / 民族数);放不下时每轮 × 0.85 */
-const HEARTH_SPACING = 0.85;
+const HEARTH_SPACING = 0.7;
 /** 发源地只在按偏好排序的前这么多里挑 */
 const HEARTH_POOL = 0.4;
 /** 间距放宽到不足原定的这个比例时,不再加民族(至少保留 MIN_CULTURES 个) */
@@ -1047,7 +1047,7 @@ function colorDist(a: readonly number[], b: readonly number[]): number {
 
 /**
  * 配色:按发源州的治所地块从小到大依次挑(位置锚,和编号无关:改地形后别处多一个、少一个民族,远处民族的颜色尽量不变),
- * 和接壤的民族色差越大越好,和全世界已用的颜色也尽量拉开;用过的颜色尽量不再用(民族不超过 16 个时不会重复)。
+ * 和接壤的民族色差越大越好,和全世界已用的颜色也尽量拉开;用过的颜色尽量不再用(民族不超过色板种数时不会重复)。
  */
 function assignColors(cultures: Culture[], nb: Set<number>[], base: number, seat: ArrayLike<number>, fixed?: (i: number) => boolean) {
   const used = new Uint8Array(CULTURE_PALETTE.length);

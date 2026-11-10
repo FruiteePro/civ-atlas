@@ -371,7 +371,8 @@ describe('城市成长 + 国家', () => {
       // 改制以后的共和国不分档,写"某共和国"(见 civ-reform.test.ts)
       if (!p.eastern && !hasReform(p)) expect(polityName(p, civ.endYear)).toBe(p.name + POLITY_FORMS[p.lineage!][tier]);
       if (tier === 3) empires++;
-      if (p.kind === 'nomad') expect(p.lineage).toBe('khanate');
+      // 游牧立国是汗国;从别国分出的沿用母国的一系(GENERATOR_VERSION 60 以后 2024 号有游牧从王国裂出,一系是 realm)
+      if (p.kind === 'nomad' && p.parent === undefined) expect(p.lineage).toBe('khanate');
     }
     expect(empires).toBeLessThan(civ.polities.length / 2);
     expect(new Set(civ.polities.map((p) => p.name)).size).toBe(civ.polities.length);
