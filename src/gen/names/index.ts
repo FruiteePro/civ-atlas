@@ -11,7 +11,7 @@
  */
 import { mulberry32, subSeed, type Rng } from '../util';
 import { WESTERN_STYLES, westernCandidate } from './western';
-import { EASTERN_STYLES, easternCandidate } from './eastern';
+import { EASTERN_STYLES, easternCandidate, toneOf } from './eastern';
 import { latinBlocked, zhBlocked } from './filters';
 import { NAME_KINDS, ZH_LEN, type Candidate, type NameKind } from './spec';
 import type { NameMix } from './mix';
@@ -80,6 +80,15 @@ const FALLBACK_PREFIX: Array<[string, string]> = [
   ['新', 'New'], ['北', 'North'], ['南', 'South'], ['东', 'East'], ['西', 'West'], ['上', 'Upper'],
   ['下', 'Lower'], ['大', 'Great'], ['小', 'Little'], ['外', 'Outer'], ['内', 'Inner'],
 ];
+
+/** 东方风三字以上不能全仄;方位前缀可能把两字全仄名变成三字全仄,兜底时再挡一次 */
+function fallbackToneOk(zh: string, eastern: boolean): boolean {
+  if (!eastern) return true;
+  const cs = [...zh];
+  if (cs.length < 3) return true;
+  return !cs.every((c) => (toneOf(c) ?? 'p') === 'z');
+}
+
 
 /** 同 seed + styleId + 调用顺序 → 同样的名字 */
 export function createNamer(seed: number, styleId: string): Namer {
@@ -167,7 +176,7 @@ export function createNamer(seed: number, styleId: string): Namer {
       if ([...c.zh].length >= hi) continue;
       for (const [p, en] of FALLBACK_PREFIX) {
         const zh = p + c.zh;
-        if (!zhBlocked(zh)) prefixed.push({ ...c, zh, latin: c.latin && `${en} ${c.latin}`, tokens: [] });
+        if (!zhBlocked(zh) && fallbackToneOk(zh, !!east)) prefixed.push({ ...c, zh, latin: c.latin && `${en} ${c.latin}`, tokens: [] });
       }
     }
     if (i < prefixed.length) return prefixed[i];
@@ -188,7 +197,7 @@ export function createNamer(seed: number, styleId: string): Namer {
       if ([...c.zh].length >= hi) continue;
       for (const [p, en] of FALLBACK_PREFIX) {
         const zh = p + c.zh;
-        if (!used.has(zh) && !zhBlocked(zh)) return { ...c, zh, latin: c.latin && `${en} ${c.latin}`, tokens: [] };
+        if (!used.has(zh) && !zhBlocked(zh) && fallbackToneOk(zh, !!east)) return { ...c, zh, latin: c.latin && `${en} ${c.latin}`, tokens: [] };
       }
     }
     base ??= { zh: kind === 'river' ? '无名河' : '无名地', tokens: [] };

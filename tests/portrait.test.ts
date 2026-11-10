@@ -2,6 +2,7 @@
  * 人物头像(gen/portrait.ts):同一个种子同一张脸、一家人长得像、身份对得上衣服和头饰、年龄对得上胡子皱纹白发、
  * 每一层的图都在 public/portraits 里、神情按那一年的事换。女性还没有部件(给 null),她的后人长相照她原来的男名往下传。
  */
+import { NAME_STYLES } from '../src/gen/names';
 import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_PARAMS, generateWorld } from '../src/gen/world';
@@ -36,8 +37,8 @@ describe('部件表', () => {
       for (const role of ['ruler', 'general', 'minister', 'royal'] as const) expect(parts!.parts.some((p) => p.layer === 'clothes' && p.roles?.includes(role)), `${g} ${role}`).toBe(true);
     }
   });
-  it('十二种地名语感都分到了组', () => {
-    expect(Object.keys(STYLE_GROUP).sort()).toEqual(['central', 'desert', 'elven', 'frontier', 'hellenic', 'imperial', 'kingdom', 'mythic', 'nordic', 'slavic', 'steppe', 'xianxia']);
+  it('每种地名语感都分到了组', () => {
+    expect(Object.keys(STYLE_GROUP).sort()).toEqual(NAME_STYLES.map((s) => s.id).sort());
   });
 });
 

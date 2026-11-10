@@ -41,7 +41,7 @@ describe('地图文字的字体子集', () => {
     }
   });
 
-  it('地名生成器实际生成的名字(12 种语感 × 6 类 × 多个种子)都在字表里', () => {
+  it('地名生成器实际生成的名字(每种语感 × 6 类 × 多个种子)都在字表里', () => {
     const missing = new Set<string>();
     for (const st of NAME_STYLES) {
       for (const seed of [1, 7, 2024, 99, 123456]) {

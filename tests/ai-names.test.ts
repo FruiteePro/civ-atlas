@@ -74,7 +74,7 @@ afterEach(() => {
 });
 
 describe('语感说明', () => {
-  it('12 种语感和起名器一一对应(顺序、名字、说明一致);没人住的地方的语感和 places.ts 一样', () => {
+  it('语感和起名器一一对应(顺序、名字、说明一致);没人住的地方的语感和 places.ts 一样', () => {
     expect(STYLE_GUIDES.map((s) => [s.id, s.label, s.family, s.desc])).toEqual(NAME_STYLES.map((s) => [s.id, s.label, s.family, s.desc]));
     for (const s of STYLE_GUIDES) {
       expect(s.explain.length).toBeGreaterThan(30);
