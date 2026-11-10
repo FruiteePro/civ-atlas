@@ -264,9 +264,13 @@ const FIXED_PARTS: Record<string, string> = {
   steppe:
     'kara=喀拉 ak=阿克 kok=科克 sary=萨热 kyzyl=克孜勒 altan=阿勒坦 ulaan=乌兰 khokh=呼和 tsagaan=查干 khar=哈尔 shar=沙尔 temir=铁木尔 ' +
     'bayan=巴彦 mongon=孟根 tengri=腾格里 ikh=伊克 ongon=翁贡 arslan=阿尔斯兰 bori=博热 boz=博孜 tash=塔什 kum=库姆 ay=阿依 yulduz=尤勒都斯 ' +
-    'tegin=特勤 batur=巴图尔 shira=西拉 nomin=诺敏 sain=赛音 bugha=布哈 altyn=阿勒屯 erdene=额尔德尼 mergen=莫日根 khatun=可敦 khot=浩特 ' +
-    'balik=八里 kent=肯特 sumu=苏木 bulak=布拉克 bazar=巴扎 kurgan=库尔干 ordu=斡鲁朵 tag=塔格 ula=乌拉 tengis=腾吉斯 dalai=达来 gol=郭勒 ' +
-    'su=苏 muren=木伦 darya=达里雅 tal=塔拉 gobi=戈壁 dala=达拉 bulun=布伦',
+    'tegin=特勤 batur=巴图尔 shira=西拉 nomin=诺敏 sain=赛音 bugha=布哈 altyn=阿勒屯 erdene=额尔德尼 mergen=莫日根 khatun=可敦 ' +
+    'khad=哈德 chuluu=楚鲁 gal=加勒 chono=乔诺 morin=莫林 odon=奥敦 nar=纳尔 nogoon=诺贡 khuren=库林 munkh=蒙赫 ' +
+    'salkhin=萨勒 buyan=布彦 galuut=加鲁 burged=布勒 khol=霍尔 tavan=塔万 jargal=扎尔 tulga=图勒 ochir=奥奇 zayaa=扎雅 ' +
+    'narin=纳林 khishig=希格 delger=德尔格 undur=温都尔 tarkhan=塔尔汗 sharga=沙尔加 ' +
+    'khot=浩特 balik=八里 kent=肯特 sumu=苏木 bulak=布拉克 bazar=巴扎 kurgan=库尔干 ordu=斡鲁朵 nor=诺尔 khudag=呼达 otok=斡托 baishin=白申 ' +
+    'tag=塔格 ula=乌拉 daban=达班 tengis=腾吉斯 dalai=达来 gol=郭勒 su=苏 muren=木伦 darya=达里雅 us=乌斯 ' +
+    'tal=塔拉 gobi=戈壁 dala=达拉 bulun=布伦 nutag=努塔 khol=霍勒',
   elven: 'duin=杜因',
 };
 /** 各语感的固定译法:中文 → 拉丁(长的在前;同一个中文有两种写法的取第一种) */

@@ -639,6 +639,8 @@
  *      地形、疆域、兴亡、战争不变,只有一部分人物的名字变了
  *  60:民族更密、分化稍易(civ/cultures.ts、civ/assimilation.ts):自动数量约每 40 个可居州一个民族,上限 28,发源地间距略收;
  *      分化上限 20 支、机会略高,定居和立国满 400 年即可,分属别国的门槛 8 州。地形不变,历史重新推演
+ *  61:加厚已有十二种语感的词库(gen/names):通名、词根、人名表加厚,默认的地名和人名换了。
+ *      地形、历史不变
  */
 import type { Civ, Culture, Faith, MigrationDir, Person, Place, Polity, Regions, RulerLeanings, Settlement } from './civ/types';
 import { FRAGMENT_MODE_CHOICES, type FragmentModeChoice } from './civ/fragmentMode';
@@ -655,7 +657,7 @@ import { SLUMP_CHOICES, SLUMP_DEFAULT, type Calamity } from './civ/calamity';
 import { stampCalc, type RuleSet } from './civ/ruleSet';
 
 /** 生成器版本:生成算法有改动、同种子会得到不同世界时加一(存档读档时核对);加一时在 GENERATOR_CHANGES 里补一条 */
-export const GENERATOR_VERSION = 60;
+export const GENERATOR_VERSION = 61;
 
 /**
  * 一版生成器的改动有多大(从小到大):打开旧存档、旧链接时,按跨过的几版里最大的那一种说清变了什么(savefile.ts 的 versionNote)
@@ -736,6 +738,7 @@ export const GENERATOR_CHANGES: Readonly<Record<number, { change: GeneratorChang
   58: { change: 'history' },
   59: { change: 'people' },
   60: { change: 'history' },
+  61: { change: 'names' },
 };
 
 /** 干预的种类(见文件头的表) */
