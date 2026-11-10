@@ -7,6 +7,7 @@
  *   看邻国(Ev.WarCheck)每个国家立国 CHECK_FIRST 年后,每 CHECK_EVERY 年看一眼(每段里随机一个时刻)。
  *     自己没在打仗(帝国级的大国可以两线作战)、上次议和过了 REST 年,就在接壤的邻国里挑一个最"值得打"的:
  *       赔率 = WAR_ODDS × 扩张性 × 边境胜算^LOCAL_EXP × 异族 FOREIGN × 收复失地 × 小国 PREY_ODDS × 边界长短
+ *       收复失地再乘偏安因子 e^(PIANAN_K·x)(x 为开拓与好战倾向的均值:守成之君不思收复,雄主北伐;寻常之君 = 1)
  *       挑好了打谁,开不开战再乘此刻在位君主的好战倍数(rulers.ts:越好战越容易开战)
  *       国家方针(policy.ts):倍数是君主倾向加上方针的;亲国不打,仇国的赔率 × FOE_ODDS(先打它)
  *       动荡(unrest.ts):邻国大乱的格外招人(趁虚而入),自己国内乱也更想对外开战(转移矛盾;动荡到 DIVERT_U 再上调一档)
@@ -90,7 +91,7 @@ import { coldShare, coldSpellEnd, yearClimate } from '../seasons';
 import { AdjKind, Layer, type Annal, type AnnalCause, type Civ, type Polity, type Year } from './types';
 import { fexp, flog, fpow, keyed, keyed4, round24, subSeed } from './engine/rand';
 import { bookChain, LOOK_K, quantize, type CivSim } from './engine/sim';
-import { befriends, canCross, coreOf, effOf, endPolity, moveCapital, picks, policyAt, polityModelOf, powerScaleOf, regentOf, rulerOf, type PolityModel } from './polities';
+import { befriends, canCross, coreOf, effOf, endPolity, moveCapital, picks, policyAt, polityModelOf, powerScaleOf, regentOf, rulerOf, rulingLeanings, type PolityModel } from './polities';
 import { reignBorn } from './rulers';
 import { REGENTS_KNOBS } from './regents';
 import { POLICY_KNOBS } from './policy';
@@ -182,9 +183,11 @@ export const WARS_KNOBS = defineKnobs('wars', {
   /** 灭国之战:攻方国力是守方的这么多倍(原先 3 倍);战争目标翻几倍(Infinity = 不设目标) */
   CRUSH: 2.5,
   CRUSH_GOAL: Infinity,
-  /** 收复失地:邻国手里每有一州原是本国的,宣战赔率 × (1 + REVANCHE)(最多算 4 州);打仗时先打这些州 */
+  /** 收复失地:邻国手里每有一州原是本国的,宣战赔率 × (1 + REVANCHE × 偏安因子)(最多算 4 州);打仗时先打这些州 */
   REVANCHE: 0.8,
   REGAIN: 2.5,
+  /** 偏安:守成之君不思收复,雄主北伐;收复失地宣战加成再乘 e^(PIANAN_K·x),x 为开拓与好战倾向的均值((项-50)/50,−1…1);寻常之君(50/50)=1 */
+  PIANAN_K: 1.2,
   /** 阶段 4 结盟:盟国被第三国宣战时,另一方(和攻方接壤)援盟参战的机会 */
   ALLY_JOIN: 0.8,
   /** 阶段 4 不许灭:国都攻不下;国土只剩这么多州(含)以下时,一州都攻不下(保住国都一带的几州,不至于缩成孤城) */
@@ -407,6 +410,13 @@ export function collapseVigorFactor(founded: Year | undefined, isCollapseChild: 
   return vigor + (1 - vigor) * (age / years);
 }
 
+/** 偏安因子:守成之君不思收复,雄主北伐。x = 开拓与好战倾向的均值((项-50)/50,夹到 −1…1);因子 = e^(k·x)。无倾向或 k=0 时为 1 */
+export function piananAmbitionFactor(expand: number | undefined, war: number | undefined, k: number): number {
+  if (expand === undefined || war === undefined || !Number.isFinite(k) || k === 0) return 1;
+  const x = Math.max(-1, Math.min(1, ((expand - 50) / 50 + (war - 50) / 50) / 2));
+  return fexp(k * x);
+}
+
 /** 崩解家族主张强度:满额 FULL 年,之后线性降到 FADE 年为 0 */
 export function collapseClaimStrength(age: number, full: number, fade: number): number {
   if (age < 0) return 0;
@@ -542,7 +552,7 @@ export function warModelOf(sim: CivSim): WarModel | undefined {
 
 /** 登记战争的事件处理和监听(installPolities 之后调用) */
 export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarModel = newModel(pm)): WarModel {
-  const { PROJECT, KIN_ATTACK, HOME_DEF, CAPITAL_DEF, PROTECT_DEF, P_MAX, P_MIN, CAPITAL_GRACE, PROTECT_KEEP, HOLD, DEFENSE, REGAIN, RES_TARGET, MAX_CUT, MIN_STATE, CEDE_I, SURRENDER_SHARE, SURRENDER_POWER, ALLY_JOIN, TWO_FRONTS, REST, BROKE_CUT, PURSE_0, PLUNDER_FLOOR, TRUCE, NEWBORN, COLLAPSE_TRUCE, COLLAPSE_WEAK, COLLAPSE_WEAK_YEARS, COLLAPSE_VIGOR, COLLAPSE_VIGOR_YEARS, COLLAPSE_CLAIM_POWER, COLLAPSE_CLAIM_FULL, COLLAPSE_CLAIM_FADE, COLLAPSE_REUNIFY, MAX_WARS, CRUSH, WAR_ODDS, LOCAL_EXP, BORDER_FULL, FOREIGN, REVANCHE, PREY, PREY_ODDS, GRUDGE_YEARS, GRUDGE, RES_WANT, RES_MAX, RICH, DIVERT, DIVERT_U, DIVERT_STEP, CHAOS_YEARS, PREY_UNREST, PREY_CALM, PREY_HIGH, WEAK_PREY, BLIGHT_MIN, BLIGHT_PREY, BLIGHT_FULL, LORD_PREY, LORD_PREY_MAX, STAND, STAND_DAYS, STAND_SLAIN, STAND_TAKEN, WINTER_T, WINTER_ALWAYS, WINTER_JITTER, BREAK_MAX, BREAK, COUNTER, STALL, BROKE_LENGTH, BROKE_PEACE, REVOLT_LENGTH, CRUSH_GOAL, CEDE } = wm.k;
+  const { PROJECT, KIN_ATTACK, HOME_DEF, CAPITAL_DEF, PROTECT_DEF, P_MAX, P_MIN, CAPITAL_GRACE, PROTECT_KEEP, HOLD, DEFENSE, REGAIN, RES_TARGET, MAX_CUT, MIN_STATE, CEDE_I, SURRENDER_SHARE, SURRENDER_POWER, ALLY_JOIN, TWO_FRONTS, REST, BROKE_CUT, PURSE_0, PLUNDER_FLOOR, TRUCE, NEWBORN, COLLAPSE_TRUCE, COLLAPSE_WEAK, COLLAPSE_WEAK_YEARS, COLLAPSE_VIGOR, COLLAPSE_VIGOR_YEARS, COLLAPSE_CLAIM_POWER, COLLAPSE_CLAIM_FULL, COLLAPSE_CLAIM_FADE, COLLAPSE_REUNIFY, MAX_WARS, CRUSH, WAR_ODDS, LOCAL_EXP, BORDER_FULL, FOREIGN, REVANCHE, PIANAN_K, PREY, PREY_ODDS, GRUDGE_YEARS, GRUDGE, RES_WANT, RES_MAX, RICH, DIVERT, DIVERT_U, DIVERT_STEP, CHAOS_YEARS, PREY_UNREST, PREY_CALM, PREY_HIGH, WEAK_PREY, BLIGHT_MIN, BLIGHT_PREY, BLIGHT_FULL, LORD_PREY, LORD_PREY_MAX, STAND, STAND_DAYS, STAND_SLAIN, STAND_TAKEN, WINTER_T, WINTER_ALWAYS, WINTER_JITTER, BREAK_MAX, BREAK, COUNTER, STALL, BROKE_LENGTH, BROKE_PEACE, REVOLT_LENGTH, CRUSH_GOAL, CEDE } = wm.k;
   const { FOE_ODDS, FRIEND_JOIN } = pm.knobs.get(POLICY_KNOBS);
   const { ADULT } = pm.knobs.get(REGENTS_KNOBS);
   const api = civApi(sim);
@@ -1043,7 +1053,9 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
         // 家族收复:实力不到对方 COLLAPSE_CLAIM_POWER 倍则不计主张赔率
         const fi = wm.familyOf.get(p);
         if (cl > 0 && fi !== undefined && wm.families[fi].members.has(q) && pow[p] < COLLAPSE_CLAIM_POWER * pow[q]) cl = 0;
-        o *= 1 + REVANCHE * Math.min(4, cl) * weak;
+        const lean = rulingLeanings(pm, p, t);
+        const ambition = piananAmbitionFactor(lean?.expand, lean?.war, PIANAN_K);
+        o *= 1 + REVANCHE * Math.min(4, cl) * weak * ambition;
       }
       // 小国(一场仗就能吞下)格外招人
       if (pm.size[q] <= PREY) o *= PREY_ODDS;
