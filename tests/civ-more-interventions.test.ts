@@ -337,7 +337,11 @@ describe.each([7, 2024])('新干预 · seed=%i', (seed) => {
     for (const c of [base, civ]) {
       for (const p of c.people ?? []) {
         const cs = p.commands ?? [];
-        for (let i = 0; i < cs.length; i++) for (let j = i + 1; j < cs.length; j++) expect(cs[i].from < cs[j].until && cs[j].from < cs[i].until, p.name).toBe(false);
+        // 同一场仗里的后方调度(rear、起止同一年)不算同时领两场
+        for (let i = 0; i < cs.length; i++) for (let j = i + 1; j < cs.length; j++) {
+          if (cs[i].war === cs[j].war) continue;
+          expect(cs[i].from < cs[j].until && cs[j].from < cs[i].until, p.name).toBe(false);
+        }
       }
     }
   }, 240_000);
