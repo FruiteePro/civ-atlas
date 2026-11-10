@@ -72,9 +72,18 @@ describe('每个世界带一套自己的数', () => {
     const a = generateCiv(w);
     const b = generateCiv(w, { knobs: WAR2 });
     expect(print(b)).not.toBe(print(a));
-    expect(wars(b)).toBeGreaterThan(wars(a));
     expect(b.knobs).toEqual(WAR2);
     expect('knobs' in a).toBe(false);
+    // 加倍赔率会改后期地图,单一种子上战争条数偶尔反转(种子 7 上官方 257、加倍 235)。
+    // 用 1..12 这组固定种子的合计来验“仗打得更多”,避免绑在一条历史上。
+    let official = wars(a);
+    let doubled = wars(b);
+    for (const seed of [1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12]) {
+      const ww = world(seed);
+      official += wars(generateCiv(ww));
+      doubled += wars(generateCiv(ww, { knobs: WAR2 }));
+    }
+    expect(doubled).toBeGreaterThan(official);
   });
 
   it('同一套改动跑两次一模一样', () => {
