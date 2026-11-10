@@ -104,3 +104,27 @@ export function nameIf(test: NameTest, name: string, arg: string, yes: string, n
   if (name.charCodeAt(0) !== OPEN && arg.charCodeAt(0) !== OPEN) return testName(test, name, arg) ? yes : no;
   return `${IF_CHAR}${test}${ARG_CHAR}${name}${ARG_CHAR}${arg}${ARM_CHAR}${yes}${ARM_CHAR}${no}${END_CHAR}`;
 }
+
+/**
+ * 占位符历史上,真名字碰巧相同的其它名字(州、城、民族、地名、信仰)怎么对应占位符。
+ * 来历(chronicle.ts 的 introduce / firstMention)找国名时:真名字里国名和州名碰巧一样,
+ * 正文写的是州名也算写到了这个国家;换成占位符以后两串字不同,不记下就对不上。
+ * 只挂在 tokenCiv 当时那份历史上,不进存档。
+ */
+export type SameNameTable = {
+  /** 还是真名字的国家,按年份用 namesOf 算出那时的国名 */
+  polities: readonly object[];
+  /** 生成时的真名字 → 叫这个名字的州、城、民族等的占位符 */
+  tokensByName: ReadonlyMap<string, readonly string[]>;
+};
+
+const SAME_NAME_TOKENS = new WeakMap<object, SameNameTable>();
+
+export function setSameNameTokens(host: object, table: SameNameTable): void {
+  SAME_NAME_TOKENS.set(host, table);
+}
+
+export function sameNameTokens(host: object): SameNameTable | undefined {
+  return SAME_NAME_TOKENS.get(host);
+}
+

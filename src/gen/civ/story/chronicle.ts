@@ -123,7 +123,7 @@ import { bySex, childWord, heOrShe, heirWord, isFemale, khanWord, kinWord, rival
 import { eraText, monthTail, type Era } from '../../era';
 import { biomeHas } from '../../biomes';
 import { TREK_DIR_NAMES, keyCells, parsePersonKey, regionOfKey, resolveKey, resolvePersonKey, type Intervention } from '../../edits';
-import { isNameToken, nameIf, nameToken, rootShapeOf } from '../nameToken';
+import { isNameToken, nameIf, nameToken, rootShapeOf, sameNameTokens } from '../nameToken';
 import { IV_NO_WAY } from '../trekRoute';
 import { emptyPolicy, policyName, type PolicyIv } from '../policy';
 import { IV_NOT_HIM, IV_PEOPLE, IV_PROTECTED, IV_WAIT, KEEP_COURT, KEEP_REGENT } from '../rulers';
@@ -4318,7 +4318,8 @@ const NAME_REACH = 8;
 
 /**
  * 正文里写得到的、不是国家和人物的名字:民族、州、城、地名、信仰。国名碰巧是它们的一部分时,那一处写的不是这个国家
- * ("西拉瓦尼亚族"里的"拉瓦尼亚")。名字是占位符时用不着:占位符不会碰巧是别的占位符的一部分
+ * ("西拉瓦尼亚族"里的"拉瓦尼亚")。名字是占位符时用不着:占位符不会碰巧是别的占位符的一部分。
+ * 名字完全相同的(州名和国名都叫"特利斯")仍算写到了这个国家:占位符对不上,见 nameToken.ts 的 sameNameTokens
  */
 function otherNames(civ: Civ): ReadonlySet<string> {
   const out = new Set<string>();
@@ -4395,7 +4396,16 @@ function* introduce(civ: Civ, list: ChronicleEntry[], told: ReadonlyMap<Chronicl
       if (!n) {
         const p = civ.polities[id];
         // 改朝换代这一条写的是旧朝的国号("大昌享国 312 年而亡")
-        n = e.kind === 'dynasty' && id === pids[0] ? namesOf(p, y - 1 / 512) : namesOf(p, y);
+        const at = e.kind === 'dynasty' && id === pids[0] ? y - 1 / 512 : y;
+        n = namesOf(p, at);
+        // 占位符:按生成时那年的国名,把碰巧同名的州、城、民族等的占位符也算写到了这个国家(nameToken.ts 的 sameNameTokens)
+        const table = sameNameTokens(civ);
+        if (table) {
+          const orig = table.polities[id] as Polity;
+          const extra: string[] = [];
+          for (const s of namesOf(orig, at)) for (const tok of table.tokensByName.get(s) ?? []) if (!extra.includes(tok)) extra.push(tok);
+          if (extra.length) n = [...n, ...extra];
+        }
         names.set(id, n);
       }
       return n;
