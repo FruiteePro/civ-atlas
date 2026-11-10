@@ -405,8 +405,9 @@ describe('人物 · 稳定', () => {
       const f = r.parent !== undefined ? x.people![r.parent] : undefined;
       return f ? [f.role, f.name, f.born, f.died] : null;
     };
+    // 只比第 y0 年以前立国的:干预以后又新立的国家会让表更长,和下台君主无关
     const before = (x: Civ) =>
-      x.polities.map((p) =>
+      x.polities.filter((p) => p.founded < y0).map((p) =>
         rulersOf(x, p.id)
           .filter((r) => r.until !== undefined && r.until < y0)
           .map((r) => [r.name, r.born, r.from, r.until, r.fate, father(x, r)]),
