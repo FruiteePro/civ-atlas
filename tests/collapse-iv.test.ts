@@ -12,7 +12,7 @@ import { fragmentModeFromOpt } from '../src/gen/civ/fragmentMode';
 import { capitalAt } from '../src/gen/civ/growth';
 import { resumeCiv } from '../src/gen/civ/modules';
 import { polityModelOf } from '../src/gen/civ/polities';
-import { collapseTruceYears, collapseWeakFactor, collapseVigorFactor, collapseClaimStrength, warModelOf } from '../src/gen/civ/wars';
+import { WARS_KNOBS, collapseTruceYears, collapseWeakFactor, collapseVigorFactor, collapseClaimStrength, piananAmbitionFactor, warModelOf } from '../src/gen/civ/wars';
 import { newIvDoneText } from '../src/ui/newIvInfo';
 import { nameAt } from '../src/ui/Interventions';
 
@@ -166,6 +166,20 @@ describe('post-collapse parent weakness', () => {
     expect(collapseWeakFactor(1000, 1040, 0.5, 40)).toBe(1);
     expect(collapseWeakFactor(1000, 1020, 0.5, 40)).toBeCloseTo(0.75, 5);
     expect(collapseWeakFactor(undefined, 1000, 0.5, 40)).toBe(1);
+  });
+});
+
+describe('pianan ambition factor', () => {
+  it('piananAmbitionFactor: 1 at 50/50; monotone in ambition; K=0 is 1', () => {
+    expect(piananAmbitionFactor(50, 50, 1.2)).toBe(1);
+    expect(piananAmbitionFactor(0, 0, 1.2)).toBeLessThan(1);
+    expect(piananAmbitionFactor(100, 100, 1.2)).toBeGreaterThan(1);
+    expect(piananAmbitionFactor(80, 80, 1.2)).toBeGreaterThan(piananAmbitionFactor(60, 60, 1.2));
+    expect(piananAmbitionFactor(100, 0, 1.2)).toBe(1);
+    expect(piananAmbitionFactor(undefined, 100, 1.2)).toBe(1);
+    expect(piananAmbitionFactor(0, 0, 0)).toBe(1);
+    expect(piananAmbitionFactor(100, 100, 0)).toBe(1);
+    expect(WARS_KNOBS.values.PIANAN_K).toBe(1.2);
   });
 });
 
