@@ -37,7 +37,7 @@ jobs:
     name: 构建并发布
     if: github.repository == 'FruiteePro/civ-atlas'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
