@@ -635,6 +635,8 @@
  *  58:大崩解后的平衡(civ/wars.ts、civ/diplomacy.ts、civ/rulers.ts、civ/politics.ts):
  *      单次崩解休战 5–50 年;母国虚弱、继承国元气、同族收复主张、同胞优先结盟、偏安(守成之君收复加成只减不加)。
  *      地形不变,历史重新推演
+ *  59:将领名臣起名(civ/people.ts):回避国中已有君名时,第一轮 NAME_TRIES 用尽后继续往后找,不再立刻退回重名。
+ *      地形、疆域、兴亡、战争不变,只有一部分人物的名字变了
  */
 import type { Civ, Culture, Faith, MigrationDir, Person, Place, Polity, Regions, RulerLeanings, Settlement } from './civ/types';
 import { FRAGMENT_MODE_CHOICES, type FragmentModeChoice } from './civ/fragmentMode';
@@ -651,7 +653,7 @@ import { SLUMP_CHOICES, SLUMP_DEFAULT, type Calamity } from './civ/calamity';
 import { stampCalc, type RuleSet } from './civ/ruleSet';
 
 /** 生成器版本:生成算法有改动、同种子会得到不同世界时加一(存档读档时核对);加一时在 GENERATOR_CHANGES 里补一条 */
-export const GENERATOR_VERSION = 58;
+export const GENERATOR_VERSION = 59;
 
 /**
  * 一版生成器的改动有多大(从小到大):打开旧存档、旧链接时,按跨过的几版里最大的那一种说清变了什么(savefile.ts 的 versionNote)
@@ -730,6 +732,7 @@ export const GENERATOR_CHANGES: Readonly<Record<number, { change: GeneratorChang
   56: { change: 'history' },
   57: { change: 'history' },
   58: { change: 'history' },
+  59: { change: 'people' },
 };
 
 /** 干预的种类(见文件头的表) */
