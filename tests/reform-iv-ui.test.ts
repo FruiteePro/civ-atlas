@@ -16,10 +16,10 @@ import { keepWhy } from '../src/ui/keepInfo';
 import { IV_ROYAL_AGE, marryChoice, marryPartners, regentChoice } from '../src/ui/newIvInfo';
 
 /**
- * 42:军政府;21:复辟(+共和/改制前)。改进分裂以后种子 1–100 里军政府只有 42、95、96,复辟只有 21、36、62、73、80、92,两样都有的一个也没有
- * (第 57 湿地是 47、13;第 56 滚雪球是 2、3、7)
+ * 10:军政府(+共和/改制前);25:复辟(+共和)。崩解平衡以后 25 的政变段短到取不到中间年,21/42 也不再盖全;10 有军政府,25 有复辟
+ * (曾用 25+21;改进分裂以后是 42、21;第 57 湿地是 47、13;第 56 滚雪球是 2、3、7)
  */
-const SEEDS = [42, 21];
+const SEEDS = [10, 25];
 const civs = new Map<number, Civ>();
 const civOf = (seed: number) => {
   let c = civs.get(seed);
