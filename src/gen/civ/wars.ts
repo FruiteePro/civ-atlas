@@ -476,8 +476,10 @@ function isAuthorCollapseAnnal(e: { kind: string; b?: number; n?: number }): boo
 export function rebuildCollapseFamilies(wm: WarModel, civ: Pick<Civ, 'annals' | 'log' | 'regions'>): void {
   const annals = civ.annals;
   const log = civ.log;
+  // 按史事先后一遍走完(和推演里登记的先后一致):母国再次崩解时 familyOf[母国] 换成新一家,不被更早那次的切出覆盖
   for (const e of annals) {
     if (e.kind === 'collapse' && e.b !== 2) noteCollapseFamily(wm, e.a, e.year, []);
+    else if (e.kind === 'split' && e.cause === 'collapse') joinCollapseFamily(wm, e.b, e.a, e.year);
     else if (isAuthorCollapseAnnal(e)) {
       const f = noteCollapseFamily(wm, e.a, e.year, []);
       if ((e.opt ?? 0) & 4) {
@@ -487,9 +489,6 @@ export function rebuildCollapseFamilies(wm: WarModel, civ: Pick<Civ, 'annals' | 
         }
       }
     }
-  }
-  for (const e of annals) {
-    if (e.kind === 'split' && e.cause === 'collapse') joinCollapseFamily(wm, e.b, e.a, e.year);
   }
   const events: { parent: number; year: number }[] = [];
   for (const e of annals) {
