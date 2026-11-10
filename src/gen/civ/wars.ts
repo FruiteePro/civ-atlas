@@ -464,9 +464,14 @@ export function joinCollapseFamily(wm: WarModel, parent: number, child: number, 
   wm.collapseChild.set(child, year);
 }
 
-/** 作者大崩解(-8)或灭国切出继承国(-1 且记了继承国数):不是即位 / 任将等同样写 b=−1 的干预 */
-function isAuthorCollapseAnnal(e: { kind: string; b?: number; n?: number }): boolean {
-  return e.kind === 'intervene' && (e.b === -8 || (e.b === -1 && (e.n ?? 0) > 0));
+/**
+ * 作者大崩解(b=−8)或灭国切出继承国(b=−1,n=继承国数,foe=剩余无主州数)。
+ * 即位 / 任将 / 国运加成 / 停留等也写 b=−1,有的还带 n,不能只凭 n>0 判断。
+ */
+function isAuthorCollapseAnnal(e: { kind: string; a?: number; b?: number; n?: number; foe?: number }): boolean {
+  if (e.kind !== 'intervene' || (e.a ?? -1) < 0) return false;
+  if (e.b === -8) return true;
+  return e.b === -1 && (e.n ?? 0) > 0 && e.foe !== undefined;
 }
 
 /**
