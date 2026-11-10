@@ -540,7 +540,7 @@ function sampleOriginal(): { parts: SnapshotPart[]; save: SaveFile; generator: n
     const b = readFileSync(join(FIXTURE_DIR, p.file));
     return { name: p.name, bytes: p.bytes, sum: p.sum, zip: p.zip, data: b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer } as SnapshotPart;
   });
-  const save = makeSave({ ...DEFAULT_PARAMS, seed: s.seed, cells: s.cells }, { ...EMPTY_EDITS, endYear: s.endYear }, '', 'x', '2026-11-01T00:00:00.000Z');
+  const save = { ...makeSave({ ...DEFAULT_PARAMS, seed: s.seed, cells: s.cells }, { ...EMPTY_EDITS, endYear: s.endYear }, '', 'x', '2026-11-01T00:00:00.000Z'), generator: s.generator };
   return { parts, save, generator: s.generator };
 }
 
