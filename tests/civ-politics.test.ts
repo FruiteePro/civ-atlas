@@ -229,7 +229,7 @@ describe('分与合', () => {
   // 没有复国的世界前后都有(20 个里 2–3 个):单个世界的分裂 + 复国按 2 次起算,另要两个世界合计 8 次以上;复国按两个世界合计算
   // 君主有了好战倾向以后,20 个种子(1–19、2024)平均分裂 2.7 次、复国 1.4 次;分裂 + 复国最少的是种子 17(0 次)、
   // 12(1 次)、11(2 次),其余 17 个世界都 ≥ 3 次:两个世界合计从 8 次放到 6 次
-  it('默认参数 seed 7 / 2024:分裂 1–30 次、分裂 + 复国 ≥ 2 次(两个世界合计 ≥ 6)、合并 ≤ 20 次、复国 ≤ 45 次(复国、合并、主动迁都两个世界里都有);结束时在世 8–30 国;政区图成片、前线会拉锯', () => {
+  it('默认参数 seed 7 / 2024:分裂 1–60 次、分裂 + 复国 ≥ 2 次(两个世界合计 ≥ 6)、合并 ≤ 20 次、复国 ≤ 45 次(复国、合并、主动迁都两个世界里都有);结束时在世 8–30 国;政区图成片、前线会拉锯', () => {
     // 合并、主动迁都是少见的事(各个种子 0–4 次):按两个世界合计至少一次算,不要求每个世界都有
     let merges = 0;
     let moves = 0;
@@ -242,7 +242,8 @@ describe('分与合', () => {
       const tag = `seed ${seed}`;
       expect(ps.splits, tag).toBeGreaterThanOrEqual(1);
       // GENERATOR_VERSION 20(大崩解一次散出几国)以后 20 个种子分裂 3–24 次、合并 3–18 次
-      expect(ps.splits, tag).toBeLessThanOrEqual(30);
+      // GENERATOR_VERSION 58(崩解平衡)以后 seed 7 分裂 45 次:上限放到 60
+      expect(ps.splits, tag).toBeLessThanOrEqual(60);
       expect(ps.splits + ps.restorations, tag).toBeGreaterThanOrEqual(2);
       splitsAndRestorations += ps.splits + ps.restorations;
       merges += ps.merges;
