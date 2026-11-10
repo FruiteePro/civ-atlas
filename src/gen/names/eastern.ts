@@ -9,8 +9,9 @@
  * 不收"照着真实地名 / 国名 / 朝代名 / 典籍原条目挑出来的整名"。
  * 拼出来偶尔和现实重名(河东、大宁、青丘)没关系,那是巧合,不刻意引用也不刻意避开。
  */
-import type { Rng } from '../util';
-import { pick, wpick, type Candidate, type NameKind, type Weighted } from './spec';
+import { mulberry32, subSeed, type Rng } from '../util';
+import { pick, wpick, NAME_KINDS, type Candidate, type NameKind, type Weighted } from './spec';
+import { shiftWeights } from './dialect';
 
 // ---------------------------------------------------------------------------
 // 平仄(普通话:一二声为平,三四声为仄)。东方风用到的每个字都要在这里,单测会检查。
@@ -458,3 +459,55 @@ export function easternCandidate(st: EasternStyle, kind: NameKind, rng: Rng): Ca
 
 /** 单测用:所有东方风句式可能用到的字(粗略:从源码字库里收集) */
 export const EASTERN_TONES = TONE;
+
+/** 从本语感已有的字里,按盐挑一批这一支偏爱的(不另造字、也不出字库) */
+function dialectChars(st: EasternStyle, salt: number): Set<string> {
+  const rng = mulberry32(subSeed(salt, 'east-dialect-chars'));
+  const freq = new Map<string, number>();
+  for (const kind of NAME_KINDS) {
+    for (let i = 0; i < 80; i++) {
+      const c = easternCandidate(st, kind, rng);
+      if (!c) continue;
+      for (const ch of c.zh) freq.set(ch, (freq.get(ch) ?? 0) + 1);
+    }
+  }
+  const ranked = [...freq.keys()].sort((a, b) => (freq.get(b)! - freq.get(a)!) || (a < b ? -1 : 1));
+  if (!ranked.length) return new Set();
+  const off = salt % ranked.length;
+  const rot = ranked.slice(off).concat(ranked.slice(0, off));
+  return new Set(rot.slice(0, Math.max(6, Math.min(14, Math.ceil(rot.length * 0.2)))));
+}
+
+function biasPattern(pat: Pattern, prefer: ReadonlySet<string>): Pattern {
+  const score = (zh: string) => {
+    let n = 0;
+    for (const ch of zh) if (prefer.has(ch)) n++;
+    return n;
+  };
+  return (rng) => {
+    let best = pat(rng);
+    let bestScore = score(best.zh);
+    for (let i = 0; i < 5; i++) {
+      const c = pat(rng);
+      const s = score(c.zh);
+      if (s > bestScore) {
+        best = c;
+        bestScore = s;
+      }
+    }
+    return best;
+  };
+}
+
+/** 按方言盐偏一偏句式权重和用字(字仍出自己的字库,不另造字;浅拷贝,不改原来的语感表) */
+export function easternWithDialect(st: EasternStyle, salt: number): EasternStyle {
+  const prefer = dialectChars(st, salt);
+  const kinds = {} as Record<NameKind, Weighted<Pattern>[]>;
+  NAME_KINDS.forEach((kind, i) => {
+    kinds[kind] = shiftWeights(st.kinds[kind], salt, i + 1).map((p) => ({
+      item: prefer.size ? biasPattern(p.item, prefer) : p.item,
+      w: p.w,
+    }));
+  });
+  return { ...st, kinds };
+}

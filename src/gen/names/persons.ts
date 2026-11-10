@@ -17,6 +17,7 @@ import { WESTERN_STYLES } from './western';
 import { transcribe, type TranscribeOptions } from './transcribe';
 import { latinBlocked, zhBlocked } from './filters';
 import { list, parts, pick, wpick, type Part, type Weighted } from './spec';
+import { preferChars, preferSlice, shiftWeights } from './dialect';
 
 export interface PersonNamer {
   readonly style: string;
@@ -361,12 +362,33 @@ export function hasPersonStyle(styleId: string): boolean {
   return styleId in WESTERN_PERSONS || styleId in EASTERN_PERSONS;
 }
 
-/** 某种语感的人名生成器(不认识的语感按"王国"风) */
-export function createPersonNamer(seed: number, styleId: string): PersonNamer {
+function eastPersonDialect(st: EasternPersonStyle, salt: number, lane = 0): EasternPersonStyle {
+  return {
+    ...st,
+    surnames: st.surnames ? preferChars(st.surnames, salt, lane) : undefined,
+    compound: st.compound ? preferSlice(st.compound, salt, lane + 1) : undefined,
+    chars: preferChars(st.chars, salt, lane + 2),
+    first: st.first ? preferChars(st.first, salt, lane + 3) : undefined,
+  };
+}
+
+function westPersonDialect(st: WesternPersonStyle, salt: number): WesternPersonStyle {
+  return {
+    stems: preferSlice(st.stems, salt, 1),
+    mids: preferSlice(st.mids, salt, 2),
+    mid: st.mid,
+    ends: shiftWeights(st.ends, salt, 3),
+  };
+}
+
+/** 某种语感的人名生成器(不认识的语感按"王国"风)。dialect = 分化出来的民族的方言盐,不给或 0 = 母族原样 */
+export function createPersonNamer(seed: number, styleId: string, dialect?: number): PersonNamer {
   const base = subSeed(seed, 'persons:' + styleId);
-  const east = EASTERN_PERSONS[styleId];
+  const east0 = EASTERN_PERSONS[styleId];
+  const east = east0 && dialect ? eastPersonDialect(east0, dialect) : east0;
   if (east) {
     const surnamed = !!east.surnames;
+    const female = dialect && EASTERN_FEMALE[styleId] ? eastPersonDialect(EASTERN_FEMALE[styleId], dialect, 11) : EASTERN_FEMALE[styleId];
     return {
       style: styleId,
       family: 'eastern',
@@ -387,7 +409,7 @@ export function createPersonNamer(seed: number, styleId: string): PersonNamer {
       },
       femaleGiven(...key) {
         const r = keyRng(base, 2, key);
-        const st = EASTERN_FEMALE[styleId];
+        const st = female;
         for (let t = 0; t < TRIES; t++) {
           const g = easternGiven(st, r);
           if (g) return g;
@@ -396,8 +418,11 @@ export function createPersonNamer(seed: number, styleId: string): PersonNamer {
       },
     };
   }
-  const west = WESTERN_PERSONS[styleId] ?? WESTERN_PERSONS.kingdom;
+  const west0 = WESTERN_PERSONS[styleId] ?? WESTERN_PERSONS.kingdom;
+  const west = dialect ? westPersonDialect(west0, dialect) : west0;
   const ws = WESTERN_STYLES.find((s) => s.id === styleId) ?? WESTERN_STYLES.find((s) => s.id === 'kingdom')!;
+  const femaleEnds0 = WESTERN_FEMALE_ENDS[styleId] ?? WESTERN_FEMALE_ENDS.kingdom;
+  const femaleEnds = dialect ? shiftWeights(femaleEnds0, dialect, 7) : femaleEnds0;
   return {
     style: styleId,
     family: 'western',
@@ -413,10 +438,9 @@ export function createPersonNamer(seed: number, styleId: string): PersonNamer {
     },
     femaleGiven(...key) {
       const r = keyRng(base, 2, key);
-      const ends = WESTERN_FEMALE_ENDS[styleId] ?? WESTERN_FEMALE_ENDS.kingdom;
       const tr = femaleTrOf(WESTERN_PERSONS[styleId] ? styleId : 'kingdom', ws.tr);
       for (let t = 0; t < TRIES; t++) {
-        const g = westernPerson(west, tr, ws.link, r, ends);
+        const g = westernPerson(west, tr, ws.link, r, femaleEnds);
         if (g) return g;
       }
       return FALLBACK_WEST_FEMALE;

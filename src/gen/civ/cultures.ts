@@ -6,7 +6,7 @@
  *                  → 按世界标定"走一步要几年"(默认到第 3000 年,约 90% 的可居州有人住)
  *   installCultures 挂到 CivSim 上:民族诞生、民族到达;州归属变了就预约邻州的到达
  *   (sim.run)
- *   finishCultures  给民族配色、分语感、起族名和州名(只看各自出现以前的历史,接着往后推也不变)
+ *   finishCultures  给民族配色、分语感、起族名和州名(只看各自出现以前的历史,接着往后推也不变;分化出来的沿用母族语感,地名再按这一支做方言)
  *
  * 走几年 = 标定的年数 × 路程 × 地形系数(B) × 过界系数(A→B) × 类型修正 × 水土 × 随机抖动 ÷ 扩张性
  *   - 路程:两治所间的路程(regions.adjLen)÷ 一个标准值
@@ -1154,7 +1154,7 @@ export function finishCultures(world: World, m: CultureModel, log: Readonly<Chan
     assignColors(m.cultures, nb, subSeed(seed, 'civ-culture-color'), reg.seat);
     assignStyles(m.cultures, nb, m.terrain, subSeed(seed, 'civ-culture-style'), names, planned);
   }
-  // 分化出来的民族:地名语感沿用母族的(按编号 = 分化先后,母族先定好)
+  // 分化出来的民族:地名语感沿用母族的(按编号 = 分化先后,母族先定好);地名、人名再按这一支的方言起(见 naming.ts 的 cultureDialect)
   for (const cu of m.cultures) {
     if (cu.parent === undefined || isPinned(cu.id)) continue;
     const parent = m.cultures[cu.parent];

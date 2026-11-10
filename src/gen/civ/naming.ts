@@ -3,6 +3,8 @@
  *
  * - 每个民族分到一种"语感"(地名风格):看发源地的气候和民族类型,再加一点按实体取的随机;
  *   相邻的民族尽量不同,全世界也尽量不重复。
+ *   分化出来的民族沿用母族的语感 id,地名、国名、城名、人名按这一支的方言起(通名、词尾和一批独有词根会偏一点);
+ *   族名仍是母名加方位(nameKin)。
  * - 族名:用这种语感的国名去掉通名(王朝 / 国…),东方古风再去掉方位、"大"字前缀("东越" → "越")。
  *   界面上显示为"XX族"(display.ts 的 cultureLabel)。
  * - 州名:按占据它的民族的语感起名;没人住的州不起名(界面上显示"第 N 州")。
@@ -10,7 +12,7 @@
  * - 国名词根、城名:namePolities / nameSettlements,各用一套种子。
  *   起国名时顺便记下这个国家是不是东方语感(Polity.eastern):东方国家的国号走中式写法(growth.ts)。
  *
- * **名字按位置取**(阶段 4 改地形):每个实体的名字只由"种子 + 语感 + 位置锚(地块)+ 种类"决定(Namer.keyed),
+ * **名字按位置取**(阶段 4 改地形):每个实体的名字只由"种子 + 语感 + 方言 + 位置锚(地块)+ 种类"决定(Namer.keyed),
  * 和生成先后无关 —— 改地形后世界里多一个、少一个实体,别处的名字不跟着错位。位置锚:
  *   民族 = 发源州的治所地块;州 = 治所地块;国家 = 立国时国都的地块;城 = 所在地块;朝代 = 国家的锚 + 第几朝。
  *   同一个锚上有几个的(同一座城先后立了几国、故址重建的城),再按先后编"第几个"。
@@ -100,7 +102,7 @@ function autoStyles(
   const used = new Map<string, number>();
   const seat = terrain.regions.seat;
   // 按发源州的治所地块从小到大挑(和生成先后、编号无关;改地形后别处多一个、少一个民族,这里的先后照旧)。
-  // 干预立国时来落脚的新民族(pioneer)排最后:别的民族照没有它时一样挑。分化出来的民族不挑(沿用母族的,见 finishCultures)
+  // 干预立国时来落脚的新民族(pioneer)排最后:别的民族照没有它时一样挑。分化出来的民族不挑(沿用母族语感,地名再按这一支做方言,见 finishCultures)
   const order = cultures.filter((cu) => cu.parent === undefined).sort((a, b) => lastIfPioneer(a) - lastIfPioneer(b) || seat[a.hearth] - seat[b.hearth] || a.id - b.id);
   /** 已经挑好的民族(相邻的民族错开语感时,只看已经挑好的) */
   const done = new Set<number>();
@@ -207,7 +209,7 @@ function assignByMix(
   };
 
   // 先挑:住的地方大的先挑(同样大按发源州的治所地块),每个挑当下总分最好的
-  // 分化出来的民族不挑(沿用母族的,见 finishCultures)
+  // 分化出来的民族不挑(沿用母族语感,地名再按这一支做方言,见 finishCultures)
   const order = cultures
     .map((_, c) => c)
     .filter((c) => cultures[c].parent === undefined)
@@ -312,12 +314,40 @@ function firstFree(next: () => GeneratedName, taken: ReadonlySet<string>): Gener
   return g;
 }
 
-/** 每种语感一个 Namer(按需建,字库复用) */
-function namerCache(seed: number): (style: string) => Namer {
+
+/** 分化方位 → 稳定的序号(没有方位 = 5,和东西南北错开) */
+const BRANCH_CODE: Record<string, number> = { 北: 1, 南: 2, 东: 3, 西: 4 };
+
+/**
+ * 这一族的方言盐:沿母系累加(母族的方言 + 本支的方位和身份)。
+ * 同一套语感里用它偏转词库(见 names/dialect.ts);没有母族的(始祖、干预立国来落脚的开拓民族)= 0,不用方言。
+ * 只看 Culture 上已有的字段(branch、hearth、id、born),各地起名用同一个盐。
+ */
+export function cultureDialect(cu: Culture | undefined, cultures: readonly Culture[]): number {
+  if (!cu || cu.parent === undefined) return 0;
+  const line: Culture[] = [];
+  const seen = new Set<number>();
+  let x: Culture | undefined = cu;
+  while (x && x.parent !== undefined && !seen.has(x.id)) {
+    seen.add(x.id);
+    line.push(x);
+    x = cultures[x.parent];
+  }
+  let salt = 0;
+  for (const c of line.reverse()) {
+    const dir = BRANCH_CODE[c.branch ?? ''] ?? 5;
+    salt = subSeed(salt || 0x9e3779b9, `dialect:${dir}:${c.hearth}:${c.id}:${c.born}`);
+  }
+  return salt || 1;
+}
+
+/** 每种语感(+ 方言)一个 Namer(按需建,字库复用)。母族和分化出来的一支不共用同一个实例 */
+function namerCache(seed: number): (style: string, dialect?: number) => Namer {
   const namers = new Map<string, Namer>();
-  return (style: string) => {
-    let n = namers.get(style);
-    if (!n) namers.set(style, (n = createNamer(seed, style)));
+  return (style: string, dialect = 0) => {
+    const k = dialect ? `${style}#${dialect}` : style;
+    let n = namers.get(k);
+    if (!n) namers.set(k, (n = createNamer(seed, style, dialect || undefined)));
     return n;
   };
 }
@@ -370,7 +400,8 @@ export function nameRegions(seed: number, cultures: readonly Culture[], settled:
   for (let r = 0; r < R; r++) if (settled.culture[r] >= 0 && settled.culture[r] < cultures.length) peopled.push(r);
   peopled.sort((a, b) => settled.year[a] - settled.year[b] || (seat[a] ?? -1) - (seat[b] ?? -1) || a - b);
   for (const r of peopled) {
-    names[r] = firstFree(namer(cultures[settled.culture[r]].style).keyed('region', seat[r] ?? -1), used).zh;
+    const cu = cultures[settled.culture[r]];
+    names[r] = firstFree(namer(cu.style, cultureDialect(cu, cultures)).keyed('region', seat[r] ?? -1), used).zh;
     used.add(names[r]);
   }
   return names;
@@ -395,7 +426,7 @@ export function nameKin(cultures: Culture[], skip: (i: number) => boolean = () =
   /** 另起族名:按发源州治所地块 + 民族编号取候选,挑法同 nameCultures;名字里不带数字 */
   const fresh = (cu: Culture): string => {
     if (!namer) return '';
-    const next = namer(cu.style).keyed('state', seat?.[cu.hearth] ?? -1, cu.id);
+    const next = namer(cu.style, cultureDialect(cu, cultures)).keyed('state', seat?.[cu.hearth] ?? -1, cu.id);
     let pick = '';
     for (let t = 0; t < MAX_PICKS && (t < 6 || !pick); t++) {
       const g = next();
@@ -465,6 +496,7 @@ export function namePolities(seed: number, polities: Polity[], cultures: Culture
   const kin = cultures.filter((cu) => cu.parent !== undefined || (cu.pioneer !== undefined && !cu.unborn)).sort((a, b) => a.born - b.born || a.id - b.id);
   let nextKin = 0;
   const styleOf = (p: Polity) => cultures[p.culture]?.style || 'kingdom';
+  const dialectOf = (p: Polity) => cultureDialect(cultures[p.culture], cultures);
   for (const p of polities) {
     // 东方语感的国家,国号走中式写法(growth.ts 的 easternTitles)
     p.eastern = NAME_STYLES.find((s) => s.id === cultures[p.culture]?.style)?.family === 'eastern';
@@ -473,7 +505,7 @@ export function namePolities(seed: number, polities: Polity[], cultures: Culture
   }
   /** 按这个国家的键另起一个国名词根:前几个候选里第一个不超过 4 个字、没被占的;都不合适取最短的 */
   const fresh = (p: Polity): string => {
-    const next = namer(styleOf(p)).keyed('state', at[p.id].cell, at[p.id].n);
+    const next = namer(styleOf(p), dialectOf(p)).keyed('state', at[p.id].cell, at[p.id].n);
     let pick = '';
     for (let t = 0; t < MAX_PICKS && (t < 8 || !pick); t++) {
       const g = next();
@@ -499,7 +531,7 @@ export function namePolities(seed: number, polities: Polity[], cultures: Culture
     if (way && order.includes(way)) order.splice(0, 0, ...order.splice(order.indexOf(way), 1));
     return order.map((x) => x + root).find((n) => !taken.has(n) && !AWKWARD.has(n) && !(p.eastern && takenBare.has(bare(n)))) ?? '';
   };
-  const dyn = dynastyNamer(seed, places, at);
+  const dyn = dynastyNamer(seed, places, at, cultures);
   // 起名的先后:立国(国名 + 第一朝)、改朝换代(这一朝),按年份;同一刻先立国、再改朝,再按锚点地块编号
   const events: { t: Year; kind: 0 | 1; p: Polity; i: number }[] = [];
   for (const p of polities) {
@@ -580,9 +612,10 @@ export interface DynastyPlaces {
  *   还撞就按语感另起一个城名式的名字)
  * 随机数、另起的名字按"国家的位置锚 + 第几朝"取(keyed / Namer.keyed),和别的国家起名先后无关
  */
-function dynastyNamer(seed: number, { settlements, regionNames }: DynastyPlaces, at: readonly Anchor[]) {
+function dynastyNamer(seed: number, { settlements, regionNames }: DynastyPlaces, at: readonly Anchor[], cultures: Culture[]) {
   const base = subSeed(seed, 'civ-names-dynasty');
   const namer = namerCache(base);
+  const dialectOf = (p: Polity) => cultureDialect(cultures[p.culture], cultures);
   const free = (x: string, taken: Set<string>, takenBare: Set<string>) =>
     !!x && !taken.has(x) && !takenBare.has(bare(x)) && !AWKWARD.has(x);
   /** 国家 p 的第 i 朝(起完它自己的国名、它以前的历朝以后调用) */
@@ -608,7 +641,7 @@ function dynastyNamer(seed: number, { settlements, regionNames }: DynastyPlaces,
       let name = houseName(s?.name ?? '');
       if ((!name || used.has(name)) && s && regionNames?.[s.region]) name = houseName(regionNames[s.region], true);
       if (!name || used.has(name)) {
-        const next = namer(style).keyed('city', cell, n, i);
+        const next = namer(style, dialectOf(p)).keyed('city', cell, n, i);
         for (let t = 0; t < 6 && (!name || used.has(name)); t++) name = houseName(next().zh);
       }
       d.name = name || `第${i + 1}`;
@@ -639,7 +672,7 @@ function dynastyNamer(seed: number, { settlements, regionNames }: DynastyPlaces,
     }
     // 字用完了 / 别的语感:按语感起一个国名,去掉通名(两个字的优先)
     if (!name) {
-      const next = namer(style).keyed('state', cell, n, i);
+      const next = namer(style, dialectOf(p)).keyed('state', cell, n, i);
       for (let t = 0; t < 12 && !name; t++) {
         const g = next();
         const root = stripGeneric(g.zh, g.generic);
@@ -660,7 +693,7 @@ function dynastyNamer(seed: number, { settlements, regionNames }: DynastyPlaces,
       }
     }
     if (!name && late) {
-      const next = namer(style).keyed('state', cell, n, i);
+      const next = namer(style, dialectOf(p)).keyed('state', cell, n, i);
       for (let t = 0; t < LATE_TRIES && !name; t++) {
         const g = next();
         const root = stripGeneric(g.zh, g.generic);
@@ -690,22 +723,23 @@ export function nameSettlements(seed: number, settlements: Settlement[], culture
     const old = s.rebuilds !== undefined ? settlements[s.rebuilds] : undefined;
     if (old && old.culture === s.culture && old.name) s.name = old.name;
     else {
-      s.name = firstFree(namer(cultures[s.culture]?.style || 'kingdom').keyed('city', at[s.id].cell, at[s.id].n), taken).zh;
+      s.name = firstFree(namer(cultures[s.culture]?.style || 'kingdom', cultureDialect(cultures[s.culture], cultures)).keyed('city', at[s.id].cell, at[s.id].n), taken).zh;
       taken.add(s.name);
     }
   }
 }
 
 /**
- * 人名(people.ts 起君主、统帅的名字用):每种语感一个人名生成器(按需建)。
+ * 人名(people.ts 起君主、统帅的名字用):每种语感(+ 方言)一个人名生成器(按需建)。
  * 东方中式 = 姓 + 名,边塞、山海、西幻 = 名;按键取,同一个键永远是同一个名字(见 src/gen/names/persons.ts)
  */
-export function personNamers(seed: number): (style: string) => PersonNamer {
+export function personNamers(seed: number): (style: string, dialect?: number) => PersonNamer {
   const base = subSeed(seed, 'civ-names-person');
   const namers = new Map<string, PersonNamer>();
-  return (style: string) => {
-    let n = namers.get(style);
-    if (!n) namers.set(style, (n = createPersonNamer(base, style)));
+  return (style: string, dialect = 0) => {
+    const k = dialect ? `${style}#${dialect}` : style;
+    let n = namers.get(k);
+    if (!n) namers.set(k, (n = createPersonNamer(base, style, dialect || undefined)));
     return n;
   };
 }
