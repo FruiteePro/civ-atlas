@@ -425,34 +425,102 @@ export function collapseClaimStrength(age: number, full: number, fade: number): 
   return 1 - (age - full) / (fade - full);
 }
 
-/** 登记一次大崩解家族(live;resume 走 rebuildCollapseFamilies) */
+/** 按母国 + 崩解年找那一次家族(同一母国多次崩解各有一条;familyOf[母国]只记最近一次) */
+export function collapseFamilyIndex(wm: WarModel, parent: number, year: Year): number | undefined {
+  for (let i = 0; i < wm.families.length; i++) {
+    const f = wm.families[i];
+    if (f.parent === parent && Math.abs(f.year - year) < 1e-6) return i;
+  }
+  return undefined;
+}
+
+/** 登记一次大崩解家族(live;resume 走 rebuildCollapseFamilies)。同一母国同年只一条。 */
 export function noteCollapseFamily(wm: WarModel, parent: number, year: Year, regions: readonly number[]): CollapseFamily {
-  const existing = wm.familyOf.get(parent);
+  const existing = collapseFamilyIndex(wm, parent, year);
   if (existing !== undefined) {
     const f = wm.families[existing];
-    if (Math.abs(f.year - year) < 1e-6) {
-      for (const r of regions) if (!f.regions.includes(r)) f.regions.push(r);
-      return f;
-    }
+    for (const r of regions) if (!f.regions.includes(r)) f.regions.push(r);
+    return f;
   }
   const f: CollapseFamily = { parent, year, regions: [...regions], members: new Set([parent]), noReclaim: false };
-  wm.familyOf.set(parent, wm.families.length);
+  const i = wm.families.length;
   wm.families.push(f);
-  wm.collapsedAt.set(parent, year);
+  wm.familyOf.set(parent, i);
+  const prev = wm.collapsedAt.get(parent);
+  if (prev === undefined || year >= prev - 1e-9) wm.collapsedAt.set(parent, year);
   return f;
 }
 
-/** 把继承国挂进母国当次崩解的家族 */
+/** 把继承国挂进母国当次崩解的家族(按崩解年对上;对不上就新开一条,不并进上一次) */
 export function joinCollapseFamily(wm: WarModel, parent: number, child: number, year: Year): void {
-  let i = wm.familyOf.get(parent);
+  let i = collapseFamilyIndex(wm, parent, year);
   if (i === undefined) {
     noteCollapseFamily(wm, parent, year, []);
-    i = wm.familyOf.get(parent)!;
+    i = collapseFamilyIndex(wm, parent, year)!;
   }
   const f = wm.families[i];
   f.members.add(child);
   wm.familyOf.set(child, i);
   wm.collapseChild.set(child, year);
+}
+
+/** 作者大崩解(-8)或灭国切出继承国(-1 且记了继承国数):不是即位 / 任将等同样写 b=−1 的干预 */
+function isAuthorCollapseAnnal(e: { kind: string; b?: number; n?: number }): boolean {
+  return e.kind === 'intervene' && (e.b === -8 || (e.b === -1 && (e.n ?? 0) > 0));
+}
+
+/**
+ * 由史事重建崩解家族、收复休战、禁收复、母国虚弱起点(不另存档)。
+ * 同一母国多次崩解必须各成一家,不能并进第一次。
+ */
+export function rebuildCollapseFamilies(wm: WarModel, civ: Pick<Civ, 'annals' | 'log' | 'regions'>): void {
+  const annals = civ.annals;
+  const log = civ.log;
+  for (const e of annals) {
+    if (e.kind === 'collapse' && e.b !== 2) noteCollapseFamily(wm, e.a, e.year, []);
+    else if (isAuthorCollapseAnnal(e)) {
+      const f = noteCollapseFamily(wm, e.a, e.year, []);
+      if ((e.opt ?? 0) & 4) {
+        f.noReclaim = true;
+        for (const s of annals) {
+          if (s.kind === 'split' && s.cause === 'collapse' && s.b === e.a && Math.abs(s.year - e.year) < 1e-6) wm.noReclaim.set(s.a, e.a);
+        }
+      }
+    }
+  }
+  for (const e of annals) {
+    if (e.kind === 'split' && e.cause === 'collapse') joinCollapseFamily(wm, e.b, e.a, e.year);
+  }
+  const events: { parent: number; year: number }[] = [];
+  for (const e of annals) {
+    if (e.kind === 'collapse' && e.b !== 2) events.push({ parent: e.a, year: e.year });
+    else if (isAuthorCollapseAnnal(e)) events.push({ parent: e.a, year: e.year });
+  }
+  for (const ev of events) {
+    let fi = collapseFamilyIndex(wm, ev.parent, ev.year);
+    if (fi === undefined) {
+      noteCollapseFamily(wm, ev.parent, ev.year, []);
+      fi = collapseFamilyIndex(wm, ev.parent, ev.year)!;
+    }
+    const fam = wm.families[fi];
+    const cur = new Int16Array(civ.regions.count).fill(-1);
+    const terr = new Set<number>(fam.regions);
+    for (let i = 0; i < log.size; i++) {
+      if (log.layer[i] !== Layer.Polity) continue;
+      const r = log.region[i];
+      const y = log.year[i];
+      if (y < ev.year - 1e-9) {
+        cur[r] = log.value[i];
+        continue;
+      }
+      if (Math.abs(y - ev.year) < 1e-6) {
+        if (cur[r] === ev.parent) terr.add(r);
+        cur[r] = log.value[i];
+      }
+    }
+    for (let r = 0; r < cur.length; r++) if (cur[r] === ev.parent) terr.add(r);
+    fam.regions = [...terr];
+  }
 }
 
 /** 国家 p 第 k 次看邻国的时刻 */
@@ -1362,20 +1430,6 @@ export function resumeWars(sim: CivSim, world: World, civ: Civ): void {
     if (e.kind === 'war') {
       wm.wars[e.war] = { id: e.war, a: e.a, b: e.b, start: e.year, takes: [] };
       if (e.cause === 'quell' || e.cause === 'heir' || e.cause === 'trek') civil.add(e.war);
-    } else if (e.kind === 'collapse') {
-      wm.collapsedAt.set(e.a, e.year);
-    } else if (e.kind === 'split' && e.cause === 'collapse') {
-      joinCollapseFamily(wm, e.b, e.a, e.year);
-    } else if (e.kind === 'intervene' && (e.b === -8 || e.b === -1)) {
-      wm.collapsedAt.set(e.a, e.year);
-      // 作者「禁止母国收复」:同刻从该国切出的 collapse 子女永久禁收复
-      if ((e.opt ?? 0) & 4) {
-        for (const s of civ.annals) {
-          if (s.kind === 'split' && s.cause === 'collapse' && s.b === e.a && Math.abs(s.year - e.year) < 1e-6) wm.noReclaim.set(s.a, e.a);
-        }
-        const fi = wm.familyOf.get(e.a);
-        if (fi !== undefined) wm.families[fi].noReclaim = true;
-      }
     } else if (e.kind === 'conquer' && e.war >= 0) wm.wars[e.war]?.takes.push({ year: e.year, region: e.region, by: e.a });
     else if (e.kind === 'peace') {
       const w = wm.wars[e.war];
@@ -1396,39 +1450,7 @@ export function resumeWars(sim: CivSim, world: World, civ: Civ): void {
       }
     }
   }
-  // 补全各家族崩解前国土(归属日志:崩解年之前属母国的州 + 同年从母国切出的州)
-  {
-    const events: { parent: number; year: number }[] = [];
-    for (const e of civ.annals) {
-      if (e.kind === 'collapse') events.push({ parent: e.a, year: e.year });
-      else if (e.kind === 'intervene' && (e.b === -8 || e.b === -1)) events.push({ parent: e.a, year: e.year });
-    }
-    for (const ev of events) {
-      let fi = wm.familyOf.get(ev.parent);
-      if (fi === undefined) {
-        noteCollapseFamily(wm, ev.parent, ev.year, []);
-        fi = wm.familyOf.get(ev.parent)!;
-      }
-      const fam = wm.families[fi];
-      const cur = new Int16Array(civ.regions.count).fill(-1);
-      const terr = new Set<number>(fam.regions);
-      for (let i = 0; i < log.size; i++) {
-        if (log.layer[i] !== Layer.Polity) continue;
-        const r = log.region[i];
-        const y = log.year[i];
-        if (y < ev.year - 1e-9) {
-          cur[r] = log.value[i];
-          continue;
-        }
-        if (Math.abs(y - ev.year) < 1e-6) {
-          if (cur[r] === ev.parent) terr.add(r);
-          cur[r] = log.value[i];
-        }
-      }
-      for (let r = 0; r < cur.length; r++) if (cur[r] === ev.parent) terr.add(r);
-      fam.regions = [...terr];
-    }
-  }
+  rebuildCollapseFamilies(wm, civ);
   for (const w of wm.wars) if (w && w.end === undefined) wm.active.push(w);
   installWars(sim, pm, world, wm);
 
