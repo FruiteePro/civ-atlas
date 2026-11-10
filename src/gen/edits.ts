@@ -644,6 +644,8 @@
  *  62:六种新语感(天竺/波斯/南洋/萨赫勒/和风/海东;ids indic、persian、nusantara、sahel、yamato、haedong)
  *      接入起名、群落、AI 提示、界面和地图字体子集。语感对口分变了,默认的名字换了,一部分人物跟着变(女性、后妃)。
  *      地形、疆域、兴亡、战争不变
+ *  63:分化出来的民族仍用母族语感,但按分出方位和这一支做方言,通名、词尾和一批独有词根会偏一点;族名仍是母名加方位。
+ *      地形、疆域、兴亡、战争不变
  */
 import type { Civ, Culture, Faith, MigrationDir, Person, Place, Polity, Regions, RulerLeanings, Settlement } from './civ/types';
 import { FRAGMENT_MODE_CHOICES, type FragmentModeChoice } from './civ/fragmentMode';
@@ -660,7 +662,7 @@ import { SLUMP_CHOICES, SLUMP_DEFAULT, type Calamity } from './civ/calamity';
 import { stampCalc, type RuleSet } from './civ/ruleSet';
 
 /** 生成器版本:生成算法有改动、同种子会得到不同世界时加一(存档读档时核对);加一时在 GENERATOR_CHANGES 里补一条 */
-export const GENERATOR_VERSION = 62;
+export const GENERATOR_VERSION = 63;
 
 /**
  * 一版生成器的改动有多大(从小到大):打开旧存档、旧链接时,按跨过的几版里最大的那一种说清变了什么(savefile.ts 的 versionNote)
@@ -743,6 +745,7 @@ export const GENERATOR_CHANGES: Readonly<Record<number, { change: GeneratorChang
   60: { change: 'history' },
   61: { change: 'names' },
   62: { change: 'people' },
+  63: { change: 'names' },
 };
 
 /** 干预的种类(见文件头的表) */

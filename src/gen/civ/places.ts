@@ -36,6 +36,7 @@ import { MinHeap, hypot2, mulberry32, subSeed } from '../util';
 import { geometryOf, type Chart, type Geometry } from '../geometry';
 import { createNamer, NAME_STYLES, pickStyle, type GeneratedName, type NameMix, type Namer } from '../names';
 import type { Culture, Place, Regions } from './types';
+import { cultureDialect } from './naming';
 import { passSince, type PassSite } from './passSites';
 import { adjLengths, cellAreas, refCellArea, refSpacing } from './geo';
 import { keyed, round24 } from './engine/rand';
@@ -439,12 +440,12 @@ function chord(ctx: Ctx, ch: Chart, field: Float32Array, u: number, v: number, v
 // 起名
 
 interface Namers {
-  /** 这个地块按哪种语感起名 → namer + 民族编号 */
-  at: (cell: number) => { namer: Namer; culture: number; family: 'western' | 'eastern' };
+  /** 这个地块按哪种语感起名 → namer + 民族编号(+ 这一支的方言盐) */
+  at: (cell: number) => { namer: Namer; culture: number; family: 'western' | 'eastern'; dialect: number };
   /** 海名的 keyed 随机数的根 */
   seaBase: number;
-  /** 关名的 keyed 随机数用的起名器(按语感;另起一个根,不和别的地名共用候选流) */
-  passNamer: (style: string) => Namer;
+  /** 关名的 keyed 随机数用的起名器(按语感 + 方言;另起一个根,不和别的地名共用候选流) */
+  passNamer: (style: string, dialect?: number) => Namer;
   used: Set<string>;
   /** 关名另外不许用的:城名 → 最早建城的那年(别的地名照旧不看它) */
   avoid: Map<string, number>;
@@ -536,16 +537,18 @@ export function worldNameStyle(seed: number, names?: NameMix): string {
 function makeNamers(seed: number, regions: Regions, naming: PlaceNaming): Namers {
   const base = subSeed(seed, 'civ-places-names');
   const cache = new Map<string, Namer>();
-  const get = (style: string) => {
-    let nm = cache.get(style);
-    if (!nm) cache.set(style, (nm = createNamer(base, style)));
+  const get = (style: string, dialect = 0) => {
+    const k = dialect ? `${style}#${dialect}` : style;
+    let nm = cache.get(k);
+    if (!nm) cache.set(k, (nm = createNamer(base, style, dialect || undefined)));
     return nm;
   };
   const passBase = subSeed(seed, 'civ-pass-names');
   const passCache = new Map<string, Namer>();
-  const passNamer = (style: string) => {
-    let nm = passCache.get(style);
-    if (!nm) passCache.set(style, (nm = createNamer(passBase, style)));
+  const passNamer = (style: string, dialect = 0) => {
+    const k = dialect ? `${style}#${dialect}` : style;
+    let nm = passCache.get(k);
+    if (!nm) passCache.set(k, (nm = createNamer(passBase, style, dialect || undefined)));
     return nm;
   };
   const fallback = worldNameStyle(seed, naming.names);
@@ -564,7 +567,8 @@ function makeNamers(seed: number, regions: Regions, naming: PlaceNaming): Namers
           cu = c;
         }
       }
-      return { namer: get(style), culture: cu, family: family.get(style)! };
+      const dialect = cu >= 0 && cultures ? cultureDialect(cultures[cu], cultures) : 0;
+      return { namer: get(style, dialect), culture: cu, family: family.get(style)!, dialect };
     },
     seaBase: subSeed(seed, 'civ-places-sea'),
     passNamer,
@@ -626,8 +630,8 @@ const PASS_CORE_MAX = 4;
  * 专名带"之"、太长的不要;和别的地名、关画上地图以前就有的城撞了换下一个候选
  */
 function passName(ns: Namers, cell: number, since: number): { zh: string; latin?: string; culture: number } {
-  const { namer, culture, family } = ns.at(cell);
-  const next = ns.passNamer(namer.style.id).keyed('mountain', cell);
+  const { namer, culture, family, dialect } = ns.at(cell);
+  const next = ns.passNamer(namer.style.id, dialect).keyed('mountain', cell);
   const west = family === 'western';
   let last = '';
   for (let t = 0; t < MAX_PICKS; t++) {

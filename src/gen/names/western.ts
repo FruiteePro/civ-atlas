@@ -7,7 +7,8 @@
  */
 import type { Rng } from '../util';
 import { transcribe, type TranscribeOptions } from './transcribe';
-import { list, parts, pick, wpick, type Candidate, type NameKind, type Part, type Weighted } from './spec';
+import { list, parts, pick, wpick, NAME_KINDS, type Candidate, type NameKind, type Part, type Weighted } from './spec';
+import { preferSlice, rotate, shiftWeights } from './dialect';
 
 interface KindRule {
   ends: Weighted<Part>[];
@@ -515,3 +516,28 @@ export const WESTERN_STYLES: WesternStyle[] = [
     },
   },
 ];
+
+/** 按方言盐偏一偏词根、中间音节、词尾和通名(浅拷贝,不改原来的语感表) */
+export function westernWithDialect(st: WesternStyle, salt: number): WesternStyle {
+  const kinds = {} as Record<NameKind, KindRule>;
+  NAME_KINDS.forEach((kind, i) => {
+    const rule = st.kinds[kind];
+    kinds[kind] = {
+      ends: shiftWeights(rule.ends, salt, i + 3),
+      mid: rule.mid,
+      stems: rule.stems ? preferSlice(rule.stems, salt, i + 13) : undefined,
+    };
+  });
+  return {
+    ...st,
+    stems: preferSlice(st.stems, salt, 1),
+    mids: preferSlice(st.mids, salt, 2),
+    kinds,
+    epithet: st.epithet && {
+      ...st.epithet,
+      sea: rotate(st.epithet.sea, Math.floor(salt % Math.max(1, st.epithet.sea.length))),
+      mountain: rotate(st.epithet.mountain, Math.floor((salt >>> 3) % Math.max(1, st.epithet.mountain.length))),
+    },
+  };
+}
+

@@ -8,10 +8,11 @@
  * - 逐个取 name(kind):同 seed + styleId + 调用顺序 → 同样的名字,同一个 Namer 内不重名;
  * - 按键取 keyed(kind, ...key):同 seed + styleId + kind + key → 同一串候选,和调用先后无关
  *   (文明、地理实体起名用它,key = 位置锚;改地形后远处的名字不跟着错位)。
+ * 分化出来的民族仍用同一个 styleId,另传方言盐(createNamer 的 dialect):词库偏一偏,随机数的根不变。
  */
 import { mulberry32, subSeed, type Rng } from '../util';
-import { WESTERN_STYLES, westernCandidate } from './western';
-import { EASTERN_STYLES, easternCandidate, toneOf } from './eastern';
+import { WESTERN_STYLES, westernCandidate, westernWithDialect } from './western';
+import { EASTERN_STYLES, easternCandidate, easternWithDialect, toneOf } from './eastern';
 import { latinBlocked, zhBlocked } from './filters';
 import { NAME_KINDS, ZH_LEN, type Candidate, type NameKind } from './spec';
 import type { NameMix } from './mix';
@@ -90,13 +91,15 @@ function fallbackToneOk(zh: string, eastern: boolean): boolean {
 }
 
 
-/** 同 seed + styleId + 调用顺序 → 同样的名字 */
-export function createNamer(seed: number, styleId: string): Namer {
+/** 同 seed + styleId + 调用顺序 → 同样的名字。dialect = 分化出来的民族的方言盐,不给或 0 = 母族原样 */
+export function createNamer(seed: number, styleId: string, dialect?: number): Namer {
   const style = NAME_STYLES.find((s) => s.id === styleId);
   if (!style) throw new Error(`未知的地名风格 "${styleId}",可选:${NAME_STYLES.map((s) => s.id).join(', ')}`);
   const rng = mulberry32(subSeed(seed, 'names:' + styleId));
-  const west = WESTERN_STYLES.find((s) => s.id === styleId);
-  const east = EASTERN_STYLES.find((s) => s.id === styleId);
+  const west0 = WESTERN_STYLES.find((s) => s.id === styleId);
+  const east0 = EASTERN_STYLES.find((s) => s.id === styleId);
+  const west = west0 && dialect ? westernWithDialect(west0, dialect) : west0;
+  const east = east0 && dialect ? easternWithDialect(east0, dialect) : east0;
   const genWith = (kind: NameKind, r: Rng): Candidate | null => (west ? westernCandidate(west, kind, r) : easternCandidate(east!, kind, r));
   const gen = (kind: NameKind): Candidate | null => genWith(kind, rng);
   const keyBase = subSeed(seed, 'names-keyed:' + styleId);

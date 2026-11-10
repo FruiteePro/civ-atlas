@@ -49,7 +49,7 @@
 import { EXILE_TIES, type Annal, type Civ, type Person, type PersonCommand, type PersonDeed, type PersonFate, type PersonPost, type PersonRegency, type PersonSpouse, type Polity, type RulerLeanings, type RulerRise, type Year } from './types';
 import { parsePersonKey, type Intervention } from '../edits';
 import { keyed4, subSeed } from './engine/rand';
-import { personNamers } from './naming';
+import { cultureDialect, personNamers } from './naming';
 import { annexedRemnants, capitalAt, polityTierAt } from './growth';
 import { buildLineage } from './lineage';
 import { ROYALS_KNOBS, buildSons, contest, march, murderedAt, type Son } from './royals';
@@ -333,8 +333,9 @@ function peopleOnce(civ: PeopleInput, kills: Kills): { people: Person[]; ids: Ma
   civ.annals.forEach((e, i) => e.kind === 'intervene' && ivAnnal.set(e.war, i));
   /** 作者立的君主 → 立他的那一条(Crown) */
   const crownBy = new Map<Person, Crown>();
-  const namerOf = personNamers(civ.seed);
+  const namers = personNamers(civ.seed);
   const styleOf = (p: Polity) => cultures[p.culture]?.style || 'kingdom';
+  const namerOf = (p: Polity) => namers(styleOf(p), cultureDialect(cultures[p.culture], cultures));
   const rulers: Person[][] = polities.map(() => []);
   /** 作者让他去世、改过倾向的君主(一国排完再补上,见下) */
   const marks: [Person, Reign][] = [];
@@ -373,7 +374,7 @@ function peopleOnce(civ: PeopleInput, kills: Kills): { people: Person[]; ids: Ma
   for (const p of polities) {
     const f = facts[p.id];
     const R = (k: number, use: number) => keyed4(base, tag[p.id], k, use, K_RULER);
-    const namer = namerOf(styleOf(p));
+    const namer = namerOf(p);
     const segs = p.dynasties?.length ? p.dynasties : [{ year: p.founded, name: p.name, seat: p.capital }];
     const end = p.ended ?? endYear;
     const list = rulers[p.id];
@@ -406,8 +407,8 @@ function peopleOnce(civ: PeopleInput, kills: Kills): { people: Person[]; ids: Ma
       if (namer.surnamed) {
         const prev = surname;
         surname = '';
-        if (heirOf && namerOf(styleOf(fallen!)).surnamed) surname = splitSurname(heirOf.name);
-        if (sire && namerOf(styleOf(polities[sire.polity])).surnamed) surname = splitSurname(sire.name);
+        if (heirOf && namerOf(fallen!).surnamed) surname = splitSurname(heirOf.name);
+        if (sire && namerOf(polities[sire.polity]).surnamed) surname = splitSurname(sire.name);
         if (house !== undefined) surname = surnames[p.id][house] ?? '';
         // 迎回的旧王室照它原来的姓(和上一段撞了也不换)
         for (let t = 0; !surname || (house === undefined && surname === prev && t < 20); t++) surname = namer.surname(tag[p.id], 0, i, t);
@@ -663,7 +664,7 @@ function peopleOnce(civ: PeopleInput, kills: Kills): { people: Person[]; ids: Ma
     const kill = kills.get(id);
     if (kill && kill.t < life) life = kill.t;
     const careerEnd = Math.min(life, q(born + lerp(RETIRE, G(U_RETIRE))));
-    const namer = namerOf(styleOf(polities[pid]));
+    const namer = namerOf(polities[pid]);
     const person: Person = { id: -1, role: 'general', polity: pid, name: '', born };
     ids.set(person, id);
     genIdx.set(person, gi);
@@ -1018,7 +1019,7 @@ function peopleOnce(civ: PeopleInput, kills: Kills): { people: Person[]; ids: Ma
   const husbandOf = new Map<Person, Person>();
   /** 太后是嫁来的宗室女的:娶她的人(照旧是男的,她才是人物) */
   const dowagerGrooms = new Set<Person>();
-  const wctx0 = { knobs, seed: civ.seed, polities, tag, styleOf, namerOf: (p: Polity) => namerOf(styleOf(p)), rbase: base, reignOf, sons: sonsOf, usurped: new Map<Person, Person>(), retitle: () => {} };
+  const wctx0 = { knobs, seed: civ.seed, polities, tag, styleOf, namerOf, rbase: base, reignOf, sons: sonsOf, usurped: new Map<Person, Person>(), retitle: () => {} };
   // 出道时认不出男女的(继位的君主要按世系认先君是父亲还是兄弟):先照君主连一遍世系(只为在这里认男女,连出来的不留;
   // 没即位的宗室换成副本,免得这里起的名字留在他们身上),照 pickWomen 同一个判法认。是女的同样不安排太后 ——
   // 不然推到幼主即位以前她是女君,推过了这一刻她又被改成男的(接着推改了过去)
@@ -1033,7 +1034,7 @@ function peopleOnce(civ: PeopleInput, kills: Kills): { people: Person[]; ids: Ma
       return { ...x, p };
     };
     const sons = new Map([...sonsOf].map(([k, ss]) => [k, ss.map(copy)]));
-    const { parentOf } = buildLineage(polities, rulers, [], { tag, namerOf: (p) => namerOf(styleOf(p)), surnameOf: (r) => splitSurname(r.name), sons, maxAge: MAX_AGE });
+    const { parentOf } = buildLineage(polities, rulers, [], { tag, namerOf, surnameOf: (r) => splitSurname(r.name), sons, maxAge: MAX_AGE });
     return (early = { parentOf, orig, women: pickWomen(rulers.flat(), wctx0, new Set(), (x) => parentOf.get(x)) });
   };
   /** 幼主的父亲 H(出道时认不出的)是不是女的:没即位的宗室出道时就认得出;继位的君主照先连的世系认 */
@@ -1073,7 +1074,7 @@ function peopleOnce(civ: PeopleInput, kills: Kills): { people: Person[]; ids: Ma
     // 原定要篡位的(推到她篡位以前也是这一位):东方的姓照新朝的姓(和名臣篡位一样);篡了位就和新朝的第一位并成一人(下面)
     const died = consortDeath(CR, t0, g.start, K_DOWAGER, g.born, Math.max(g.stop + 1, g.start + 2));
     const x: Person = { id: -1, role: 'consort', polity: pid, name: '', female: true, born: g.born, died, dynasty: g.dyn };
-    const namer = namerOf(styleOf(P));
+    const namer = namerOf(P);
     if (namer.surnamed) {
       const prev = surnames[pid][g.dyn] ?? '';
       dowagerSur.set(x, g.outcome === 'usurp' ? otherSurname((t) => namer.surname(tag[pid], 0, g.dyn + 1, t), prev) : otherSurname((t) => namer.surname(t0, K_DOWAGER, Math.round(g.start * 256), U_SURNAME + t), prev));
@@ -1093,7 +1094,7 @@ function peopleOnce(civ: PeopleInput, kills: Kills): { people: Person[]; ids: Ma
     }),
     HEIR.general,
   );
-  for (const [x, f] of houseG) if (namerOf(styleOf(polities[x.polity])).surnamed) genName.set(x, withParentSurname(genName.get(x)!, f, splitSurname));
+  for (const [x, f] of houseG) if (namerOf(polities[x.polity]).surnamed) genName.set(x, withParentSurname(genName.get(x)!, f, splitSurname));
 
   // ---- 名臣(编号排在宗室后面,君主、将领、宗室的编号不变),顺带给将领填籍贯、号、官职(officials.ts)----
   // 掌实权的名臣、大臣(大将专权没有合适的将领的,也由一位大臣顶上):专门起一位,生年照推演里的;篡位的照新朝的姓起名
@@ -1108,7 +1109,7 @@ function peopleOnce(civ: PeopleInput, kills: Kills): { people: Person[]; ids: Ma
     const f: ForcedRegent = { dyn: g.dyn, year: g.start, born: g.born, stay: g.stop, kind: g.kind === 'minister' ? 'regent' : 'power', who: N };
     if (s.until !== undefined) f.until = s.until;
     if (s.end === 'purged' || s.end === 'died') f.fate = s.end;
-    const namer = namerOf(styleOf(P));
+    const namer = namerOf(P);
     if (g.outcome === 'usurp' && namer.surnamed) {
       // 他篡位以后新朝的姓(和下面排君主时一样:换一个和这一朝不同的姓)
       const prev = surnames[pid][g.dyn] ?? '';
@@ -1124,7 +1125,7 @@ function peopleOnce(civ: PeopleInput, kills: Kills): { people: Person[]; ids: Ma
   const { ministers, fixups, nameAt, finish, regents: forcedPeople, houses: houseM } = civ.log
     ? buildOfficials(
         { knobs, seed: civ.seed, endYear, polities, settlements, annals: civ.annals, upheavals: civ.upheavals, log: civ.log, regionCount: civ.regionCount ?? 0 },
-        { tag, rulers, styleOf, namerOf: (p) => namerOf(styleOf(p)), kills, ids, regents: forcedRegs, homes: dowagerHomes, houses: houseG },
+        { tag, rulers, styleOf, namerOf, kills, ids, regents: forcedRegs, homes: dowagerHomes, houses: houseG },
         generals,
       )
     : { ministers: [], fixups: [], nameAt: new Map<Person, (a: number) => string>(), finish: () => {}, regents: new Map<ForcedRegent, Person>(), houses: new Map<Person, Person>() };
@@ -1158,7 +1159,7 @@ function peopleOnce(civ: PeopleInput, kills: Kills): { people: Person[]; ids: Ma
   }
 
   // ---- 世系:谁是谁的父亲,补上没即位的宗室(不和本国的君主、将领、名臣重名)----
-  const { princes, parentOf, debut, descent } = buildLineage(polities, rulers, [...generals, ...ministers], { tag, namerOf: (p) => namerOf(styleOf(p)), surnameOf: (r) => splitSurname(r.name), sons: sonsOf, maxAge: MAX_AGE });
+  const { princes, parentOf, debut, descent } = buildLineage(polities, rulers, [...generals, ...ministers], { tag, namerOf, surnameOf: (r) => splitSurname(r.name), sons: sonsOf, maxAge: MAX_AGE });
   // 据地争位的宗室和他立的国的开国之君并成一人:名字、父亲、早先领的兵都是做宗室时的(推到那一刻以前,他已经以宗室的身份在了)
   const merged = new Map<Person, Person>();
   // 摄政篡位的叔父同样并成一人(在本国,同一朝接着即位)
@@ -1438,7 +1439,7 @@ function peopleOnce(civ: PeopleInput, kills: Kills): { people: Person[]; ids: Ma
   houses.sort((a, b) => debutOf(a[0]) - debutOf(b[0]));
   for (const [x, f] of houses) {
     parentOf.set(x, f);
-    if (!namerOf(styleOf(polities[x.polity])).surnamed) continue;
+    if (!namerOf(polities[x.polity]).surnamed) continue;
     const sur = splitSurname(f.name);
     const own = splitSurname(x.name);
     if (own !== sur) x.name = sur + x.name.slice(own.length);
@@ -1486,7 +1487,7 @@ function peopleOnce(civ: PeopleInput, kills: Kills): { people: Person[]; ids: Ma
     polities,
     tag,
     styleOf,
-    namerOf: (p: Polity) => namerOf(styleOf(p)),
+    namerOf,
     rbase: base,
     reignOf,
     sons: sonsOf,
@@ -1522,7 +1523,7 @@ function peopleOnce(civ: PeopleInput, kills: Kills): { people: Person[]; ids: Ma
     if (consortNames.has(b)) continue;
     const F = brideFatherOf(m);
     const Q = polities[m.b];
-    consortNames.set(b, { sur: F && F.author === undefined && Q && namerOf(styleOf(Q)).surnamed ? splitSurname(F.name) : '', kind: K_BRIDE });
+    consortNames.set(b, { sur: F && F.author === undefined && Q && namerOf(Q).surnamed ? splitSurname(F.name) : '', kind: K_BRIDE });
     all.push({ x: b, T: m.t, r: 4, pid: m.b, k: all.length });
   }
   for (const [s, D] of dowagerOf) {
@@ -1558,7 +1559,7 @@ function peopleOnce(civ: PeopleInput, kills: Kills): { people: Person[]; ids: Ma
     if (!groom) continue;
     const father = brideFatherOf(m);
     const Q = polities[m.b];
-    const name = father && father.author === undefined && Q && namerOf(styleOf(Q)).surnamed ? `${splitSurname(father.name)}氏` : '';
+    const name = father && father.author === undefined && Q && namerOf(Q).surnamed ? `${splitSurname(father.name)}氏` : '';
     const sp: PersonSpouse = { polity: m.b, father: father?.id ?? -1, name, year: m.t, annal: m.annal };
     if (m.war >= 0) sp.peace = m.war;
     const b = brideOfMatch.get(m);

@@ -34,7 +34,7 @@ import { polityModelOf, type PolityModel } from './polities';
 import { AdjKind, Layer } from './types';
 import { ownersAt, type Owners } from './engine/timeline';
 import { capitalAt, populationAt } from './growth';
-import { personNamers } from './naming';
+import { cultureDialect, personNamers } from './naming';
 import { keyed, subSeed } from '../util';
 import type { CivModule } from './modules';
 
@@ -576,7 +576,7 @@ export class FaithSim {
         f.name = `${nm.cu.name}${folkSuffix(eastern(nm.cu))}`;
         f.culture = nm.cu.id;
       } else if (nm.kind === 'great') {
-        const namer = namers(nm.cu.style);
+        const namer = namers(nm.cu.style, cultureDialect(nm.cu, civ.cultures));
         const given = namer.given(nm.cell, 77);
         if (namer.family === 'eastern') {
           const tail = f.form === '修行' ? '宗' : f.form === '哲理' ? '道' : '教';
