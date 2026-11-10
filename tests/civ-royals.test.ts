@@ -210,8 +210,11 @@ describe.each([7, 2024])('据地争位 · seed=%i', (seed) => {
       if (F.parent !== undefined) {
         sons++;
         const R = P[F.parent];
-        expect(R.polity).toBe(e.b);
-        expect(R.until).toBe(e.year);
+        // 先君之子:父亲是那一刻下台的旧国君主。父亲是没即位的宗室(第 58 版 seed 7 第 1967 年景冥月之父景霁是宗室,挂在新国名下)不按旧国君主来比
+        if (R.role === 'ruler') {
+          expect(R.polity).toBe(e.b);
+          expect(R.until).toBe(e.year);
+        }
         expect(e.year - F.born).toBeGreaterThanOrEqual(20);
         // 立国以前替父亲出征时,称呼照父亲那国("大昌皇子李昭",不写后来自立的国号)
         for (const c of F.commands ?? []) {
