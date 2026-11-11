@@ -94,6 +94,15 @@ export function assignStyles(
  */
 export const lastIfPioneer = (cu: Culture): number => (cu.pioneer === undefined && cu.parent === undefined ? 0 : 1);
 
+/** 始祖民族的语感预览(和自动分语感同一套,邻族加成按空的算):推演里混合民族只用来判断书写系统是否相同 */
+export function previewFounderStyles(
+  cultures: Culture[],
+  terrain: { temp: Float32Array; regions: { biome: Uint8Array; seat: ArrayLike<number> } },
+  base: number,
+): string[] {
+  return autoStyles(cultures, cultures.map(() => new Set()), terrain, base);
+}
+
 /** 自动的挑法(见 assignStyles):返回每个民族挑到的语感,不写进 culture */
 function autoStyles(
   cultures: Culture[],
@@ -441,7 +450,9 @@ export function nameKin(cultures: Culture[], skip: (i: number) => boolean = () =
   /** 另起族名:按发源州治所地块 + 民族编号取候选,挑法同 nameCultures;名字里不带数字 */
   const fresh = (cu: Culture): string => {
     if (!namer) return '';
-    const next = namer(cu.style, cultureDialect(cu, cultures)).keyed('state', seat?.[cu.hearth] ?? -1, cu.id);
+    const other = cu.mix !== undefined ? cultures[cu.mix] : undefined;
+    const contact = other?.style && other.style !== cu.style ? { style: other.style, salt: contactSalt(cu, other.style) } : undefined;
+    const next = namer(cu.style, cultureDialect(cu, cultures), contact).keyed('state', seat?.[cu.hearth] ?? -1, cu.id);
     let pick = '';
     for (let t = 0; t < MAX_PICKS && (t < 6 || !pick); t++) {
       const g = next();
@@ -458,6 +469,12 @@ export function nameKin(cultures: Culture[], skip: (i: number) => boolean = () =
   for (const cu of cultures) {
     if (cu.parent === undefined || skip(cu.id)) continue;
     const parent = cultures[cu.parent];
+    // 混合民族另起族名,不用母名加方位
+    if (cu.mix !== undefined) {
+      cu.name = fresh(cu) || `${parent.name}${cultures[cu.mix]?.name || cu.id + 1}`;
+      taken.add(cu.name);
+      continue;
+    }
     const line = [parent];
     while (line[line.length - 1].parent !== undefined) line.push(cultures[line[line.length - 1].parent!]);
     const root = line[line.length - 1];

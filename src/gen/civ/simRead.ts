@@ -96,6 +96,8 @@ export interface SimCulture {
   born: number;
   ended?: number;
   parent?: number;
+  /** 混合民族的第二支来源;普通分化不给 */
+  mix?: number;
 }
 
 export interface SimFaith {
@@ -244,6 +246,7 @@ export function simRead(sim: CivSim): SimRead | null {
         const info: SimCulture = { id: c.id, kind: c.kind, hearth: c.hearth, born: c.born };
         if (c.ended !== undefined) info.ended = c.ended;
         if (c.parent !== undefined) info.parent = c.parent;
+        if (c.mix !== undefined) info.mix = c.mix;
         return info;
       });
     },

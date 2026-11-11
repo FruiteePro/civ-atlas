@@ -218,12 +218,12 @@ export const ANNAL_KINDS: Readonly<Record<AnnalKind, AnnalKindInfo>> = {
     war: '−1',
   },
   diverge: {
-    desc: '民族分化:一支分出来渐成一族(assimilation.ts;分出去的几州同一刻改换民族,日志原因 Ev.Diverge)',
+    desc: '民族分化:一支分出来渐成一族(assimilation.ts;分出去的几州同一刻改换民族,日志原因 Ev.Diverge)。混合民族也记这一条,a = 新民族,b = 人多的那一支,n = 另一支(Culture.mix)',
     a: '**民族**:新民族',
-    b: '**民族**:母族',
+    b: '**民族**:母族(混合民族 = 人多的那一支)',
     region: '新民族的发源州',
     settlement: '−1',
-    war: '**国家**(借用这一列):分属不同国家而分化时,统治那几州的国家;隔山隔海而分化 = −1',
+    war: '**国家**(借用这一列):分属不同国家而分化时,统治那几州的国家;隔山隔海而分化 = −1;混合民族 = 混居的那一国',
   },
   famine: {
     desc: '饥荒(unrest.ts):一国治下同一年景里闹饥荒的几州(各城的折损见 Settlement.sacks 里 cause = famine 的那一条)',

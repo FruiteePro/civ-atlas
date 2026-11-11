@@ -30,7 +30,7 @@ import { fpow, keyed, subSeed } from './engine/rand';
 import { refCellArea, refSpacing } from './geo';
 import { quantize, type CivSim } from './engine/sim';
 import { assignStyles, lastIfPioneer, nameCultures, nameKin, nameRegions } from './naming';
-import { detectContacts } from './contact';
+import { detectContacts, withHybridContacts } from './contact';
 import type { NameMix } from '../names';
 import { HABITABLE_SUIT, KIND_EXPANSIONISM } from './kinds';
 import { cleanFrontier, frontierFx, originRegion, terrainChanged, type Frontier, type FrontierFx, type Origins } from './frontier';
@@ -1166,7 +1166,7 @@ export function finishCultures(world: World, m: CultureModel, log: Readonly<Chan
   nameCultures(seed, m.cultures, reg.seat);
   if (pinned) m.cultures.forEach((cu, i) => pinned[i] && (cu.name = pinned[i]!.name));
   nameKin(m.cultures, isPinned, seed, reg.seat);
-  const contacts = hist?.polities?.length ? detectContacts(m.cultures, hist.polities, log, reg.count, hist.endYear) : [];
+  const contacts = withHybridContacts(hist?.polities?.length ? detectContacts(m.cultures, hist.polities, log, reg.count, hist.endYear) : [], m.cultures);
   reg.name = nameRegions(seed, m.cultures, settlers(log, reg.count), reg.seat, contacts);
   if (pins) pins.regionNames.forEach((x, r) => x !== undefined && r < reg.count && (reg.name![r] = x));
   return planned;

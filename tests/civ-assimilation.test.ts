@@ -223,7 +223,7 @@ describe('同化与迁徙', () => {
     }
   });
 
-  it('默认参数 seed 7 / 2024:4%~三成的有人州改换过民族;同化、迁徙都有;民族有减少但留下大多数;大国治下的统治民族占比上升', () => {
+  it('默认参数 seed 7 / 2024:4%~六成的有人州改换过民族;同化、迁徙都有;民族有减少但留下大多数;大国治下的统治民族占比上升', () => {
     // GENERATOR_VERSION 4(地形像一颗星球:高原多、岛多)以后同化少了一些:改换过民族的州 7.6%~14.7%(以前 15%~22%),
     // seed 7 只有 1 波迁徙(以前 6~8 波)。下限按新世界放宽。
     // GENERATOR_VERSION 7(洋流改了气候,历史重排)以后 seed 7 改换过民族的州 5.4%、同化 41 州、没有迁徙。
@@ -241,7 +241,8 @@ describe('同化与迁徙', () => {
       expect(s.changedShare, tag).toBeGreaterThanOrEqual(0.04);
       // GENERATOR_VERSION 15(民族分化:分出去的州也算改换过民族)以后 20 个种子 10%–39%:上限放宽到 0.45;
       // GENERATOR_VERSION 47(季节进推演)以后 20 个种子 19%–46%,2024 号 45.6%:上限放到 0.5
-      expect(s.changedShare, tag).toBeLessThanOrEqual(0.5);
+      // GENERATOR_VERSION 65(反向同化略松、偶有混合民族)以后 seed 7 改换过民族的州 53.8%:上限放到 0.6
+      expect(s.changedShare, tag).toBeLessThanOrEqual(0.6);
       expect(s.assimilated, tag).toBeGreaterThan(30);
       migrations += s.migrations;
       expect(s.migrated, tag).toBeGreaterThanOrEqual(s.migrations);

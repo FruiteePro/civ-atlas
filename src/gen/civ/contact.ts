@@ -42,6 +42,19 @@ export function contactAt(contacts: readonly CultureContact[], cultureId: number
   return c && year >= c.year ? c : undefined;
 }
 
+/** 混合民族从诞生起就按接触语混入另一支的语感;已有接触语的不覆盖 */
+export function withHybridContacts(contacts: CultureContact[], cultures: readonly Culture[]): CultureContact[] {
+  const fused = new Set(contacts.map((c) => c.culture));
+  for (const cu of cultures) {
+    if (cu.mix === undefined || fused.has(cu.id)) continue;
+    const other = cultures[cu.mix];
+    if (!other?.style || other.style === cu.style) continue;
+    contacts.push({ culture: cu.id, style: other.style, year: cu.born });
+    fused.add(cu.id);
+  }
+  return contacts;
+}
+
 /** 当时占着的州数够不够得上门槛 */
 export function contactSizeGate(ruled: number, total: number): boolean {
   if (ruled >= CONTACT_MIN_REGIONS) return true;

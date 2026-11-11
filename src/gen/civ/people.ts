@@ -50,7 +50,7 @@ import { EXILE_TIES, type Annal, type Civ, type Person, type PersonCommand, type
 import { parsePersonKey, type Intervention } from '../edits';
 import { keyed4, subSeed } from './engine/rand';
 import { cultureDialect, namingContact, personNamers } from './naming';
-import { detectContacts } from './contact';
+import { detectContacts, withHybridContacts } from './contact';
 import { annexedRemnants, capitalAt, polityTierAt } from './growth';
 import { buildLineage } from './lineage';
 import { ROYALS_KNOBS, buildSons, contest, march, murderedAt, type Son } from './royals';
@@ -336,7 +336,7 @@ function peopleOnce(civ: PeopleInput, kills: Kills): { people: Person[]; ids: Ma
   const crownBy = new Map<Person, Crown>();
   const namers = personNamers(civ.seed);
   const styleOf = (p: Polity) => cultures[p.culture]?.style || 'kingdom';
-  const contacts = civ.log && civ.regionCount ? detectContacts(cultures, polities, civ.log, civ.regionCount, endYear) : [];
+  const contacts = withHybridContacts(civ.log && civ.regionCount ? detectContacts(cultures, polities, civ.log, civ.regionCount, endYear) : [], cultures);
   const namerOf = (p: Polity, at?: Year) => namers(styleOf(p), cultureDialect(cultures[p.culture], cultures), namingContact(cultures[p.culture], contacts, at ?? -Infinity));
   const rulers: Person[][] = polities.map(() => []);
   /** 作者让他去世、改过倾向的君主(一国排完再补上,见下) */

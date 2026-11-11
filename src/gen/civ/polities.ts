@@ -42,7 +42,7 @@ import { KIND_EXPANSIONISM } from './kinds';
 import { OwnerReplay, REF_YEAR, cultureModelOf, cultureTerrain, ownersNear, type CultureModel, type CultureTerrain } from './cultures';
 import { RESHAPE_RAMP, SETTLEMENT_RANKS, capacityAt, capitalAt, portAt, portSince, tierOf, yearReaching, yearReachingPop } from './growth';
 import { namePolities, nameSettlements, type RestoreDirection } from './naming';
-import { detectContacts } from './contact';
+import { detectContacts, withHybridContacts } from './contact';
 import type { RouteCity } from './routes';
 import type { InterventionModel } from './interventions';
 import type { Intervention } from '../edits';
@@ -1726,7 +1726,7 @@ const COLOR_NEAR_HOPS = 5;
 export function finishPolities(world: World, m: PolityModel, log: Readonly<ChangeLog>, pins?: NamePins, authored?: ReadonlyMap<number, string>, endYear?: Year): void {
   const seed = m.seed;
   const reg = m.terrain.regions;
-  const contacts = endYear !== undefined ? detectContacts(m.cultures, m.polities, log, reg.count, endYear) : [];
+  const contacts = withHybridContacts(endYear !== undefined ? detectContacts(m.cultures, m.polities, log, reg.count, endYear) : [], m.cultures);
   const nb = m.polities.map(() => new Set<number>());
   const replay = new OwnerReplay(log, Layer.Polity, reg.count);
   for (const p of m.polities) {

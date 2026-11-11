@@ -121,6 +121,11 @@ export interface Culture {
   parent?: number;
   /** 分出去的那几州在母族本土的哪个方位(族名"北某某"用) */
   branch?: MigrationDir;
+  /**
+   * 长期混居后融合成的新民族(assimilation.ts):第二支来源民族。parent 是人数较多的那一支(底层),
+   * mix 是另一支;族名另起,地名、人名按接触语那样混两支的语感。普通分化不给
+   */
+  mix?: number;
 }
 
 /** 迁徙的方位 */

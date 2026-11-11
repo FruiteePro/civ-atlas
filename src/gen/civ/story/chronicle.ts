@@ -171,6 +171,8 @@ export const ASSIM_MINOR = 3;
 export const MIGRATE_MAJOR = 5;
 /** 大迁徙迁来立的国,统治民族一段里被同化了这么多州以上是大事 */
 export const TREK_ASSIM_MAJOR = 5;
+/** 寻常反向同化:改换这么多州以上是大事(比正向的 ASSIM_MAJOR 低,免得写不进编年史) */
+export const REVERSE_ASSIM_MAJOR = 5;
 
 /**
  * 纪事的种类:史事的种类,加上按人物排出来的君主继位(reign,不是史事,见 reignEntries)、
@@ -2073,11 +2075,15 @@ function simpleEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
     }
     case 'diverge': {
       // 民族分化:"居兰族的一支在瑞州一带渐成一族,称北居兰族" / "大昌治下的居兰人与本族日渐疏远,自成北居兰族"
+      // 混合民族:"大昌境内的居兰人与霜澜人长期共处,渐成一族,称某某族"
       const r = regionName(civ, e.region);
+      const mix = civ.cultures[e.a]?.mix;
       const t =
-        e.war >= 0
-          ? `${pn(civ, e.war, y)}治下的${folk(civ, e.b)}与本族日渐疏远,自成${cn(civ, e.a)}`
-          : `${cn(civ, e.b)}的一支${r ? `在${r}一带` : ''}渐成一族,称${cn(civ, e.a)}`;
+        mix !== undefined
+          ? `${e.war >= 0 ? pn(civ, e.war, y) + '境内的' : ''}${folk(civ, e.b)}与${folk(civ, mix)}长期共处,渐成一族,称${cn(civ, e.a)}`
+          : e.war >= 0
+            ? `${pn(civ, e.war, y)}治下的${folk(civ, e.b)}与本族日渐疏远,自成${cn(civ, e.a)}`
+            : `${cn(civ, e.b)}的一支${r ? `在${r}一带` : ''}渐成一族,称${cn(civ, e.a)}`;
       return { ...base(e, id, t, 2, e.war >= 0 ? [e.war] : [], [e.region]), settlement: -1 };
     }
     case 'assimilate':
@@ -4155,7 +4161,8 @@ function assimEntries(ctx: Ctx, groups: Map<string, number[]>, out: ChronicleEnt
       else if (P && P.culture === first.b) text = `${pn(civ, first.war, first.year)}的${folk(civ, first.b)}渐染${cultureOf(civ, first.a)?.name ?? '异族'}俗,${where}渐为${folk(civ, first.a)}`;
       else if (P) text = `${pn(civ, first.war, first.year)}治下,${where}的${folk(civ, first.b)}渐为${folk(civ, first.a)}`;
       else text = `${where}的${folk(civ, first.b)}渐为${folk(civ, first.a)}`;
-      const importance: Importance = regions.length >= (trek ? TREK_ASSIM_MAJOR : ASSIM_MAJOR) ? 3 : regions.length >= ASSIM_MINOR ? 2 : 1;
+      const reverse = !!P && P.culture === first.b;
+      const importance: Importance = regions.length >= (trek ? TREK_ASSIM_MAJOR : reverse ? REVERSE_ASSIM_MAJOR : ASSIM_MAJOR) ? 3 : regions.length >= ASSIM_MINOR ? 2 : 1;
       const kids = group.map((i) => assimChild(civ, A[i], i));
       out.push({
         id: group[0],

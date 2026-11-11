@@ -20,7 +20,7 @@
  *              × 地形(草原荒漠上的游牧民族、高山上的高原民族、林中的山林民族、小岛上的海洋民族难同化;游牧国家难同化农耕地区)
  *              × 原民族越大越难、越小越快(√(SIZE_REF ÷ 州数),夹在 [SIZE_MIN, SIZE_MAX])
  *      统治民族在本国人口占比不到 REVERSE_SHARE、另有一族占到 REVERSE_MAJ 时反过来:统治民族的州被那一族同化
- *      (入主的少数民族渐为多数民族所化),速率另乘 REVERSE_K。默认参数下很少见:战争打下的异族国土很少多过本族。
+ *      (入主的少数民族渐为多数民族所化),速率另乘 REVERSE_K。门槛按 REVERSE_SHARE / REVERSE_MAJ,比迁徙立国那一档(TREK_*)紧,但比旧的 35%/50% 稍松,免得几乎从不发生;改换仍走史事 assimilate(编年史写成"渐染某俗")。
  *      大迁徙迁来立的国(Polity.trek)门槛低、速率快:统治民族不到 TREK_SHARE、另有一族到 TREK_MAJ,速率再乘 TREK_K,统治满 MIN_RULE 年就是满速。
  *      同一次看里先定好哪些州改换,再一起改:同化一次最多往外推一圈,前线齐整。
  *
@@ -36,6 +36,10 @@
  *      片里每州都改换民族满 HOLD 年(不闪烁),本土分出它以后还剩 DIV_MIN_POL 州以上;隔山隔海的先分,同一类里挑最大的一片,有 DIV_P 的机会分化:这几州同一刻改换成新民族(cultures.ts 的 addCulture;parent = 母族,branch = 在母族本土的哪个方位,
  *      类型、扩张性沿用母族),记一条 diverge。一个民族一次看最多分出一支;整个世界最多分出 DIV_MAX 支。
  *      新民族的族名用母族的名字加方位("北某某"),地名语感沿用母族的(naming.ts)。
+ *   看混合:同一次看分化的末了,一国之内两支同一书写系统的民族已经混居满 HYBRID_AGE 年、各有 HYBRID_MIN 州以上,
+ *      且接壤处够一块,有 HYBRID_P 的机会融成一个新民族(addCulture:parent = 人多的那支,mix = 另一支)。
+ *      只改接壤那一小片(HYBRID_PATCH 到 HYBRID_PATCH_MAX 州),记一条 diverge。一个世界最多 HYBRID_MAX 支,比普通分化稀。
+ *      族名另起,后来的地名、人名按接触语那样混两支的语感。书写系统按始祖语感的预览判断(和自动分语感同一套)。
  *   不闪烁:一州改换民族(含最初定居)后 HOLD 年内不再改换。
  *   民族消亡:一个民族的州全没了,记 Culture.ended 和一条 vanish;消亡前预约的到达作废(见 cultures.ts)。
  *   州名、城名、城镇的民族(Settlement.culture = 建城时的民族)都不改:地名留着旧民族的语感。
@@ -57,6 +61,9 @@ import { addCulture, cultureModelOf } from './cultures';
 import { polityModelOf, type PolityModel } from './polities';
 import { warModelOf, type WarModel } from './wars';
 import { capitalAt } from './growth';
+import { previewFounderStyles } from './naming';
+import { NAME_STYLES } from '../names';
+
 import type { CivModule } from './modules';
 import { Ev } from './events';
 import { defineKnobs } from './engine/knobs';
@@ -83,10 +90,13 @@ export const ASSIMILATION_KNOBS = defineKnobs('assimilation', {
   SIZE_REF: 25,
   SIZE_MIN: 0.4,
   SIZE_MAX: 2,
-  /** 反向同化:统治民族占本国人口不到 REVERSE_SHARE、另有一族到 REVERSE_MAJ;速率乘 REVERSE_K */
-  REVERSE_SHARE: 0.35,
-  REVERSE_MAJ: 0.5,
-  REVERSE_K: 0.8,
+  /**
+   * 反向同化:统治民族占本国人口不到 REVERSE_SHARE、另有一族到 REVERSE_MAJ;速率乘 REVERSE_K。
+   * 略松于最初的 0.35 / 0.5 / 0.8:少数统治仍要明显少于当地大族,但不再几乎碰不上门槛;速率仍远低于迁徙立国的 TREK_K
+   */
+  REVERSE_SHARE: 0.42,
+  REVERSE_MAJ: 0.4,
+  REVERSE_K: 1.6,
   /**
    * 大迁徙迁来立的国(Polity.trek,migration.ts):统治民族在本国占不到 TREK_SHARE(少数)、另有一族到 TREK_MAJ 就反过来被同化,
    * 速率再乘 TREK_K —— 入主中原的一支两三百年里多半渐染当地之俗(北魏、诺曼人、保加尔人那样),国还在、国号不变
@@ -121,6 +131,16 @@ export const ASSIMILATION_KNOBS = defineKnobs('assimilation', {
   DIV_RULE: 400,
   DIV_P: 0.18,
   DIV_MAX: 20,
+  /**
+   * 混合民族:两国源族在同一国混居满 HYBRID_AGE 年、各有至少 HYBRID_MIN 州才可能融合;
+   * 每次机会 HYBRID_P(低于分化的 DIV_P),新民族占地 HYBRID_PATCH–HYBRID_PATCH_MAX 州,全世界最多 HYBRID_MAX 支
+   */
+  HYBRID_AGE: 500,
+  HYBRID_MIN: 5,
+  HYBRID_P: 0.05,
+  HYBRID_PATCH: 4,
+  HYBRID_PATCH_MAX: 8,
+  HYBRID_MAX: 2,
   /** 随征服而来的移民(游牧国家):每州的机会、林地打折、一次最多几州 */
   SETTLE_P: 0.45,
   SETTLE_FOREST: 0.3,
@@ -155,6 +175,7 @@ const U_ENCLAVE_T = 5;
 const U_ENCLAVE = 6;
 const U_DIVERGE_T = 7;
 const U_DIVERGE = 8;
+const U_HYBRID = 9;
 
 /** 按 Biome 下标查的群落集合(哪些群落算哪一类见地貌表的标签):游牧之地(草原、荒漠)、开阔干地(再加稀树草原)、林地(密林、湿地) */
 const STEPPE_DESERT = biomeTagged('nomad');
@@ -179,7 +200,7 @@ export interface AssimModel {
 }
 
 function newModel(pm: PolityModel, wm: WarModel, cultures: Culture[], world: World): AssimModel {
-  const { DIV_MAX } = pm.knobs.get(ASSIMILATION_KNOBS);
+  const { DIV_MAX, HYBRID_MAX } = pm.knobs.get(ASSIMILATION_KNOBS);
   const reg = pm.terrain.regions;
   const R = reg.count;
   return {
@@ -189,8 +210,8 @@ function newModel(pm: PolityModel, wm: WarModel, cultures: Culture[], world: Wor
     base: subSeed(pm.seed, 'civ-assim'),
     geo: geometryOf(world.mesh),
     since: new Float64Array(R).fill(-Infinity),
-    // 推演中还会分化出新民族(最多 DIV_MAX 支):留出位置
-    count: new Int32Array(cultures.length + DIV_MAX),
+    // 推演中还会分化、融合出新民族:留出位置
+    count: new Int32Array(cultures.length + DIV_MAX + HYBRID_MAX),
   };
 }
 
@@ -235,13 +256,24 @@ export function installAssimilation(sim: CivSim, pm: PolityModel, world: World):
 }
 
 function hook(sim: CivSim, am: AssimModel): void {
-  const { HOLD, SETTLE_P, SETTLE_FOREST, SETTLE_MAX, TO_EMPTY, TO_TRIBAL, TO_KIN_STATE, CROSS, FLIGHT_REACH, RESIST_STEPPE, HIGH_ELEV, RESIST_HIGH, RESIST_FOREST, RESIST_ISLAND, SIZE_MAX, SIZE_MIN, SIZE_REF, DIV_MAX, TREK_SHARE, TREK_MAJ, REVERSE_SHARE, REVERSE_MAJ, REVERSE_K, TREK_K, STRONG_SHARE, MIN_RULE, CAPITAL_KIN, REACH, NOMAD_FARMLAND, FULL_RULE, RATE, FLIGHT_ODDS, FLIGHT_NOMAD, FLIGHT_FALL, FLIGHT_MAX, FLIGHT_RATIO, ENCLAVE_HOLD, STRAIT_BORDER, ENCLAVE_F, ENCLAVE_RATE, DIV_MIN_GEO, DIV_MIN_POL, DIV_AGE_GEO, DIV_AGE, DIV_RULE, DIV_SETTLED_GEO, DIV_SETTLED, DIV_P } = am.pm.knobs.get(ASSIMILATION_KNOBS);
+  const { HOLD, SETTLE_P, SETTLE_FOREST, SETTLE_MAX, TO_EMPTY, TO_TRIBAL, TO_KIN_STATE, CROSS, FLIGHT_REACH, RESIST_STEPPE, HIGH_ELEV, RESIST_HIGH, RESIST_FOREST, RESIST_ISLAND, SIZE_MAX, SIZE_MIN, SIZE_REF, DIV_MAX, HYBRID_AGE, HYBRID_MIN, HYBRID_P, HYBRID_PATCH, HYBRID_PATCH_MAX, HYBRID_MAX, TREK_SHARE, TREK_MAJ, REVERSE_SHARE, REVERSE_MAJ, REVERSE_K, TREK_K, STRONG_SHARE, MIN_RULE, CAPITAL_KIN, REACH, NOMAD_FARMLAND, FULL_RULE, RATE, FLIGHT_ODDS, FLIGHT_NOMAD, FLIGHT_FALL, FLIGHT_MAX, FLIGHT_RATIO, ENCLAVE_HOLD, STRAIT_BORDER, ENCLAVE_F, ENCLAVE_RATE, DIV_MIN_GEO, DIV_MIN_POL, DIV_AGE_GEO, DIV_AGE, DIV_RULE, DIV_SETTLED_GEO, DIV_SETTLED, DIV_P } = am.pm.knobs.get(ASSIMILATION_KNOBS);
   models.set(sim, am);
   const { pm, wm, cultures, since, count } = am;
   const T = pm.terrain;
   const reg = T.regions;
   const R = T.R;
   const culture = sim.owners[Layer.Culture];
+  const founderStyle = previewFounderStyles(cultures, T, subSeed(pm.seed, 'civ-culture-style'));
+  const familyOf = (c: number): string | undefined => {
+    let x = cultures[c];
+    if (!x) return undefined;
+    const seen = new Set<number>();
+    while (x.parent !== undefined && !seen.has(x.id)) {
+      seen.add(x.id);
+      x = cultures[x.parent];
+    }
+    return NAME_STYLES.find((st) => st.id === founderStyle[x.id])?.family;
+  };
   const owner = sim.owners[Layer.Polity];
 
   // 民族层:记下每州最近一次改换民族的年份、各民族的州数
@@ -396,7 +428,7 @@ function hook(sim: CivSim, am: AssimModel): void {
   };
 
   // ---- ③ 同化 ----
-  const weight = new Float64Array(cultures.length + DIV_MAX);
+  const weight = new Float64Array(cultures.length + DIV_MAX + HYBRID_MAX);
   const assimilate = (P: Polity, k: number, t: number, span: number) => {
     const mine = pm.lands[P.id];
     if (!mine.length) return;
@@ -445,8 +477,8 @@ function hook(sim: CivSim, am: AssimModel): void {
       let e = ease(c, g, r);
       const bi = reg.biome[r];
       if (!reverse && nomadRuler && !ARID[bi]) e *= NOMAD_FARMLAND;
-      // 迁来立的国反被同化:统治满 MIN_RULE 年就是满速(不等到 FULL_RULE)
-      const ramp = reverse && trek ? 1 : Math.min(1, (rule - MIN_RULE) / (FULL_RULE - MIN_RULE));
+      // 迁来立的国反被同化:统治满 MIN_RULE 年就是满速;寻常反向同化也比正向更快满速(六成时间)
+      const ramp = reverse && trek ? 1 : Math.min(1, (rule - MIN_RULE) / ((FULL_RULE - MIN_RULE) * (reverse ? 0.6 : 1)));
       const rate0 = RATE * ramp * f * near * strength * e;
       const rate = rateIn ? rate0 * rateIn[r] : rate0;
       const p = 1 - fexp(-rate * span);
@@ -487,7 +519,7 @@ function hook(sim: CivSim, am: AssimModel): void {
   });
 
   // ---- 看孤地:部落地带里被别族团团围住的州 ----
-  const around = new Float64Array(cultures.length + DIV_MAX);
+  const around = new Float64Array(cultures.length + DIV_MAX + HYBRID_MAX);
   sim.on(Ev.EnclaveCheck, (k, _b, t) => {
     sim.schedule(enclaveTime(am, k + 1), Ev.EnclaveCheck, k + 1, 0);
     const span = t - (k > 0 ? quantize(enclaveTime(am, k - 1)) : 0);
@@ -558,8 +590,11 @@ function hook(sim: CivSim, am: AssimModel): void {
   sim.on(Ev.DivergeCheck, (k, _b, t) => {
     sim.schedule(divergeTime(am, k + 1), Ev.DivergeCheck, k + 1, 0);
     let made = 0;
-    for (const cu of cultures) if (cu.parent !== undefined) made++;
-    if (made >= DIV_MAX) return;
+    let hybrids = 0;
+    for (const cu of cultures) {
+      if (cu.mix !== undefined) hybrids++;
+      else if (cu.parent !== undefined) made++;
+    }
     // 各民族的州(州号升序)
     const C = cultures.length;
     const lands: number[][] = Array.from({ length: C }, () => []);
@@ -621,7 +656,107 @@ function hook(sim: CivSim, am: AssimModel): void {
       sim.record('diverge', { a: cu.id, b: c, region: hearth, war: pickRuler });
       made++;
     }
+    fuseHybrid(k, t, hybrids);
   });
+
+  /** 长期混居的两族融合成一支:只改接壤的一小片,比普通分化稀 */
+  const fuseHybrid = (k: number, t: number, already: number) => {
+    if (already >= HYBRID_MAX) return;
+    let madeH = already;
+    const used = new Set<string>();
+    for (const cu of cultures) {
+      if (cu.mix === undefined || cu.parent === undefined) continue;
+      used.add(`${Math.min(cu.parent, cu.mix)}|${Math.max(cu.parent, cu.mix)}`);
+    }
+    const ids = pm.polities
+      .filter((P) => P.ended === undefined && (pm.lands[P.id]?.length ?? 0) > 0)
+      .map((P) => P.id)
+      .sort((a, b) => pm.ptag[a] - pm.ptag[b] || a - b);
+    for (const pid of ids) {
+      if (madeH >= HYBRID_MAX) return;
+      const bag = new Map<number, number[]>();
+      for (const r of pm.lands[pid]) {
+        const c = culture[r];
+        if (c < 0 || cultures[c]?.ended !== undefined || cultures[c]?.mix !== undefined) continue;
+        if (t - wm.since[r] < HYBRID_AGE || !held(r, t)) continue;
+        let list = bag.get(c);
+        if (!list) bag.set(c, (list = []));
+        list.push(r);
+      }
+      const cs = [...bag.keys()].filter((c) => bag.get(c)!.length >= HYBRID_MIN).sort((a, b) => a - b);
+      let pickA = -1;
+      let pickB = -1;
+      let pickN = -1;
+      for (let i = 0; i < cs.length; i++) {
+        for (let j = i + 1; j < cs.length; j++) {
+          const a = cs[i];
+          const b = cs[j];
+          const fa = familyOf(a);
+          if (!fa || fa !== familyOf(b)) continue;
+          const key = `${a}|${b}`;
+          if (used.has(key)) continue;
+          const n = bag.get(a)!.length + bag.get(b)!.length;
+          if (n > pickN) {
+            pickA = a;
+            pickB = b;
+            pickN = n;
+          }
+        }
+      }
+      if (pickA < 0) continue;
+      if (keyed4(am.base, pm.ptag[pid], cultures[pickA].hearth, k, U_HYBRID) >= HYBRID_P) continue;
+      const A = new Set(bag.get(pickA)!);
+      const Bset = new Set(bag.get(pickB)!);
+      const inAB = (r: number) => A.has(r) || Bset.has(r);
+      const zone: number[] = [];
+      for (const r of pm.lands[pid]) {
+        if (!inAB(r)) continue;
+        const want = A.has(r) ? Bset : A;
+        for (let e = reg.adjStart[r]; e < reg.adjStart[r + 1]; e++) {
+          if (want.has(reg.adj[e])) {
+            zone.push(r);
+            break;
+          }
+        }
+      }
+      if (zone.length < HYBRID_PATCH) continue;
+      zone.sort((a, b) => reg.seat[a] - reg.seat[b]);
+      const seen = new Set<number>([zone[0]]);
+      const q = [zone[0]];
+      for (let h = 0; h < q.length; h++) {
+        const a = q[h];
+        for (let e = reg.adjStart[a]; e < reg.adjStart[a + 1]; e++) {
+          const b = reg.adj[e];
+          if (seen.has(b) || !inAB(b)) continue;
+          seen.add(b);
+          q.push(b);
+        }
+      }
+      if (q.length < HYBRID_PATCH) continue;
+      q.sort((a, b) => reg.seat[a] - reg.seat[b]);
+      const g = q.slice(0, HYBRID_PATCH_MAX);
+      const parent = bag.get(pickA)!.length >= bag.get(pickB)!.length ? pickA : pickB;
+      const mix = parent === pickA ? pickB : pickA;
+      let hearth = g[0];
+      for (const r of g) if (T.seatSuit[r] > T.seatSuit[hearth] || (T.seatSuit[r] === T.seatSuit[hearth] && reg.seat[r] < reg.seat[hearth])) hearth = r;
+      const src = cultures[parent];
+      const other = cultures[mix];
+      const cu = addCulture(sim, {
+        kind: src.kind,
+        hearth,
+        born: t,
+        expansionism: (src.expansionism + other.expansionism) / 2,
+        parent,
+        mix,
+      });
+      count.copyWithin(cu.id + 1, cu.id, count.length - 1);
+      count[cu.id] = 0;
+      for (const r of g) sim.setOwner(Layer.Culture, r, cu.id, Ev.Diverge);
+      sim.record('diverge', { a: cu.id, b: parent, region: hearth, war: pid, n: mix });
+      used.add(`${Math.min(parent, mix)}|${Math.max(parent, mix)}`);
+      madeH++;
+    }
+  };
 }
 
 /**

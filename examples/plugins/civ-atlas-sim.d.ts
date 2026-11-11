@@ -223,6 +223,8 @@ export interface SimCulture {
   born: number;
   ended?: number;
   parent?: number;
+  /** 混合民族的第二支来源;普通分化不给 */
+  mix?: number;
 }
 
 export type FaithKind = 'folk' | 'great' | 'sect';
