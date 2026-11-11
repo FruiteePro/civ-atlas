@@ -6,7 +6,9 @@
  *   名人   全世界的名将、名君、开国之君(gen/civ/peopleInfo.ts 按事迹打分挑的),按上台的年份排,新的在上;
  *          每人一行:年份、名字、一句为什么出名("大景王朝君主，在位时得五州，亲征萨尔斯坦帝国")
  *   君主   选了国家:按朝代分组(组名停在顶上),新的在上;一句"继父睿宗即位，时年 14 岁，在位 28 年，驾崩"。
+ *          档名按那年的政体:那年是共和国 / 军政府写"执政",后来才改制的不按立国时的一系;
  *          全部国家:先按国家(鼎盛时大的在前)、再按朝代分组;这时不是一条时间线,不画"现在"线。
+ *          那年还在的有君主国也有共和国,档名写"君主、执政"。
  *          只看一国、不是共和国时右上多「列表 | 世系图」:世系图一朝一棵家谱树(PeopleLineage.tsx)
  *   将领   按第一次领兵的年份排,新的在上;一句"伐萨尔斯坦帝国，攻取三州"(全部国家时前面加"大景将领")
  *   名臣   按入仕的年份排,新的在上;一句"大景丞相，出使萨尔斯坦帝国，辅幼主宣宗"(没经手大事的写"在朝 21 年";
@@ -33,9 +35,11 @@ import {
   personSpan,
   riseText,
 } from '../gen/civ/story/peopleInfo';
+import { lineageAt } from '../gen/civ/regime';
 import { generalRole, isConsul, ministerRole, personName, rulerFateWord } from '../gen/civ/story/peopleText';
 import { deedLine } from '../gen/civ/story/officialText';
 import { hasLineage, lineageText } from '../gen/civ/story/lineageInfo';
+import { shownYearOf } from './flyTo';
 import { closeOverview, setPeople, usePeople, type PeopleList } from './overviewStore';
 import { seedTag, useEdits } from './editsStore';
 import { setSelection } from './civView';
@@ -135,6 +139,32 @@ function rulerGroups(civ: Civ, polity: number, label: boolean, era: Era | undefi
   return out;
 }
 
+/** 人物页「君主 / 执政」档的名字:按那年的政体,不按立国时的一系 */
+export function rulersTabName(civ: Pick<Civ, 'polities' | 'endYear'>, polity: number | null, year: number): '君主' | '执政' | '君主、执政' {
+  if (polity !== null) {
+    const p = civ.polities[polity];
+    if (!p) return '君主';
+    return lineageAt(p, shownYearOf(p, year, civ.endYear)) === 'republic' ? '执政' : '君主';
+  }
+  let crown = false;
+  let republic = false;
+  for (const p of civ.polities) {
+    if (!p) continue;
+    if (p.founded > year || (p.ended !== undefined && p.ended <= year)) continue;
+    if (lineageAt(p, year) === 'republic') republic = true;
+    else crown = true;
+    if (crown && republic) return '君主、执政';
+  }
+  return republic && !crown ? '执政' : '君主';
+}
+
+/** 档名后面的说明 */
+export function rulersTabTitle(name: ReturnType<typeof rulersTabName>): string {
+  if (name === '执政') return '历任执政,按朝代分组';
+  if (name === '君主、执政') return '历代君主、执政,按朝代分组';
+  return '历代君主,按朝代分组';
+}
+
 export function PeoplePage({ civ, data }: { civ: Civ | null; data: { world: World; raster: Raster } | null }) {
   const view0 = usePeople();
   const { characters: chars, era } = useEdits();
@@ -214,12 +244,13 @@ export function PeoplePage({ civ, data }: { civ: Civ | null; data: { world: Worl
 
   const focus = polity !== null ? civ.polities[polity] : undefined;
   const focusName = focus ? (choices.find((c) => c.id === polity)?.name ?? polityName(focus, civ.endYear)) : '';
+  const rulersName = rulersTabName(civ, polity, year);
   const LISTS: { id: PeopleList; name: string; n: number; title: string }[] = [
     { id: 'mine', name: '我的', n: mine.length, title: '自己放进这个世界的人物' },
     ...(ok
       ? [
           { id: 'famous' as const, name: '名人', n: counts.famous, title: '按推演里的事迹挑出来的名将、名君、开国之君' },
-          { id: 'rulers' as const, name: focus?.lineage === 'republic' ? '执政' : '君主', n: counts.rulers, title: '历代君主,按朝代分组' },
+          { id: 'rulers' as const, name: rulersName, n: counts.rulers, title: rulersTabTitle(rulersName) },
           { id: 'generals' as const, name: '将领', n: counts.generals, title: '领过兵的将领,按第一次领兵的年份排' },
           { id: 'ministers' as const, name: '名臣', n: counts.ministers, title: '各国的名臣,按入仕的年份排' },
         ]
@@ -259,7 +290,7 @@ export function PeoplePage({ civ, data }: { civ: Civ | null; data: { world: Worl
           </button>
         </div>
       ) : view.list === 'famous' && focus ? (
-        `${focusName}没有名人,切到"君主"看看`
+        `${focusName}没有名人,切到"${rulersName}"看看`
       ) : (
         '没有符合的人物'
       );
