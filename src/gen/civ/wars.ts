@@ -8,7 +8,8 @@
  *     自己没在打仗(帝国级的大国可以两线作战)、上次议和过了 REST 年,就在接壤的邻国里挑一个最"值得打"的:
  *       赔率 = WAR_ODDS × 扩张性 × 边境胜算^LOCAL_EXP × 异族 FOREIGN × 收复失地 × 小国 PREY_ODDS × 边界长短
  *       收复失地再乘偏安因子 min(1, e^(PIANAN_K·x))(x 为开拓与好战倾向的均值:只减不加,守成之君不思收复,雄主与寻常之君 = 1)
- *       挑好了打谁,开不开战再乘此刻在位君主的好战倍数(rulers.ts:越好战越容易开战)
+ *       挑好了打谁,开不开战再乘此刻在位君主的好战倍数(rulers.ts:越好战越容易开战),
+ *       再按两国信仰加权(同教略不愿打,异教更愿打;神权在这条轴上更强)
  *       国家方针(policy.ts):倍数是君主倾向加上方针的;亲国不打,仇国的赔率 × FOE_ODDS(先打它)
  *       动荡(unrest.ts):邻国大乱的格外招人(趁虚而入),自己国内乱也更想对外开战(转移矛盾;动荡到 DIVERT_U 再上调一档)
  *       钱粮(control.ts):国用不足(窘迫 0–1)的赔率 × (1 − BROKE_CUT × 窘迫),国库没攒满的再打折(PURSE_0)
@@ -94,6 +95,7 @@ import { AdjKind, Layer, type Annal, type AnnalCause, type Civ, type Polity, typ
 import { fexp, flog, fpow, keyed, keyed4, round24, subSeed } from './engine/rand';
 import { bookChain, LOOK_K, quantize, type CivSim } from './engine/sim';
 import { befriends, canCross, coreOf, effOf, endPolity, moveCapital, picks, policyAt, polityModelOf, POLITIES_KNOBS, powerScaleOf, regentOf, rulerOf, rulingLeanings, tribalAnnexMul, type PolityModel } from './polities';
+import { faithOpposeMul, faithScale, polityFaithGap } from './faithRules';
 import { reignBorn } from './rulers';
 import { REGENTS_KNOBS } from './regents';
 import { POLICY_KNOBS } from './policy';
@@ -279,6 +281,13 @@ export const WARS_KNOBS = defineKnobs('wars', {
    */
   TRIBAL_WAR_ODDS: 0.28,
   TRIBAL_WAR_MAX: 2,
+  /**
+   * 信仰:宣战赔率再 × 同教 (1 − FAITH_WAR_SAME × 神权倍数)、异教 (1 + FAITH_WAR_FAR × 神权倍数 × 差距)。
+   * 神权的倍数是 FAITH_THEO,别的政体是 1
+   */
+  FAITH_WAR_SAME: 0.16,
+  FAITH_WAR_FAR: 0.22,
+  FAITH_THEO: 1.65,
 });
 /** 这张表的值(一套数里取出来的) */
 export type WarsKnobs = typeof WARS_KNOBS.values;
@@ -633,7 +642,7 @@ export function warModelOf(sim: CivSim): WarModel | undefined {
 
 /** 登记战争的事件处理和监听(installPolities 之后调用) */
 export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarModel = newModel(pm)): WarModel {
-  const { PROJECT, KIN_ATTACK, HOME_DEF, CAPITAL_DEF, PROTECT_DEF, P_MAX, P_MIN, CAPITAL_GRACE, PROTECT_KEEP, HOLD, DEFENSE, REGAIN, RES_TARGET, MAX_CUT, MIN_STATE, CEDE_I, SURRENDER_SHARE, SURRENDER_POWER, ALLY_JOIN, TWO_FRONTS, REST, BROKE_CUT, PURSE_0, PLUNDER_FLOOR, TRUCE, NEWBORN, COLLAPSE_TRUCE, COLLAPSE_WEAK, COLLAPSE_WEAK_YEARS, COLLAPSE_VIGOR, COLLAPSE_VIGOR_YEARS, COLLAPSE_CLAIM_POWER, COLLAPSE_CLAIM_FULL, COLLAPSE_CLAIM_FADE, COLLAPSE_REUNIFY, MAX_WARS, CRUSH, WAR_ODDS, LOCAL_EXP, BORDER_FULL, FOREIGN, REVANCHE, PIANAN_K, PREY, PREY_ODDS, GRUDGE_YEARS, GRUDGE, RES_WANT, RES_MAX, RICH, DIVERT, DIVERT_U, DIVERT_STEP, CHAOS_YEARS, PREY_UNREST, PREY_CALM, PREY_HIGH, WEAK_PREY, BLIGHT_MIN, BLIGHT_PREY, BLIGHT_FULL, LORD_PREY, LORD_PREY_MAX, STAND, STAND_DAYS, STAND_SLAIN, STAND_TAKEN, WINTER_T, WINTER_ALWAYS, WINTER_JITTER, BREAK_MAX, BREAK, COUNTER, STALL, BROKE_LENGTH, BROKE_PEACE, REVOLT_LENGTH, CRUSH_GOAL, CEDE } = wm.k;
+  const { PROJECT, KIN_ATTACK, HOME_DEF, CAPITAL_DEF, PROTECT_DEF, P_MAX, P_MIN, CAPITAL_GRACE, PROTECT_KEEP, HOLD, DEFENSE, REGAIN, RES_TARGET, MAX_CUT, MIN_STATE, CEDE_I, SURRENDER_SHARE, SURRENDER_POWER, ALLY_JOIN, TWO_FRONTS, REST, BROKE_CUT, PURSE_0, PLUNDER_FLOOR, TRUCE, NEWBORN, COLLAPSE_TRUCE, COLLAPSE_WEAK, COLLAPSE_WEAK_YEARS, COLLAPSE_VIGOR, COLLAPSE_VIGOR_YEARS, COLLAPSE_CLAIM_POWER, COLLAPSE_CLAIM_FULL, COLLAPSE_CLAIM_FADE, COLLAPSE_REUNIFY, MAX_WARS, CRUSH, WAR_ODDS, LOCAL_EXP, BORDER_FULL, FOREIGN, REVANCHE, PIANAN_K, PREY, PREY_ODDS, GRUDGE_YEARS, GRUDGE, RES_WANT, RES_MAX, RICH, DIVERT, DIVERT_U, DIVERT_STEP, CHAOS_YEARS, PREY_UNREST, PREY_CALM, PREY_HIGH, WEAK_PREY, BLIGHT_MIN, BLIGHT_PREY, BLIGHT_FULL, LORD_PREY, LORD_PREY_MAX, STAND, STAND_DAYS, STAND_SLAIN, STAND_TAKEN, WINTER_T, WINTER_ALWAYS, WINTER_JITTER, BREAK_MAX, BREAK, COUNTER, STALL, BROKE_LENGTH, BROKE_PEACE, REVOLT_LENGTH, CRUSH_GOAL, CEDE, FAITH_WAR_SAME, FAITH_WAR_FAR, FAITH_THEO } = wm.k;
   const { FOE_ODDS, FRIEND_JOIN } = pm.knobs.get(POLICY_KNOBS);
   const { ADULT } = pm.knobs.get(REGENTS_KNOBS);
   const api = civApi(sim);
@@ -1282,6 +1291,11 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     if (target < 0) return;
     // 越好战的君主越容易开战(加上方针的打仗胆量);国内越乱越想对外开战转移矛盾(乱到 DIVERT_U 再上调一档)
     odds *= effOf(pm, p, t).declare;
+    {
+      const A = pm.polities[p];
+      const B = pm.polities[target];
+      if (A && B) odds *= faithOpposeMul(polityFaithGap(pm, A, B, t), FAITH_WAR_SAME, FAITH_WAR_FAR, faithScale(A, t, FAITH_THEO));
+    }
     const up = api.war.unrest ? api.war.unrest(p, t) : 0;
     odds *= 1 + DIVERT * up + (up >= DIVERT_U ? DIVERT_STEP : 0);
     const oddsIn = sim.influence?.get('war.odds');

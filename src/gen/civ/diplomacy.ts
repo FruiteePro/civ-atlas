@@ -8,11 +8,13 @@
  *   ① 藩属:看要不要自立(不再称臣纳贡)。宗主虚弱(在打仗、刚丢了国都 / 迁都、刚改朝换代、刚分裂、接连丢州)、
  *        藩属的国力追上来了、两国已不接壤(鞭长莫及)、异族,自立的机会都更大。藩属不另外结盟、不收别国称臣。
  *        自立以后宗主多半发兵讨伐(PUNISH;史事 war 的 cause = punish)。
+ *        同教更难自立、更容易纳土归附,异教相反;神权在这条轴上更强。
  *   ② 宗主:称臣久了的小藩属(接壤、两边都没在打仗;异族的机会小些),有机会纳土归附(记 merge,cause = vassal;编年史写"纳土归附")。
  *   ③ 盟约:共御的强邻已经亡了、或已不比盟国强,盟约渐废(unally,cause = lapse)。
  *   ④ 畏强邻(接壤、国力是自己 THREAT 倍以上的邻国;正在交兵的也算):
  *        小国、弱国先看要不要遣使称臣(国力差 SUBMIT_RATIO 倍以上,强邻越好战越可能;正和强邻的藩属交兵的不称臣);
- *        不称臣就找也受它威胁的国家结盟(和强邻接壤、没在和自己打、各自盟国不到 MAX_PACTS 个),正同在和它交兵的最容易结成。
+ *        不称臣就找也受它威胁的国家结盟(和强邻接壤、没在和自己打、各自盟国不到 MAX_PACTS 个),正同在和它交兵的最容易结成;
+ *        同教更容易称臣、结盟,异教更难;神权在这条轴上更强。
  *        国家方针(policy.ts):不和仇国结盟(哪一方把对方当仇都不结),亲国的分数 × FRIEND_PACT(先找它)。
  *   ⑤ 称臣、结盟都没成(或者没有强邻):看要不要和邻国立约(treaties.ts 挂上的 onCheck;约国之间也算友好,见 friendly)。
  *
@@ -49,6 +51,7 @@ import { Layer, type Annal, type Civ, type Year } from './types';
 import { fpow, keyed, keyed4, subSeed } from './engine/rand';
 import { bookChain, quantize, type CivSim } from './engine/sim';
 import { befriends, canCross, effOf, endPolity, hates, picks, policyAt, polityModelOf, powerScaleOf, type PolityModel } from './polities';
+import { faithAlignMul, faithOpposeMul, faithScale, polityFaithGap } from './faithRules';
 import { POLICY_KNOBS } from './policy';
 import { MARRIAGES_KNOBS } from './marriages';
 import { polityBorders, warModelOf, type War, type WarModel } from './wars';
@@ -139,6 +142,13 @@ export const DIPLOMACY_KNOBS = defineKnobs('diplomacy', {
   ABSORB_SETTLE: 30,
   /** 一国最多同时打几场仗(和 wars.ts 的 MAX_WARS 一样):手上的仗打满了的不来援盟,不算坐视不救 */
   MAX_WARS: 2,
+  /**
+   * 信仰:同教相吸、异教相斥(结盟、称臣、纳土、受降、援盟用同向倍数;自立用相斥倍数)。
+   * 倍数 = 同教 1±SAME×神权倍数,异教 1∓FAR×神权倍数×差距;神权的倍数是 FAITH_THEO
+   */
+  FAITH_SAME: 0.22,
+  FAITH_FAR: 0.2,
+  FAITH_THEO: 1.65,
 });
 
 
@@ -321,7 +331,7 @@ function checkTime(dm: DiplomacyModel, p: number, k: number): number {
 export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyModel = new DiplomacyModel(pm, civApi(sim).diplomacy)): DiplomacyModel {
   const { KIN_PACT, KIN_JOIN } = pm.knobs.get(MARRIAGES_KNOBS);
   const { FRIEND_PACT, FRIEND_JOIN } = pm.knobs.get(POLICY_KNOBS);
-  const { MAX_WARS, WEAK_YEARS, WEAK_LOSS, DEFECT_MIN, DEFECT_ODDS, DEFECT_K, DEFECT_R0, DEFECT_FAR, DEFECT_FOREIGN, PUNISH, ABSORB_AGE, ABSORB_MAX, ABSORB_RATIO, ABSORB_SETTLE, ABSORB_ODDS, ABSORB_FOREIGN, LAPSE_AGE, LAPSE_RATIO, LAPSE_P, THREAT, SUBMIT_RATIO, SUBMIT_MAX, RESUBMIT_REST, SUBMIT_ODDS, SUBMIT_EXP, MAX_PACTS, PACT_REST, PACT_MIN_POWER, PACT_FEAR, PACT_COWAR, PACT_ODDS, PACT_JOIN, RESCUE, SUE_RATIO, SUE_LEFT, SUE_MIN, SUE_FRAC, SUE_ACCEPT, SUE_KIN, SUE_FOREIGN, SUE_CRUSH, SUE_UNIFY, SUE_FAR, SUE_OFFER, SIB_PACT } = dm.k;
+  const { MAX_WARS, WEAK_YEARS, WEAK_LOSS, DEFECT_MIN, DEFECT_ODDS, DEFECT_K, DEFECT_R0, DEFECT_FAR, DEFECT_FOREIGN, PUNISH, ABSORB_AGE, ABSORB_MAX, ABSORB_RATIO, ABSORB_SETTLE, ABSORB_ODDS, ABSORB_FOREIGN, LAPSE_AGE, LAPSE_RATIO, LAPSE_P, THREAT, SUBMIT_RATIO, SUBMIT_MAX, RESUBMIT_REST, SUBMIT_ODDS, SUBMIT_EXP, MAX_PACTS, PACT_REST, PACT_MIN_POWER, PACT_FEAR, PACT_COWAR, PACT_ODDS, PACT_JOIN, RESCUE, SUE_RATIO, SUE_LEFT, SUE_MIN, SUE_FRAC, SUE_ACCEPT, SUE_KIN, SUE_FOREIGN, SUE_CRUSH, SUE_UNIFY, SUE_FAR, SUE_OFFER, SIB_PACT, FAITH_SAME, FAITH_FAR, FAITH_THEO } = dm.k;
   const api = civApi(sim);
   const wm = warModelOf(sim);
   if (!wm) throw new Error('installDiplomacy:先 installWars');
@@ -431,6 +441,11 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     let odds = DEFECT_ODDS * weakness(L, t) * fpow(Math.E, DEFECT_K * (ratio - DEFECT_R0));
     if (!borders(v, L) && !borders(L, v)) odds *= DEFECT_FAR;
     if (pm.polities[v].culture !== pm.polities[L].culture) odds *= DEFECT_FOREIGN;
+    {
+      const V = pm.polities[v];
+      const Liege = pm.polities[L];
+      odds *= faithOpposeMul(polityFaithGap(pm, V, Liege, t), FAITH_SAME, FAITH_FAR, faithScale(V, t, FAITH_THEO));
+    }
     if (keyed(dm.base, pm.ptag[v], k, U_DEFECT) >= odds / (1 + odds)) return false;
     record('defect', { a: v, b: L, region: capRegion(v, t), settlement: capitalAt(pm.polities[v], t) });
     // 宗主发兵讨伐:接壤、没在和它打、没被下令和它结盟、手上的仗没打满、没被下令不许扩张
@@ -451,6 +466,7 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     for (const r of mine) if (t - wm.since[r] < ABSORB_SETTLE) return false;
     let odds = ABSORB_ODDS;
     if (V.culture !== pm.polities[L].culture) odds *= ABSORB_FOREIGN;
+    odds *= faithAlignMul(polityFaithGap(pm, pm.polities[L], V, t), FAITH_SAME, FAITH_FAR, faithScale(pm.polities[L], t, FAITH_THEO));
     if (keyed4(dm.base, pm.ptag[L], pm.ptag[v], k, U_ABSORB) >= odds / (1 + odds)) return false;
     for (const r of mine) sim.setOwner(Layer.Polity, r, L, Ev.Merge);
     endPolity(pm, v, t);
@@ -500,7 +516,8 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     // 有够分量的盟国撑腰就不称臣
     const pq = powerOf(q, t);
     for (const z of dm.alliesOf(p)) if (powerOf(z, t) >= 0.5 * pq) return false;
-    const odds = SUBMIT_ODDS * fpow(ratio / SUBMIT_RATIO, SUBMIT_EXP) * pm.polities[q].expansionism;
+    let odds = SUBMIT_ODDS * fpow(ratio / SUBMIT_RATIO, SUBMIT_EXP) * pm.polities[q].expansionism;
+    odds *= faithAlignMul(polityFaithGap(pm, pm.polities[p], pm.polities[q], t), FAITH_SAME, FAITH_FAR, faithScale(pm.polities[p], t, FAITH_THEO));
     if (keyed(dm.base, pm.ptag[p], k, U_SUBMIT) >= odds / (1 + odds)) return false;
     swear(p, q, t);
     return true;
@@ -545,6 +562,12 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
         const [bf] = mainThreat(best, t, powerOf(best, t));
         if (bf === f) odds *= SIB_PACT;
       }
+    }
+    {
+      const A = pm.polities[p];
+      const B = pm.polities[best];
+      const scale = Math.max(faithScale(A, t, FAITH_THEO), faithScale(B, t, FAITH_THEO));
+      odds *= faithAlignMul(polityFaithGap(pm, A, B, t), FAITH_SAME, FAITH_FAR, scale);
     }
     if (keyed4(dm.base, pm.ptag[p], pm.ptag[best], k, U_PACT) >= odds / (1 + odds)) return false;
     const sid = capitalAt(pm.polities[p], t);
@@ -591,6 +614,11 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
       let join = hates(pm, z, y, t) ? 0 : befriends(pm, z, y, t) ? FRIEND_JOIN : PACT_JOIN;
       // 结着亲的更肯出兵(marriage.ts)
       if (join > 0 && api.diplomacy.bond) join *= 1 + (KIN_JOIN - 1) * api.diplomacy.bond(z, y, t);
+      if (join > 0) {
+        const Z = pm.polities[z];
+        const Y = pm.polities[y];
+        join *= faithAlignMul(polityFaithGap(pm, Z, Y, t), FAITH_SAME, FAITH_FAR, faithScale(Z, t, FAITH_THEO));
+      }
       if (keyed4(dm.base, pm.ptag[z], pm.ptag[x], Math.round(t * 256), U_JOIN) < join) api.war.declare!(z, x, t, y, 'ally');
       else record('unally', { a: z, b: y, war: w.id, cause: 'abandon' });
     }
@@ -615,6 +643,7 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     const B = pm.polities[b];
     const kin = B.culture === pm.polities[a].culture;
     let accept = SUE_ACCEPT * (kin ? SUE_KIN : SUE_FOREIGN);
+    accept *= faithAlignMul(polityFaithGap(pm, pm.polities[a], B, t), FAITH_SAME, FAITH_FAR, faithScale(pm.polities[a], t, FAITH_THEO));
     if (kin && pow[a] >= SUE_CRUSH * pow[b]) accept *= SUE_UNIFY;
     if (warsOf(a).length > 1) accept *= 1.4;
     if (pm.capDist[a][capRegion(b, t)] > SUE_FAR) accept *= 1.4;

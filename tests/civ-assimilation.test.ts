@@ -17,6 +17,7 @@ import {
   COMBINE_GAP,
   MIGRATE_MAJOR,
   TREK_ASSIM_MAJOR,
+  REVERSE_ASSIM_MAJOR,
   buildChronicle,
   filterChronicle,
   type ChronicleEntry,
@@ -347,8 +348,9 @@ describe('同化与迁徙', () => {
         expect(e.end - e.year).toBeLessThanOrEqual(ASSIM_SPAN);
         const ys = (e.children ?? [e]).map((c) => c.year);
         for (let i = 1; i < ys.length; i++) expect(ys[i] - ys[i - 1]).toBeLessThanOrEqual(ASSIM_GAP);
-        // 大迁徙迁来立的国反被同化("…境内的…人渐为…人"):五州以上就是大事
-        if (e.regions.length >= (/境内的/.test(e.text) ? TREK_ASSIM_MAJOR : ASSIM_MAJOR)) expect(e.importance).toBe(3);
+        // 大迁徙迁来立的国反被同化("…境内的…人渐为…人"):五州以上就是大事;寻常反向同化("渐染某俗")按 REVERSE_ASSIM_MAJOR
+        const major = /境内的/.test(e.text) ? TREK_ASSIM_MAJOR : /渐染/.test(e.text) ? REVERSE_ASSIM_MAJOR : ASSIM_MAJOR;
+        if (e.regions.length >= major) expect(e.importance).toBe(3);
         else expect(e.importance).toBeLessThan(3);
       }
       for (const e of kids('vanish')) {

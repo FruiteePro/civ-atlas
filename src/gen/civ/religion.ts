@@ -1,7 +1,7 @@
 /**
  * 信仰:推演里每 STEP 年算一步(挂在推演引擎上,和发展度一样随推演往后走),推完整理成 Civ.religion。
- * 眼下只是"算着":推演里别的规则(打仗、邦交、出奔、同化、动荡……)还不读它,国界、兴亡、战争、人物和不算信仰时一个都不变。
- * 纯计算,不碰 DOM。
+ * 推演里同化、邦交、开战意愿会读国教 / 国都的信仰(同教相吸、异教相斥,神权在这条轴上更强,见 faithRules.ts);
+ * 每 STEP 年算一步,别的规则问的是已经算过的最近一步。纯计算,不碰 DOM。
  *
  *   - 民间信仰:每个民族自带一种(Faith.culture = 民族编号),州一有人住就是它;民族换了(同化、迁徙),民间信仰跟着换(按日志,换的那一刻就换)
  *   - 大教:2–5 个(按州数),在 FOUND_SPAN 里几个年份上(那年没有合适的城:不到两个大教就往后推,够两个就不创这一个),挑当时人口最多、离别的圣城够远、还信民间信仰的大城,
@@ -628,6 +628,11 @@ function hook(sim: CivSim, fs: FaithSim, first: Year, pm?: PolityModel): void {
   if (pm) {
     pm.faithAt = (r) => (r >= 0 && r < fs.faith.length ? fs.faith[r] : -1);
     pm.stateFaith = (p) => fs.stateFaith(p);
+    pm.faithGap = (f, g) => {
+      if (f < 0 || g < 0 || f >= fs.faithCount || g >= fs.faithCount) return -1;
+      if (f === g) return 0;
+      return fs.rootOf(f) === fs.rootOf(g) ? 0.5 : 1;
+    };
   }
   sim.everyYears(first, STEP, (y) => fs.step(y));
 }
@@ -885,7 +890,7 @@ export function faithCounts(civ: Civ, year: Year, faiths?: Int16Array, own?: Own
   return { n, folk, total };
 }
 
-/** 模块:信仰:每 5 年算一步(只算着,别的规则还不读它;不预约事件)(清单和次序见 modules.ts) */
+/** 模块:信仰:每 5 年算一步(同化、邦交、开战意愿会读;不预约事件)(清单和次序见 modules.ts) */
 export const religionModule: CivModule = {
   id: 'religion',
   install: (c) => {

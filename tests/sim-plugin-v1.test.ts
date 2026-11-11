@@ -144,9 +144,9 @@ describe('试金石:宗教生效(异教难治、难融合;圣城在异教国手�
     const before = faithMix(base);
     const after = faithMix(civ);
     const cmds = by(civ, 'faith');
-    expect(cmds.length).toBeGreaterThan(0);
+    // 官方推演自己会按信仰加权以后,有的种子里插件不再额外下「宣战」「结盟」令;意图由多种子合计那一项来验
     expect(cmds.every((v) => v.kind === 'declare' || v.kind === 'ally')).toBe(true);
-    expect(civ.simChronicle!.length).toBe(cmds.length);
+    expect((civ.simChronicle ?? []).length).toBe(cmds.length);
     pin(seed, 'faith', { before, after, declare: cmds.filter((v) => v.kind === 'declare').length, ally: cmds.filter((v) => v.kind === 'ally').length, digest: digest(civ) });
   }, 120_000);
 });

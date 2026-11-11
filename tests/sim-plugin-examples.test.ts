@@ -111,9 +111,17 @@ describe.each(['weariness', 'faith'] as const)('%s:打成插件包经 QuickJS,�
     const { civ, seen } = await run(p, seed, (plugins) => generateCiv(worldOf(seed), { plugins }));
     expect(civ.stuck).toBeUndefined();
     expect(civ.endYear).toBe(3000);
-    expect(by(civ, name).length).toBeGreaterThan(0);
+    const cmds = by(civ, name);
+    // 官方推演自己会按信仰加权以后,有的种子里插件不再额外下「宣战」「结盟」令,chronicle / commands 可能没用到
+    if (name !== 'faith') expect(cmds.length).toBeGreaterThan(0);
     expect(simDigest(civ)).toBe(V1_PINS[seed as V1Seed][name].digest);
-    expect(capsUsed(p, seen)).toEqual([...p.opened.manifest.requires].sort());
+    const used = capsUsed(p, seen);
+    const req = [...p.opened.manifest.requires].sort();
+    if (name === 'faith') {
+      const optional = new Set(['sim.commands@1', 'sim.chronicle@1']);
+      expect(used.every((c) => req.includes(c))).toBe(true);
+      expect(used.filter((c) => !optional.has(c)).sort()).toEqual(req.filter((c) => !optional.has(c)));
+    } else expect(used).toEqual(req);
   }, 120_000);
 });
 
@@ -155,16 +163,16 @@ const lastFrame = (civ: Civ) => {
 
 const MAGIC_PINS: Record<V1Seed, unknown> = {
   1: {
-    layer: { y100: { mean: 4.43, max: 45.7 }, y500: { mean: 11.44, max: 62.22 }, y1500: { mean: 8.68, max: 63.4 }, y3000: { mean: 6.21, max: 63.28 } },
-    before: { towns: 736, mean: 28.1, richTowns: 33, richMean: 21.9 },
-    after: { towns: 739, mean: 29.1, richTowns: 35, richMean: 26.5 },
-    digest: 'b866bf623855d75b',
+    layer: { y100: { mean: 4.43, max: 45.7 }, y500: { mean: 11.44, max: 62.22 }, y1500: { mean: 8.68, max: 63.4 }, y3000: { mean: 6.22, max: 63.28 } },
+    before: { towns: 742, mean: 28.2, richTowns: 34, richMean: 21.9 },
+    after: { towns: 732, mean: 29.9, richTowns: 34, richMean: 27.4 },
+    digest: 'bf470c9b906996d4',
   },
   2024: {
-    layer: { y100: { mean: 4.6, max: 38.54 }, y500: { mean: 12, max: 49.66 }, y1500: { mean: 9.44, max: 48.99 }, y3000: { mean: 5.94, max: 45.4 } },
-    before: { towns: 809, mean: 25.6, richTowns: 43, richMean: 19.3 },
-    after: { towns: 799, mean: 25.5, richTowns: 45, richMean: 27.3 },
-    digest: '3b8b6b305dc414e1',
+    layer: { y100: { mean: 4.6, max: 38.54 }, y500: { mean: 12, max: 49.66 }, y1500: { mean: 9.44, max: 48.99 }, y3000: { mean: 5.93, max: 45.41 } },
+    before: { towns: 794, mean: 25.1, richTowns: 44, richMean: 18 },
+    after: { towns: 787, mean: 27.1, richTowns: 41, richMean: 28.6 },
+    digest: '146b494bfc47aa87',
   },
 };
 

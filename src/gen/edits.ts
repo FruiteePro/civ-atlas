@@ -654,6 +654,7 @@
  *  67:各语感的教名、民间信仰后缀和说明加厚,和风、海东、天竺、波斯、南洋、萨赫勒各有专名;地形、历史、疆域兴亡不变,只有教名和相关说明变了
  *  68:神权是单独一种政体(和君主、共和、军政府并列):国教既盛时可立教宗 / 大祭司 / 国师主国,按教职终身继任,日后也可废神权或复辟;地形不变,历史重新推演
  *  69:中古以后并吞部落地带更容易,按国都时代、政体、州的贫富、民族和信仰加权,战争也可能顺手收服接壤的部落州;早年战争仍不占无主部落地。地形不变,历史重新推演
+ *  70:信仰影响同化、邦交和开战意愿:同教相吸、异教相斥,神权在这条轴上更强。地形不变,历史重新推演
  */
 import type { Civ, Culture, Faith, MigrationDir, Person, Place, Polity, Regions, RulerLeanings, Settlement } from './civ/types';
 import { FRAGMENT_MODE_CHOICES, type FragmentModeChoice } from './civ/fragmentMode';
@@ -670,7 +671,7 @@ import { SLUMP_CHOICES, SLUMP_DEFAULT, type Calamity } from './civ/calamity';
 import { stampCalc, type RuleSet } from './civ/ruleSet';
 
 /** 生成器版本:生成算法有改动、同种子会得到不同世界时加一(存档读档时核对);加一时在 GENERATOR_CHANGES 里补一条 */
-export const GENERATOR_VERSION = 69;
+export const GENERATOR_VERSION = 70;
 
 /**
  * 一版生成器的改动有多大(从小到大):打开旧存档、旧链接时,按跨过的几版里最大的那一种说清变了什么(savefile.ts 的 versionNote)
@@ -760,6 +761,7 @@ export const GENERATOR_CHANGES: Readonly<Record<number, { change: GeneratorChang
   67: { change: 'names' },
   68: { change: 'history' },
   69: { change: 'history' },
+  70: { change: 'history' },
 };
 
 /** 干预的种类(见文件头的表) */

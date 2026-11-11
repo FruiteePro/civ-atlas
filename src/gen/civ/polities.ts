@@ -235,6 +235,8 @@ export interface PolityModel {
   faithAt?: (r: number) => number;
   /** 国家此刻的国教(−1 / 不给 = 没有) */
   stateFaith?: (p: number) => number;
+  /** 两种信仰的差距(religion.ts 挂上;0 = 同一信仰,0.5 = 同一大教的不同派,1 = 异教,−1 / 不给 = 不明) */
+  faithGap?: (f: number, g: number) => number;
   /** 推演插件接了影响口 war.power 时挂上(国力加减再乘它) */
   warPower?: Influences;
   military?: number[];

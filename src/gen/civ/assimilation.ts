@@ -19,6 +19,7 @@
  *              × 离国都近(e^(−路程 ÷ REACH))× 统治民族在本国的人口占比(÷ STRONG_SHARE,最多算 1)
  *              × 地形(草原荒漠上的游牧民族、高山上的高原民族、林中的山林民族、小岛上的海洋民族难同化;游牧国家难同化农耕地区)
  *              × 原民族越大越难、越小越快(√(SIZE_REF ÷ 州数),夹在 [SIZE_MIN, SIZE_MAX])
+ *              × 信仰(这州信的和本国国教 / 国都同教略快,异教略慢;教派算一半;神权在这条轴上更强)
  *      统治民族在本国人口占比不到 REVERSE_SHARE、另有一族占到 REVERSE_MAJ 时反过来:统治民族的州被那一族同化
  *      (入主的少数民族渐为多数民族所化),速率另乘 REVERSE_K。门槛按 REVERSE_SHARE / REVERSE_MAJ,比迁徙立国那一档(TREK_*)紧,但比旧的 35%/50% 稍松,免得几乎从不发生;改换仍走史事 assimilate(编年史写成"渐染某俗")。
  *      大迁徙迁来立的国(Polity.trek)门槛低、速率快:统治民族不到 TREK_SHARE、另有一族到 TREK_MAJ,速率再乘 TREK_K,统治满 MIN_RULE 年就是满速。
@@ -61,6 +62,7 @@ import { addCulture, cultureModelOf } from './cultures';
 import { polityModelOf, type PolityModel } from './polities';
 import { warModelOf, type WarModel } from './wars';
 import { capitalAt } from './growth';
+import { faithAlignMul, faithGap, faithScale, polityFaith } from './faithRules';
 import { previewFounderStyles } from './naming';
 import { NAME_STYLES } from '../names';
 
@@ -159,6 +161,13 @@ export const ASSIMILATION_KNOBS = defineKnobs('assimilation', {
   TO_KIN_STATE: 1.3,
   /** 过界系数(按 AdjKind:平地、跨河、翻山、海峡、航线) */
   CROSS: [1, 1.2, 2, 2, 3],
+  /**
+   * 信仰:这州信的和本国国教(没有国教 = 国都所在州)同教,速率 × (1 + FAITH_SAME × 神权倍数);
+   * 异教 × (1 − FAITH_FAR × 神权倍数 × 差距)(同一大教的不同派差距 0.5)。神权的倍数是 FAITH_THEO,别的政体是 1
+   */
+  FAITH_SAME: 0.12,
+  FAITH_FAR: 0.22,
+  FAITH_THEO: 1.65,
 });
 
 
@@ -256,7 +265,7 @@ export function installAssimilation(sim: CivSim, pm: PolityModel, world: World):
 }
 
 function hook(sim: CivSim, am: AssimModel): void {
-  const { HOLD, SETTLE_P, SETTLE_FOREST, SETTLE_MAX, TO_EMPTY, TO_TRIBAL, TO_KIN_STATE, CROSS, FLIGHT_REACH, RESIST_STEPPE, HIGH_ELEV, RESIST_HIGH, RESIST_FOREST, RESIST_ISLAND, SIZE_MAX, SIZE_MIN, SIZE_REF, DIV_MAX, HYBRID_AGE, HYBRID_MIN, HYBRID_P, HYBRID_PATCH, HYBRID_PATCH_MAX, HYBRID_MAX, TREK_SHARE, TREK_MAJ, REVERSE_SHARE, REVERSE_MAJ, REVERSE_K, TREK_K, STRONG_SHARE, MIN_RULE, CAPITAL_KIN, REACH, NOMAD_FARMLAND, FULL_RULE, RATE, FLIGHT_ODDS, FLIGHT_NOMAD, FLIGHT_FALL, FLIGHT_MAX, FLIGHT_RATIO, ENCLAVE_HOLD, STRAIT_BORDER, ENCLAVE_F, ENCLAVE_RATE, DIV_MIN_GEO, DIV_MIN_POL, DIV_AGE_GEO, DIV_AGE, DIV_RULE, DIV_SETTLED_GEO, DIV_SETTLED, DIV_P } = am.pm.knobs.get(ASSIMILATION_KNOBS);
+  const { HOLD, SETTLE_P, SETTLE_FOREST, SETTLE_MAX, TO_EMPTY, TO_TRIBAL, TO_KIN_STATE, CROSS, FLIGHT_REACH, RESIST_STEPPE, HIGH_ELEV, RESIST_HIGH, RESIST_FOREST, RESIST_ISLAND, SIZE_MAX, SIZE_MIN, SIZE_REF, DIV_MAX, HYBRID_AGE, HYBRID_MIN, HYBRID_P, HYBRID_PATCH, HYBRID_PATCH_MAX, HYBRID_MAX, TREK_SHARE, TREK_MAJ, REVERSE_SHARE, REVERSE_MAJ, REVERSE_K, TREK_K, STRONG_SHARE, MIN_RULE, CAPITAL_KIN, REACH, NOMAD_FARMLAND, FULL_RULE, RATE, FLIGHT_ODDS, FLIGHT_NOMAD, FLIGHT_FALL, FLIGHT_MAX, FLIGHT_RATIO, ENCLAVE_HOLD, STRAIT_BORDER, ENCLAVE_F, ENCLAVE_RATE, DIV_MIN_GEO, DIV_MIN_POL, DIV_AGE_GEO, DIV_AGE, DIV_RULE, DIV_SETTLED_GEO, DIV_SETTLED, DIV_P, FAITH_SAME, FAITH_FAR, FAITH_THEO } = am.pm.knobs.get(ASSIMILATION_KNOBS);
   models.set(sim, am);
   const { pm, wm, cultures, since, count } = am;
   const T = pm.terrain;
@@ -479,7 +488,8 @@ function hook(sim: CivSim, am: AssimModel): void {
       if (!reverse && nomadRuler && !ARID[bi]) e *= NOMAD_FARMLAND;
       // 迁来立的国反被同化:统治满 MIN_RULE 年就是满速;寻常反向同化也比正向更快满速(六成时间)
       const ramp = reverse && trek ? 1 : Math.min(1, (rule - MIN_RULE) / ((FULL_RULE - MIN_RULE) * (reverse ? 0.6 : 1)));
-      const rate0 = RATE * ramp * f * near * strength * e;
+      const fg = faithGap(pm, polityFaith(pm, P, t), pm.faithAt?.(r) ?? -1);
+      const rate0 = RATE * ramp * f * near * strength * e * faithAlignMul(fg, FAITH_SAME, FAITH_FAR, faithScale(P, t, FAITH_THEO));
       const rate = rateIn ? rate0 * rateIn[r] : rate0;
       const p = 1 - fexp(-rate * span);
       if (keyed4(am.base, pm.ptag[P.id], reg.seat[r], k, U_ASSIM) < p) out.push([r, g]);
