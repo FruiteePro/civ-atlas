@@ -64,7 +64,7 @@ function fingerprint(seed: number): Record<string, string> {
 }
 
 /**
- * 期望值是 GENERATOR_VERSION 24 算的(civ.religion 是后加的字段,加它时别的字段一个没变;地图上画的关隘(civ.places 里的 pass,算在 civ.places.pass)也是后加的,加它时别的字段、别的地名一个没变,后来关隘又记上在那里据险断后的史事(Place.pass.stands),也只变了 civ.places.pass;10 加了邦交、11 加了君主性格和扩张算账,历史都重排;12 只改了 civ.people:多了名臣,将领有了字号、籍贯、官职,撞名的将领换了名字;13 改了宜居度和城的人口上限,地形一个字段没变,历史重排;多了 civ.capNorm;14 处理了封闭内海、贴着海的湖、湖心小块地,地形局部变了、历史重排;15 立国更早、多了边缘立国和民族分化,历史重排;civ.development 是后加的字段,加它时别的字段一个没变;16 有了航海时代,历史重排;17 发展度反过来影响人口、打仗和远航,各国自己进航海时代,历史重排;18 降水分夏冬两半年算、河多了,地形不变,气候、河流、历史重排;19 仗短而狠、乘胜连下、前线拉锯,历史重排;20 有了饥荒、民变、大崩解,历史重排;23 推完以后的整理只看每样东西出现以前的历史,归属、日志、史事、检查点一个没变,民族、州、城、国家、人物、地名、道路、信仰重排,多了 civ.capSpacing;24 推演里走过的航线不通到遗址,只有 civ.routes 变了;36 君主有了诸子、王子领兵、争储,宗室据地自立,历史重排;39 有了立约与中立地,历史重排;40 有了掌实权的人和两国宗室联姻,历史重排;41 开战看内政,历史重排;42 亡国之君先出奔中立地,疆域兴亡不变,只多了出奔的史事(civ.annals、civ.people、civ.development 里记的史事条数、civ.places.pass 里记的史事下标跟着变);43 战争节奏(议和了还会再打、仗打得密、罢兵割地),历史重排;44 亡国之君出奔邻国,疆域兴亡不变,只多了出奔的史事(和 42 一样只变了 civ.annals、civ.people、civ.development、civ.places.pass);46 有了大迁徙,历史重排,多了 civ.migrations;48 大迁徙的方位按整条路线定,只变了 civ.migrations;50 一部分人物换成女的,只变了 civ.people(性别、名字、字、西幻的序数);51 将门世家、复国之君接上故国世系,只变了 civ.people(多了父子、补的宗室,名字、籍贯、编号跟着变)和 civ.religion(里面记的君主编号);civ.ideology(思潮,只算不用)是后加的字段,加它时别的字段一个没变;53 调了思潮的数(传播、退潮),只变了 civ.ideology;54 思潮的快照从每 100 年一份改成每 20 年一份,只变了 civ.ideology;55 改制(立宪、废君立共和、革命、政变、复辟,读思潮)进推演,历史重排;56 滚雪球(破都纳降、连续吞并),历史重排;57 有了湿地(低平积水的陆地块成了湿地,难住难走),地形、气候、河一个字段没变,world.biome 和历史重排;同一版里还修了接着推会改掉先前人物的几处(太后的丈夫、预定继承人的名字、改名的将领名臣),只变了 civ.people 和 civ.religion;59 将领名臣避重名时多试几轮,只变了 civ.people;60 民族更密、分化稍易,地形一个字段没变,历史重排;61 加厚十二种语感词库,地形、历史一个字段没变,只有带名字的字段变了(civ.cultures、civ.people、civ.places、civ.places.pass、civ.polities、civ.regions、civ.religion、civ.settlements、civ.trade);62 六种新语感接入,语感对口分变了,地形、疆域、兴亡一个字段没变,只有带名字的字段和人物变了(civ.cultures、civ.people、civ.places、civ.places.pass、civ.polities、civ.regions、civ.religion、civ.settlements、civ.trade);63 分化出来的民族按母族语感做方言,地形、疆域、兴亡一个字段没变,只有分化支的默认名字变了(civ.people、civ.polities、civ.regions、civ.religion、civ.settlements;族名、山海地名不变);64 同一书写系统里外族统治够久后,被统治民族后来的地名、国号、人名走接触语,地形、疆域、兴亡一个字段没变,只有带名字的字段变了(civ.people、civ.polities;有的种子还有 civ.regions、civ.settlements、civ.trade))；65 反向同化略松、长期混居且同一书写系统的两族偶尔融成一支新民族,地形一个字段没变,历史重排；66 国内少数族早年日常自治更松,中古以后日常收紧,危机里自立、复国、割据按占地和是否异教另加一截,地形一个字段没变,历史重排。经纬度换算、沿大圆走、球面三角形面积这些三角函数都舍入到 24 位,
+ * 期望值是 GENERATOR_VERSION 24 算的(civ.religion 是后加的字段,加它时别的字段一个没变;地图上画的关隘(civ.places 里的 pass,算在 civ.places.pass)也是后加的,加它时别的字段、别的地名一个没变,后来关隘又记上在那里据险断后的史事(Place.pass.stands),也只变了 civ.places.pass;10 加了邦交、11 加了君主性格和扩张算账,历史都重排;12 只改了 civ.people:多了名臣,将领有了字号、籍贯、官职,撞名的将领换了名字;13 改了宜居度和城的人口上限,地形一个字段没变,历史重排;多了 civ.capNorm;14 处理了封闭内海、贴着海的湖、湖心小块地,地形局部变了、历史重排;15 立国更早、多了边缘立国和民族分化,历史重排;civ.development 是后加的字段,加它时别的字段一个没变;16 有了航海时代,历史重排;17 发展度反过来影响人口、打仗和远航,各国自己进航海时代,历史重排;18 降水分夏冬两半年算、河多了,地形不变,气候、河流、历史重排;19 仗短而狠、乘胜连下、前线拉锯,历史重排;20 有了饥荒、民变、大崩解,历史重排;23 推完以后的整理只看每样东西出现以前的历史,归属、日志、史事、检查点一个没变,民族、州、城、国家、人物、地名、道路、信仰重排,多了 civ.capSpacing;24 推演里走过的航线不通到遗址,只有 civ.routes 变了;36 君主有了诸子、王子领兵、争储,宗室据地自立,历史重排;39 有了立约与中立地,历史重排;40 有了掌实权的人和两国宗室联姻,历史重排;41 开战看内政,历史重排;42 亡国之君先出奔中立地,疆域兴亡不变,只多了出奔的史事(civ.annals、civ.people、civ.development 里记的史事条数、civ.places.pass 里记的史事下标跟着变);43 战争节奏(议和了还会再打、仗打得密、罢兵割地),历史重排;44 亡国之君出奔邻国,疆域兴亡不变,只多了出奔的史事(和 42 一样只变了 civ.annals、civ.people、civ.development、civ.places.pass);46 有了大迁徙,历史重排,多了 civ.migrations;48 大迁徙的方位按整条路线定,只变了 civ.migrations;50 一部分人物换成女的,只变了 civ.people(性别、名字、字、西幻的序数);51 将门世家、复国之君接上故国世系,只变了 civ.people(多了父子、补的宗室,名字、籍贯、编号跟着变)和 civ.religion(里面记的君主编号);civ.ideology(思潮,只算不用)是后加的字段,加它时别的字段一个没变;53 调了思潮的数(传播、退潮),只变了 civ.ideology;54 思潮的快照从每 100 年一份改成每 20 年一份,只变了 civ.ideology;55 改制(立宪、废君立共和、革命、政变、复辟,读思潮)进推演,历史重排;56 滚雪球(破都纳降、连续吞并),历史重排;57 有了湿地(低平积水的陆地块成了湿地,难住难走),地形、气候、河一个字段没变,world.biome 和历史重排;同一版里还修了接着推会改掉先前人物的几处(太后的丈夫、预定继承人的名字、改名的将领名臣),只变了 civ.people 和 civ.religion;59 将领名臣避重名时多试几轮,只变了 civ.people;60 民族更密、分化稍易,地形一个字段没变,历史重排;61 加厚十二种语感词库,地形、历史一个字段没变,只有带名字的字段变了(civ.cultures、civ.people、civ.places、civ.places.pass、civ.polities、civ.regions、civ.religion、civ.settlements、civ.trade);62 六种新语感接入,语感对口分变了,地形、疆域、兴亡一个字段没变,只有带名字的字段和人物变了(civ.cultures、civ.people、civ.places、civ.places.pass、civ.polities、civ.regions、civ.religion、civ.settlements、civ.trade);63 分化出来的民族按母族语感做方言,地形、疆域、兴亡一个字段没变,只有分化支的默认名字变了(civ.people、civ.polities、civ.regions、civ.religion、civ.settlements;族名、山海地名不变);64 同一书写系统里外族统治够久后,被统治民族后来的地名、国号、人名走接触语,地形、疆域、兴亡一个字段没变,只有带名字的字段变了(civ.people、civ.polities;有的种子还有 civ.regions、civ.settlements、civ.trade))；65 反向同化略松、长期混居且同一书写系统的两族偶尔融成一支新民族,地形一个字段没变,历史重排；66 国内少数族早年日常自治更松,中古以后日常收紧,危机里自立、复国、割据按占地和是否异教另加一截,地形一个字段没变,历史重排；67 各语感教名、民间通名加厚,地形、疆域、兴亡一个字段没变,只有 civ.religion 变了。经纬度换算、沿大圆走、球面三角形面积这些三角函数都舍入到 24 位,
  * 推演里的超越函数也一样,所以各 CPU、各浏览器逐位一致
  */
 const EXPECTED: Record<number, Record<string, string>> = {
@@ -108,7 +108,7 @@ const EXPECTED: Record<number, Record<string, string>> = {
     'civ.polity': '518db43e33d9',
     'civ.polityYears': 'e5d380617183',
     'civ.regions': '2620f74b8499',
-    'civ.religion': 'c49a61d007eb',
+    'civ.religion': 'ec4978c2daaa',
     'civ.routes': '76303ab1e809',
     'civ.sailFrom': '5bd9534e2395',
     'civ.seed': '0096064c9137',
@@ -157,7 +157,7 @@ const EXPECTED: Record<number, Record<string, string>> = {
     'civ.polity': 'e01f02466930',
     'civ.polityYears': 'e5d380617183',
     'civ.regions': '044a68164400',
-    'civ.religion': '8c58641664c1',
+    'civ.religion': '50f9283b4718',
     'civ.routes': 'a649878bdf56',
     'civ.sailFrom': '5bd9534e2395',
     'civ.seed': '6b5deaaf6a3b',
@@ -206,7 +206,7 @@ const EXPECTED: Record<number, Record<string, string>> = {
     'civ.polity': 'b8b516969128',
     'civ.polityYears': 'e5d380617183',
     'civ.regions': '75dd4d5861ac',
-    'civ.religion': '2d3c14a6560e',
+    'civ.religion': '560c343f3c3a',
     'civ.routes': 'e39fb597f8e4',
     'civ.sailFrom': '5bd9534e2395',
     'civ.seed': '3ff6de7b7854',

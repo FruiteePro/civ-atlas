@@ -19,11 +19,11 @@ import { yearAt, type Era } from '../../era';
 
 /** 类型的说明(宗教卡片「类型」一行的小字) */
 export const FORM_NOTE: Record<FaithForm, string> = {
-  一神: '只拜一位神',
-  多神: '拜很多神',
-  二元: '善神恶神相争',
-  哲理: '讲修身处世，不拜神',
-  修行: '出家修行',
+  一神: '只奉一位至上神',
+  多神: '祭祀多位神灵,各有职司',
+  二元: '光明与黑暗相争,世间随之起伏',
+  哲理: '讲修身处世,不专拜某一位神',
+  修行: '出家或隐修,以求超脱',
 };
 
 /** 宗教大事的一字标签(界面上的类型名见 timelineLayout.ts 的 TAG_LABEL:创教、国教、传入、教派、圣城) */
@@ -184,7 +184,7 @@ export interface FaithRow {
 
 /** 民间信仰合成的那一行 */
 export const FOLK_ROW_NAME = '民间信仰';
-export const FOLK_ROW_SUB = '各族自己的祖灵、旧神';
+export const FOLK_ROW_SUB = '各族自己的祖灵、旧神、氏神与民间祭祀';
 
 /**
  * 某一年的信仰列表:大教按(自己 + 教派)的州数排,教派(按州数)跟在本教后面,最后一行民间信仰;

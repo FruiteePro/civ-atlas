@@ -12,7 +12,7 @@ import { FONT_FILES } from '../src/render/labels/fonts';
 import { DEFAULT_PARAMS, generateWorld } from '../src/gen/world';
 import { generateCiv } from '../src/gen/civ';
 import { easternTitles, POLITY_FORMS, polityAllTitles, polityRoots } from '../src/gen/civ/growth';
-import { EAST_WORDS } from '../src/gen/civ/religion';
+import { FAITH_NAME_STEMS, FAITH_NAME_TAILS } from '../src/gen/civ/religionNames';
 import { ERAS } from '../src/gen/civ/development';
 
 const FONT_DIR = path.join('public', 'fonts');
@@ -85,10 +85,10 @@ describe('地图文字的字体子集', () => {
     expect([...missing].join('')).toBe('');
   });
 
-  it('教名(东方大教的用字和通名、教派的方位)、九个时代的全称都在字表里', () => {
+  it('教名(各语感大教的用字和通名、教派的方位)、九个时代的全称都在字表里', () => {
     const missing = new Set<string>();
     const texts = ERAS.map((e) => `${e}时代`);
-    for (const w of EAST_WORDS) for (const tail of ['教', '宗', '道']) texts.push(`${w}${tail}`);
+    for (const w of FAITH_NAME_STEMS) for (const tail of FAITH_NAME_TAILS) texts.push(`${w}${tail}`);
     for (const d of '东南西北') texts.push(`${d}派`, `${d}宗`);
     for (const t of texts) for (const c of t) if (!CHARSET.has(c)) missing.add(c);
     expect([...missing].join('')).toBe('');

@@ -651,6 +651,7 @@
  *  65:反向同化门槛略松、速率略快,仍走史事 assimilate;长期混居且同一书写系统的两族偶尔融成一支新民族(有严格上限,比普通分化稀),
  *      族名另起,后来的名字按接触语那样混两支语感。地形不变,历史重新推演
  *  66:国内少数族早年日常自治更松,中古以后日常收紧;危机里自立、复国、割据按这族占地和是否异教另加一截,中古以后照样起得来。地形不变,历史重新推演
+ *  67:各语感的教名、民间信仰后缀和说明加厚,和风、海东、天竺、波斯、南洋、萨赫勒各有专名;地形、历史、疆域兴亡不变,只有教名和相关说明变了
  */
 import type { Civ, Culture, Faith, MigrationDir, Person, Place, Polity, Regions, RulerLeanings, Settlement } from './civ/types';
 import { FRAGMENT_MODE_CHOICES, type FragmentModeChoice } from './civ/fragmentMode';
@@ -667,7 +668,7 @@ import { SLUMP_CHOICES, SLUMP_DEFAULT, type Calamity } from './civ/calamity';
 import { stampCalc, type RuleSet } from './civ/ruleSet';
 
 /** 生成器版本:生成算法有改动、同种子会得到不同世界时加一(存档读档时核对);加一时在 GENERATOR_CHANGES 里补一条 */
-export const GENERATOR_VERSION = 66;
+export const GENERATOR_VERSION = 67;
 
 /**
  * 一版生成器的改动有多大(从小到大):打开旧存档、旧链接时,按跨过的几版里最大的那一种说清变了什么(savefile.ts 的 versionNote)
@@ -754,6 +755,7 @@ export const GENERATOR_CHANGES: Readonly<Record<number, { change: GeneratorChang
   64: { change: 'names' },
   65: { change: 'history' },
   66: { change: 'history' },
+  67: { change: 'names' },
 };
 
 /** 干预的种类(见文件头的表) */
@@ -1924,7 +1926,7 @@ export function applyNames(civ: Civ, names: Record<string, string>): Civ {
       changed = true;
     }
   }
-  // 信仰:民间信仰跟着改过名的民族变(族名 + 祖灵 / 旧神;用户单独改过的除外)
+  // 信仰:民间信仰跟着改过名的民族变(族名 + 各语感的民间通名;用户单独改过的除外)
   let religion = civ.religion;
   if (religion && (faith.size || culture.size)) {
     const F0 = religion.faiths;

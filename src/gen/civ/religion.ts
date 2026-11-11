@@ -37,6 +37,8 @@ import { capitalAt, populationAt } from './growth';
 import { cultureDialect, personNamers } from './naming';
 import { keyed, subSeed } from '../util';
 import type { CivModule } from './modules';
+import { faithTail, faithWords, folkSuffix, sectTail } from './religionNames';
+export { EAST_WORDS, folkSuffix } from './religionNames';
 
 /** 每多少年算一步 */
 const STEP = 5;
@@ -80,8 +82,6 @@ export const GREAT_COLORS: readonly [number, number, number][] = [
 /** 民间信仰的颜色(米灰) */
 export const FOLK_COLOR: [number, number, number] = [214, 207, 192];
 
-/** 东方语感的教名用字(避开现实里有的教名、宗派名) */
-export const EAST_WORDS = ['玄晖', '澄元', '照冥', '衡一', '昭虚', '守素', '含光', '归穹'];
 /** 民族的生计 → 创出的大教可能是哪几类 */
 const FORM_BY_KIND: Record<string, FaithForm[]> = {
   river: ['一神', '二元'],
@@ -573,33 +573,30 @@ export class FaithSim {
       const f: Faith = { ...this.faiths[k] };
       const nm = this.naming[k];
       if (nm.kind === 'folk') {
-        f.name = `${nm.cu.name}${folkSuffix(eastern(nm.cu))}`;
+        f.name = `${nm.cu.name}${folkSuffix(nm.cu.style, eastern(nm.cu))}`;
         f.culture = nm.cu.id;
       } else if (nm.kind === 'great') {
         const namer = namers(nm.cu.style, cultureDialect(nm.cu, civ.cultures));
         const given = namer.given(nm.cell, 77);
-        if (namer.family === 'eastern') {
-          const tail = f.form === '修行' ? '宗' : f.form === '哲理' ? '道' : '教';
-          const w0 = Math.floor(keyed(seed, 4, nm.cell) * EAST_WORDS.length);
-          let i = 0;
-          while (i < EAST_WORDS.length - 1 && taken(`${EAST_WORDS[(w0 + i) % EAST_WORDS.length]}${tail}`)) i++;
-          f.name = `${EAST_WORDS[(w0 + i) % EAST_WORDS.length]}${tail}`;
-        } else {
-          f.name = `${given.slice(0, Math.min(3, Math.max(2, given.length - 1)))}教`;
-          if (taken(f.name)) f.name = `${given}教`;
-        }
+        const isEast = namer.family === 'eastern';
+        const tail = faithTail(nm.cu.style, f.form, isEast);
+        const stems = faithWords(nm.cu.style, isEast).stems;
+        const w0 = Math.floor(keyed(seed, 4, nm.cell) * stems.length);
+        let i = 0;
+        while (i < stems.length - 1 && taken(`${stems[(w0 + i) % stems.length]}${tail}`)) i++;
+        f.name = `${stems[(w0 + i) % stems.length]}${tail}`;
         f.founder = { ...f.founder!, name: namer.surname(nm.cell, 77) + given };
       } else {
         const parent = out[f.parent!];
         const by = this.foundedBy.get(f.parent!) ?? civ.cultures[S[parent.holy!].culture];
-        f.name = sectName(out, parent.name, sectDir(world, nm.holySeat, nm.capSeat), S[nm.cap].name, eastern(by));
+        f.name = sectName(out, parent.name, sectDir(world, nm.holySeat, nm.capSeat), S[nm.cap].name, by.style, eastern(by));
       }
       out.push(f);
     }
     // 一直没住进过哪个州的民族(推演中分化出来的不会这样):民间信仰排在最后
     for (const cu of this.src.cultures()) {
       if (this.folkOf.has(cu)) continue;
-      out.push({ id: out.length, kind: 'folk', name: `${cu.name}${folkSuffix(eastern(cu))}`, culture: cu.id, color: FOLK_COLOR });
+      out.push({ id: out.length, kind: 'folk', name: `${cu.name}${folkSuffix(cu.style, eastern(cu))}`, culture: cu.id, color: FOLK_COLOR });
     }
     const rulerAt = (p: number, y: Year) =>
       civ.people?.find((x) => x.role === 'ruler' && x.polity === p && (x.from ?? 0) <= y && (x.until ?? 1e9) > y)?.id;
@@ -770,17 +767,13 @@ function countRoots(R: number, F: number, ownP: Int16Array, faith: Int16Array, i
   }
 }
 
-/** 民间信仰的名字:族名 + 祖灵(东方)/ 旧神(西幻) */
-export function folkSuffix(eastern: boolean): string {
-  return eastern ? '祖灵' : '旧神';
-}
-
-/** 教派的名字:教名去掉末字 + 方位 + 宗(东方)/ 派(西幻);重名时用那国国都名字的前两个字 */
-function sectName(faiths: readonly Faith[], parent: string, dir: string, capital: string, eastern: boolean): string {
+/** 教派的名字:教名去掉末字 + 方位 + 通名(东方多是宗,西幻多是派);重名时用那国国都名字的前两个字 */
+function sectName(faiths: readonly Faith[], parent: string, dir: string, capital: string, style: string, eastern: boolean): string {
   const root = parent.slice(0, -1);
-  const byDir = eastern ? `${root}${dir}宗` : `${root}${dir}派`;
+  const tail = sectTail(style, eastern);
+  const byDir = `${root}${dir}${tail}`;
   if (!faiths.some((x) => x.name === byDir)) return byDir;
-  return eastern ? `${capital.slice(0, 2)}宗` : `${root}${capital.slice(0, 2)}派`;
+  return eastern ? `${capital.slice(0, 2)}${tail}` : `${root}${capital.slice(0, 2)}${tail}`;
 }
 
 // ---------------------------------------------------------------------------

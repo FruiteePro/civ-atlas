@@ -756,7 +756,7 @@ export type FaithForm = '一神' | '多神' | '二元' | '哲理' | '修行';
 export interface Faith {
   id: number;
   kind: FaithKind;
-  /** 教名;民间信仰 = 族名 + 祖灵(东方)/ 旧神(西幻) */
+  /** 教名;民间信仰 = 族名 + 各语感的民间通名(祖灵、旧神、氏神……) */
   name: string;
   /** 大教 / 教派 */
   form?: FaithForm;

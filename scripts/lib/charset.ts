@@ -31,9 +31,9 @@ const EXCLUDE = new Set(['src/gen/names/filters.ts', 'src/gen/names/persons.ts']
 export const EXTRA_CHARS =
   '国王帝皇汗公侯伯子男部盟邦联共和朝府州郡县道省城镇村寨堡港关都京邑乡里营屯驿' +
   '族' +
-  // 教名的通名(某某教 / 宗 / 道,教派某某东派)和东方大教的教名用字(src/gen/civ/religion.ts 的 EAST_WORDS)
+  // 教名的通名(某某教 / 宗 / 道,教派某某东派)和各语感的教名用字(src/gen/civ/religionNames.ts)
   '教宗派' +
-  '玄晖澄元照冥衡一昭虚守素含光归穹' +
+  '玄晖澄元照冥衡一昭虚守素含光归穹青冥苍玄明渊澄澜' +
   // 九个时代的全称(src/gen/civ/development.ts 的 ERAS + 「时代」)
   '石器青铜铁中古火药工业电气信息未来时代' +
   '东南西北中上下前后内外大小新旧高低' +
