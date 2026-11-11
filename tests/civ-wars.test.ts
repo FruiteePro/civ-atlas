@@ -152,7 +152,9 @@ describe('战争与攻占', () => {
             expect(w, `攻占记的战争 ${e.war}`).toBeDefined();
             expect(w.peace).toBeUndefined();
             expect([w.a, w.b]).toContain(e.a);
-            expect([w.a, w.b]).toContain(e.b);
+            // 中古以后打仗顺手收的无主部落州:b = −1,原主不是交战的另一方
+            if (e.b >= 0) expect([w.a, w.b]).toContain(e.b);
+            else expect(e.b).toBe(-1);
             expect(e.a).not.toBe(e.b);
             expect(before[e.region], `第 ${e.year} 年州 ${e.region} 原主`).toBe(e.b);
             expect(after[e.region]).toBe(e.a);
@@ -629,8 +631,8 @@ describe('战争与攻占', () => {
       const quell = civ.annals.filter((e) => e.kind === 'war' && e.cause === 'quell').length;
       expect(list.filter((e) => e.kind === 'war').length).toBe(count('war') - quell);
       expect(list.filter((e) => e.kind === 'revolt').length).toBe(quell);
-      // 没有单列的攻占:都挂在某场战争下(部落地带的扩张走"国家到达",不记攻占)
-      expect(civ.annals.every((e) => e.kind !== 'conquer' || (e.war >= 0 && e.b >= 0))).toBe(true);
+      // 没有单列的攻占:都挂在某场战争下(和平收服部落地带仍走"国家到达";中古以后打仗顺手收的无主部落州也记 conquer,b = −1,同样挂在那场战争下)
+      expect(civ.annals.every((e) => e.kind !== 'conquer' || (e.war >= 0 && (e.b >= 0 || e.b === -1)))).toBe(true);
       expect(list.some((e) => e.kind === 'conquer')).toBe(false);
       expect(list.filter((e) => e.kind === 'fall').length).toBe(count('fall'));
       // 国都失守的迁都(带战争编号)挂在那场战争下,顶层只有主动迁都

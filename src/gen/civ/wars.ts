@@ -32,6 +32,8 @@
  *     国力 = 本国城镇人口之和(growth.ts 的 populationAt;城的人口上限随生产能力变)× 军力系数(PolityModel.military,
  *     发展度按国都所在州的动员能力定,有上下限);照大纲顺着引的方针再乘它的国力倍数(policy.ts 的 powerScale)。
  *     挂了政局数表(control.ts)时读表里每年年初算的国力;这一年里才立的国家照这里现算。
+ *     中古以后打仗还可能顺手收服前线接壤的无主部落州(按国都时代、政体、贫富、民族、信仰加权,一场有上限);
+ *     早年仍只打敌国的州,不占无主部落地。
  *   宣战 → 每隔 GAP 年打一仗(Ev.Campaign):
  *     攻方挑一个**和自己国土接壤**的敌州打(国土保持成片):被自己围得越多的州越先打(前线齐整,不打出飞地),
  *       其次是离敌国国都近的(直取国都)、好走的(翻山、跨河难打)、有本国缺的物产的(RES_TARGET);打下来会把敌国切出一大块(> MAX_CUT 州)的先不打。
@@ -91,7 +93,7 @@ import { coldShare, coldSpellEnd, yearClimate } from '../seasons';
 import { AdjKind, Layer, type Annal, type AnnalCause, type Civ, type Polity, type Year } from './types';
 import { fexp, flog, fpow, keyed, keyed4, round24, subSeed } from './engine/rand';
 import { bookChain, LOOK_K, quantize, type CivSim } from './engine/sim';
-import { befriends, canCross, coreOf, effOf, endPolity, moveCapital, picks, policyAt, polityModelOf, powerScaleOf, regentOf, rulerOf, rulingLeanings, type PolityModel } from './polities';
+import { befriends, canCross, coreOf, effOf, endPolity, moveCapital, picks, policyAt, polityModelOf, POLITIES_KNOBS, powerScaleOf, regentOf, rulerOf, rulingLeanings, tribalAnnexMul, type PolityModel } from './polities';
 import { reignBorn } from './rulers';
 import { REGENTS_KNOBS } from './regents';
 import { POLICY_KNOBS } from './policy';
@@ -271,6 +273,12 @@ export const WARS_KNOBS = defineKnobs('wars', {
   WINTER_T: 3,
   WINTER_JITTER: 0.06,
   WINTER_ALWAYS: 0.9,
+  /**
+   * 中古以后战争顺手收服前线接壤的无主部落州:赔率、一场每边最多几州。
+   * 时代门槛和加权与 polities.ts 的 TRIBAL_* 同一套(国都时代不到中古 = 0,早年仍不占)
+   */
+  TRIBAL_WAR_ODDS: 0.28,
+  TRIBAL_WAR_MAX: 2,
 });
 /** 这张表的值(一套数里取出来的) */
 export type WarsKnobs = typeof WARS_KNOBS.values;
@@ -298,6 +306,7 @@ const U_REVENGE = 15;
 const U_THAW = 16;
 const U_CHAIN = 17;
 const U_COLLAPSE_TRUCE = 18;
+const U_TRIBAL = 19;
 
 // ---------------------------------------------------------------------------
 // 模型
@@ -893,6 +902,8 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     wm.truce.set(pairKey(w.a, w.b), t);
     // region 列记割让了几州(紧挨在这条议和前面的那么多条攻占是割让的,编年史写"划归""割某州求和"而不写"攻取");没割让 = −1。
     // n 列记其中最前面几条是罢兵割地
+    // 议和记账以前先看一眼前线边上的无主部落州(中古以前 scoopTribal 自己会挡;扫快照,不沿着刚收的部落州再往外滚,也不插进亡国 / 迁都那几条中间)
+    for (const e of w.takes.slice()) scoopTribal(w, e.by, e.region, t);
     sim.record('peace', { a: w.a, b: w.b, war: w.id, region: ceded > 0 ? ceded : -1, ...(yielded > 0 ? { n: yielded } : {}) });
     // 记恨赢了自己的那一国;停战期满后几年替输的一方多看一眼邻国(复仇之战)
     const g = grudgeOf(w, !!api.war.revolt?.(w));
@@ -913,6 +924,53 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     sim.record('fall', { a: y, b: x, region: r, war: w.id, ...(surrender ? { cause: 'surrender' as const } : {}) });
     for (const v of warsOf(y)) makePeace(v, t);
     api.war.onFall?.(w, x, y, t);
+  };
+
+  /** 这场仗里各方已经顺手收服的无主部落州数(key = 战争编号 * 32768 + 国家) */
+  const tribalGot = new Map<number, number>();
+  const tribalKey = (w: War, x: number) => w.id * 32768 + x;
+
+  /**
+   * 中古以后,打仗时顺手收服和 r 接壤的无主部落州。按国都时代、政体、贫富、民族、信仰加权,
+   * 一场每边最多 TRIBAL_WAR_MAX 州;早年或走不过去、禁令锁住的不去。史事 conquer 的 b = −1
+   */
+  const scoopTribal = (w: War, x: number, r: number, t: Year): number => {
+    const X = pm.polities[x];
+    if (!X || X.ended !== undefined) return 0;
+    const { TRIBAL_ERA0 } = pm.knobs.get(POLITIES_KNOBS);
+    const { TRIBAL_WAR_ODDS, TRIBAL_WAR_MAX } = wm.k;
+    const cap = pm.settlements[capitalAt(X, t)]?.region;
+    const era = cap !== undefined ? (pm.eraAt?.(cap) ?? -1) : -1;
+    if (era < TRIBAL_ERA0) return 0;
+    const already = tribalGot.get(tribalKey(w, x)) ?? 0;
+    if (already >= TRIBAL_WAR_MAX) return 0;
+    const haltMask = ownedAtHalt(x, t);
+    const culture = sim.owners[Layer.Culture];
+    const cands: number[] = [];
+    for (let k = reg.adjStart[r]; k < reg.adjStart[r + 1]; k++) {
+      const j = reg.adj[k];
+      if (owner[j] >= 0 || culture[j] < 0) continue;
+      if (haltMask && !haltMask[j]) continue;
+      if (wm.iv?.locked(j, t)) continue;
+      if (!canCross(pm, X, reg.adjKind[k], t)) continue;
+      cands.push(j);
+    }
+    cands.sort((a, b) => a - b);
+    const tag = pm.ptag[x] ?? 0;
+    let got = 0;
+    for (const j of cands) {
+      if (already + got >= TRIBAL_WAR_MAX || owner[j] >= 0) continue;
+      const mul = tribalAnnexMul(pm, X, j, culture[j], t);
+      const odds = TRIBAL_WAR_ODDS * (0.25 + 1.25 * Math.max(0, 1 - mul));
+      const u = keyed4(wm.base, tag, w.id * 32768 + j, U_TRIBAL, 0);
+      if (u >= odds / (1 + odds)) continue;
+      sim.setOwner(Layer.Polity, j, x, Ev.Conquer);
+      sim.record('conquer', { a: x, b: -1, region: j, settlement: pm.cityOf[j], war: w.id });
+      w.takes.push({ year: t, region: j, by: x });
+      got++;
+    }
+    if (got) tribalGot.set(tribalKey(w, x), already + got);
+    return got;
   };
 
   /**
@@ -1420,6 +1478,10 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
           } else sim.record('battle', { a: w.b, b: w.a, region: q, settlement: pm.cityOf[q], war: w.id, via: DEFENSE.indexOf(qdef) });
         }
       }
+    }
+    // 这一仗打完,顺手看看前线边上的无主部落州(若已亡国,makePeace 里已经收过,这里会直接 return)
+    if (w.end === undefined) {
+      for (const e of w.takes.slice()) if (e.year === t) scoopTribal(w, e.by, e.region, t);
     }
     if (w.end !== undefined) return; // 有一方亡国,已经议和
     // 邦交:守方打得很惨时可能奉表称臣、攻方受降罢兵(diplomacy.ts;成了就已经议和)

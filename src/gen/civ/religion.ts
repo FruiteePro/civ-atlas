@@ -623,14 +623,18 @@ function simSource(sim: CivSim, cm: CultureModel, pm: PolityModel): FaithSource 
   return { log: () => sim.logView, settlements: () => pm.settlements, polities: () => pm.polities, cultures: () => cm.cultures };
 }
 
-function hook(sim: CivSim, fs: FaithSim, first: Year): void {
+function hook(sim: CivSim, fs: FaithSim, first: Year, pm?: PolityModel): void {
   sims.set(sim, fs);
+  if (pm) {
+    pm.faithAt = (r) => (r >= 0 && r < fs.faith.length ? fs.faith[r] : -1);
+    pm.stateFaith = (p) => fs.stateFaith(p);
+  }
   sim.everyYears(first, STEP, (y) => fs.step(y));
 }
 
 /** 登记信仰推演(generateCiv 里,各层 install 之后):第 0 年起每 STEP 年一步。regions = 推演的州 */
 export function installReligion(sim: CivSim, civSeed: number, cm: CultureModel, pm: PolityModel, regions: Regions): void {
-  hook(sim, new FaithSim(civSeed, simSource(sim, cm, pm), regions), 0);
+  hook(sim, new FaithSim(civSeed, simSource(sim, cm, pm), regions), 0, pm);
 }
 
 /**
@@ -641,7 +645,7 @@ export function resumeReligion(sim: CivSim, civ: Civ, cm: CultureModel, pm: Poli
   const fs = new FaithSim(civ.seed, simSource(sim, cm, pm), civ.regions, eras);
   let y = 0;
   for (; y <= civ.endYear; y += STEP) fs.step(y);
-  hook(sim, fs, y);
+  hook(sim, fs, y, pm);
 }
 
 /** 推完整理成 Civ.religion(推完往结果上补;见 FaithSim.finish)。引擎上没挂信仰推演 = 推完照历史再算一遍 */

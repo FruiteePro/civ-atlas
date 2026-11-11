@@ -16,7 +16,8 @@
  * 国家走一步要几年 = STEP_YEARS × 路程 × 地形 × 过界 × 民族(同族 1、异族 ×2.5)× 类型修正 × 离国都远近 × 抖动 ÷ 扩张性
  *   - 只进有人住、还没有国家的州:无人区不去;阶段 2 先到先得,两国相接就停在那里
  *   - 只有海洋国家能跨海(海峡、航线),别的国家不会有跨海领土
- *   - 离国都越远越慢(× e^(离国都的路程 / REACH)):国家不会无限铺开,边远处留下有人住、没有国家的"部落地带"
+ *   - 离国都越远越慢(× e^(离国都的路程 / REACH)):国家不会无限铺开,边远处留下有人住、没有国家的"部落地带";
+ *     中古以后扩张算账按国都时代、政体、州的贫富、民族和信仰再放一截(tribalAnnexMul),富庶、同族、同教的更容易收服,并不把部落地带一口吃光
  *   - 阶段 3 有了战争(wars.ts):国家会丢州、迁都、灭亡。"国家到达"触发时要求这个国家和国都连成一片的国土
  *     还挨着那一州(丢了出发的那一州、或者只剩被切出去的飞地挨着,就不去了:不长出飞地);灭亡的国家撤掉国都间距标记;
  *     迁都后"离国都的路程"按新国都算(迁都那一刻之后预约的才按新的);迁都的下一刻从现有国土往外重新预约一遍
@@ -47,6 +48,7 @@ import type { RouteCity } from './routes';
 import type { InterventionModel } from './interventions';
 import type { Intervention } from '../edits';
 import { actsFrom, leaningsAt, reignAt, reignBook, reignStart, rulerBase, type LeaningEffect, type Reign, type RulerAct } from './rulers';
+import { regimeAt } from './regime';
 import { POLICY_KNOBS, policiesFrom, policySeg, powerScale, segAt, segEffect, unrestShift, type PolicyIv, type PolicySeg } from './policy';
 import { regencyBase, regentAt, regentsFrom, type Regency, type RegencyCtx } from './regents';
 import type { CivModule } from './modules';
@@ -136,6 +138,22 @@ export const POLITIES_KNOBS = defineKnobs('polities', {
   ROUTE_MIN_RANK: 1,
   /** 海洋国家走城邦共和一系的概率(其余走农耕一系) */
   REPUBLIC_P: 0.75,
+  /**
+   * 中古以后收服部落地带:国都时代不到 TRIBAL_ERA0(中古)不算加成,到 TRIBAL_ERA1(工业)收到满。
+   * 门槛再乘 TRIBAL_LATE 和政体、贫富、同族、同教的折扣;小于 1 = 更容易去。早年照旧
+   */
+  TRIBAL_ERA0: 3,
+  TRIBAL_ERA1: 5,
+  TRIBAL_LATE: 0.75,
+  TRIBAL_EMPIRE: 0.9,
+  TRIBAL_JUNTA: 0.88,
+  TRIBAL_THEOCRACY: 0.92,
+  TRIBAL_REPUBLIC: 1.08,
+  TRIBAL_WEALTH: 0.15,
+  TRIBAL_SUIT_REF: 12,
+  TRIBAL_KIN: 0.12,
+  TRIBAL_FAITH: 0.15,
+  TRIBAL_FAITH_D: 0.12,
 });
 /** 这张表的值(一套数里取出来的) */
 export type PolitiesKnobs = typeof POLITIES_KNOBS.values;
@@ -211,6 +229,12 @@ export interface PolityModel {
   capFactor?: Float64Array;
   /** 新建的城记起的倍数(推演插件接了影响口 city.capacity 时由发展度挂上;不给 = capFactor) */
   cityCapOf?: (r: number) => number;
+  /** 州此刻的时代数值(development.ts 挂上;没有 = 不给,扩张算账不加中古以后的部落加成) */
+  eraAt?: (r: number) => number;
+  /** 州此刻的信仰编号(religion.ts 的 FaithSim 挂上;−1 / 不给 = 没有) */
+  faithAt?: (r: number) => number;
+  /** 国家此刻的国教(−1 / 不给 = 没有) */
+  stateFaith?: (p: number) => number;
   /** 推演插件接了影响口 war.power 时挂上(国力加减再乘它) */
   warPower?: Influences;
   military?: number[];
@@ -599,7 +623,7 @@ function policyWidens(m: PolityModel, pid: number, t: Year): LeaningEffect | nul
  * 扩张算账:国家 p 在 t 这一刻值不值得去州 b(见 WORTH)。dist = 离国都的路程表,cb = 州 b 的民族,owner = 此刻各州的国家。
  * 由当时在位的君主定:扩张高的不太计较,扩张低的只要富庶、离国都近的地方,重商高的看重沿海、大河、港口
  */
-function wants(m: PolityModel, owner: Int16Array, p: Polity, b: number, dist: Float32Array, cb: number, e: LeaningEffect): boolean {
+function wants(m: PolityModel, owner: Int16Array, p: Polity, b: number, dist: Float32Array, cb: number, e: LeaningEffect, t: Year): boolean {
   const { NOMAD_PREFER, AVOID, HIGH, PREFER, PORT_VALUE, RIVER_VALUE, WORTH_REACH, WORTH_FOREIGN, ENCLAVE, HIGH_COST, HIGH_SCALE, WORTH } = m.k;
   const T = m.terrain;
   const reg = T.regions;
@@ -644,7 +668,38 @@ function wants(m: PolityModel, owner: Int16Array, p: Polity, b: number, dist: Fl
   // 高山难治(山地民族不算)
   if (p.kind !== 'highland') cost *= 1 + Math.max(0, reg.elevation[b] - HIGH_COST) / HIGH_SCALE;
   const coast = T.coastal[b] === 1 || T.river[b] === 1 || m.port[b] === 1;
-  return value >= WORTH * cost * (coast ? e.coast : e.worth) * m.worthMul;
+  return value >= WORTH * cost * (coast ? e.coast : e.worth) * m.worthMul * tribalAnnexMul(m, p, b, cb, t);
+}
+
+/** 把 x 夹到 [lo, hi] */
+function clamp(x: number, lo: number, hi: number): number {
+  return x < lo ? lo : x > hi ? hi : x;
+}
+
+/**
+ * 中古以后收服部落地带的门槛倍数(小于 1 = 更容易去)。按国都时代从 TRIBAL_ERA0 插到 TRIBAL_ERA1,
+ * 再按政体(帝国、军政府、神权更积极,共和略慢)、州的贫富、是否同族、是否同教加权。早年或还没挂时代 = 1
+ */
+export function tribalAnnexMul(m: PolityModel, p: Polity, b: number, cb: number, t: Year): number {
+  const { TRIBAL_ERA0, TRIBAL_ERA1, TRIBAL_LATE, TRIBAL_EMPIRE, TRIBAL_JUNTA, TRIBAL_THEOCRACY, TRIBAL_REPUBLIC, TRIBAL_WEALTH, TRIBAL_SUIT_REF, TRIBAL_KIN, TRIBAL_FAITH, TRIBAL_FAITH_D } = m.k;
+  const cap = m.settlements[capitalAt(p, t)]?.region;
+  const era = cap !== undefined ? (m.eraAt?.(cap) ?? -1) : -1;
+  if (era < TRIBAL_ERA0) return 1;
+  const span = Math.max(1e-6, TRIBAL_ERA1 - TRIBAL_ERA0);
+  const fill = clamp((era - TRIBAL_ERA0) / span, 0, 1);
+  let mul = 1 - (1 - TRIBAL_LATE) * fill;
+  const regime = regimeAt(p, t);
+  if (regime === 'junta') mul *= 1 - (1 - TRIBAL_JUNTA) * fill;
+  else if (regime === 'theocracy') mul *= 1 - (1 - TRIBAL_THEOCRACY) * fill;
+  else if (regime === 'republic' || p.lineage === 'republic') mul *= 1 - (1 - TRIBAL_REPUBLIC) * fill;
+  if ((m.tier[p.id] ?? 0) >= 3) mul *= 1 - (1 - TRIBAL_EMPIRE) * fill;
+  const rich = clamp((m.terrain.meanSuit[b] - TRIBAL_SUIT_REF * 0.5) / Math.max(1e-6, TRIBAL_SUIT_REF), 0, 1);
+  mul *= 1 - TRIBAL_WEALTH * fill * rich;
+  if (cb === p.culture) mul *= 1 - TRIBAL_KIN * fill;
+  const sf = m.stateFaith?.(p.id) ?? -1;
+  const rf = m.faithAt?.(b) ?? -1;
+  if (sf >= 0 && rf >= 0) mul *= sf === rf ? 1 - TRIBAL_FAITH * fill : 1 + TRIBAL_FAITH_D * fill;
+  return clamp(mul, 0.45, 1.25);
 }
 
 /**
@@ -655,8 +710,8 @@ function reachYears(m: PolityModel, sim: CivSim, p: Polity, k: number, b: number
   const dist = distFor(m, p.id, sim.now);
   const cb = sim.owners[Layer.Culture][b];
   const owner = sim.owners[Layer.Polity];
-  if (!wants(m, owner, p, b, dist, cb, effOf(m, p.id, sim.now))) return Infinity;
-  if (prev && wants(m, owner, p, b, dist, cb, prev)) return Infinity;
+  if (!wants(m, owner, p, b, dist, cb, effOf(m, p.id, sim.now), sim.now)) return Infinity;
+  if (prev && wants(m, owner, p, b, dist, cb, prev, sim.now)) return Infinity;
   return stepYearsWith(m, p, k, b, dist, cb, sim.now);
 }
 
@@ -1515,9 +1570,9 @@ export function resumePolities(sim: CivSim, world: World, civ: Civ, iv?: Interve
     if (lastLog[j] > i || polity[j] >= 0) return;
     // 扩张算账:当时在位的君主、当时的四邻(po 是那一刻的归属),和推演时一样
     const dist = distAt(pid, y);
-    if (!wants(m, po, m.polities[pid], j, dist, cu[j], effOf(m, pid, y))) return;
+    if (!wants(m, po, m.polities[pid], j, dist, cu[j], effOf(m, pid, y), y)) return;
     // 新君即位时重新预约的:上一位就肯去的不重复预约(见 reachYears)
-    if (prev && wants(m, po, m.polities[pid], j, dist, cu[j], prev)) return;
+    if (prev && wants(m, po, m.polities[pid], j, dist, cu[j], prev, y)) return;
     const dt = stepYearsWith(m, m.polities[pid], k, j, dist, cu[j], y);
     if (dt < Infinity && quantize(y + dt) > now) pend.push({ t: y + dt, j, pid });
   };

@@ -512,6 +512,7 @@ function hook(sim: CivSim, d: DevModel): void {
   d.eng = devEngine(d, !!sim.influence?.has('dev.rate'));
   sim.tables.add(TABLE_GROUP.dev, d.eng);
   d.pm.capFactor = d.capF;
+  d.pm.eraAt = (r) => (r >= 0 && r < d.R ? d.era[r] : -1);
   if (sim.influence?.has('city.capacity')) d.pm.cityCapOf = (r) => cityCap(d.capF[r], sim.influence!.get('city.capacity')![r]);
   d.pm.military ??= [];
   // 打仗看物产(wars.ts):州里有哪几样;国家缺哪几样
