@@ -11,8 +11,11 @@
  *     将领:攻下 3 州以上 +2×州数;击退来攻 3 次以上 +2×次数;战死 +3
  *   名人的"事迹"(卡片概况第一行)只写为什么出名;人物页的一行(fameLine)前面加国名和身份、伐谁抗谁。名臣不算名人(有自己的一档)。
  * - inferredCulture 人物卡片上的民族:推演里人物没有民族字段,按籍贯城或所在国推断,不能凭名字断定
+ * - personSurname   人物卡片上的姓:只有这种语感的人名带姓时才从全名拆出来(中原、仙侠、和风、海东)
  */
 import type { Annal, Civ, Person, PersonCommand, Year } from '../types';
+import { styleSurnamed } from '../../names/persons';
+import { displaySurname } from '../surname';
 import { polityName, polityShortTitle, polityTierAt } from '../growth';
 import { cnNumber } from './chronicle';
 import { dowagerSpans, dowagerWordOf, isConsul, kinOf, personName, rulerRef, rulerShort, rulerTitle } from './peopleText';
@@ -419,4 +422,16 @@ export function inferredCulture(civ: Pick<Civ, 'settlements' | 'polities' | 'cul
   }
   const cu = civ.polities[x.polity]?.culture;
   return cu !== undefined && civ.cultures[cu] ? cu : null;
+}
+
+/**
+ * 人物卡片上的姓:只有所在国语感的人名带姓时才从全名拆出来(中原、仙侠、和风、海东)。
+ * 西幻、边塞、山海故意只有名,这里不另造姓。拆姓用界面用的 displaySurname,不起名、不改历史。
+ */
+export function personSurname(civ: Pick<Civ, 'polities' | 'cultures'>, x: Pick<Person, 'name' | 'polity'>): string | null {
+  if (!x.name) return null;
+  const style = civ.cultures[civ.polities[x.polity]?.culture]?.style;
+  if (!style || !styleSurnamed(style)) return null;
+  const sur = displaySurname(x.name);
+  return sur || null;
 }

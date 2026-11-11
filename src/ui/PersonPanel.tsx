@@ -10,15 +10,15 @@
  *         「更多」最上面是「关系图」(右边铺开以他为中心的关系图,RelationGraph.tsx),隔一条线;接着让他去世…(那年在位的君主、将领、名臣)、改他的倾向…(那年在位的君主),点了卡片换成那一页(PersonIvPage.tsx);
  *         接着让他掌权…(那年在世、成年、没在位的太子、君主的兄弟叔伯、在朝的名臣、领过兵的将领)、为他联姻…(那年在位的君主、
  *         在世成年的宗室),点了换成那一页(RegentIvPage.tsx);演一国时别国的人这几项变灰,写"切回造物主才能改别国"
- *   概况  君主:事迹(名人才有)、国家、民族、生卒、在位、前任、继任(后面的小字是亲属,和编年史的"其子 / 其侄"同一个算法:按世系;
+ *   概况  君主:事迹(名人才有)、国家、民族、姓、生卒、在位、前任、继任(后面的小字是亲属,和编年史的"其子 / 其侄"同一个算法:按世系;
  *         作者立的君主:名字前面是作者人物的圆头像,小字写「作者的人物」,点了开作者的人物卡;让位给他的,结局写"让位 给某某")、
  *         父亲(收养的写「养父」;父亲在别国的,小字写那一国)、子嗣(世系图里有的人,没即位的写"未即位")、
  *         争储(即位时诸子争储怎么得的位:以军功越过兄长、举兵、谮杀……,对手能点)/ 争位(据地自立的:不服谁即位、据哪里自立)、
  *         结局、即位前领兵(做王子时领的兵)、亲征(在位时)、将领(在位时本国领兵的)、名臣(在位时在朝的);
  *         右上「世系图」打开这国的世系图,停在他那一朝、圈出他。共和国写"在任""执政",没有父亲、子嗣、世系图
- *         将领:事迹、国家、民族、字号、籍贯、生卒、官职、历任、领兵(伐谁 / 抗谁)、效力(那几年在位的君主)、对手(同一场仗对面的统帅)、结局
- *         名臣:事迹(经手的事)、国家、民族、字号、籍贯、生卒、官职(做到最高的那个官和任期)、历任(之前的官和年份)、效力、结局
- *         宗室:国家、民族、生卒、父亲、子嗣、领兵(替父兄出征打的仗)、效力(派他出征的君主,小字写父 / 兄)、结局(战死、争储被杀)、
+ *         将领:事迹、国家、民族、姓、字号、籍贯、生卒、官职、历任、领兵(伐谁 / 抗谁)、效力(那几年在位的君主)、对手(同一场仗对面的统帅)、结局
+ *         名臣:事迹(经手的事)、国家、民族、姓、字号、籍贯、生卒、官职(做到最高的那个官和任期)、历任(之前的官和年份)、效力、结局
+ *         宗室:国家、民族、姓、生卒、父亲、子嗣、领兵(替父兄出征打的仗)、效力(派他出征的君主,小字写父 / 兄)、结局(战死、争储被杀)、
  *         对手(杀他的那位新君,小字写亲属和怎么回事)
  *         (字号:西幻、汗国这类名字没有姓的不起字号,这一行不出)
  *         跟着大迁徙迁过来的那一代人,概况最后多「来历」一行("克拉尔族；1899 年随族自诺敏塔拉西徙，1911 年随众立国",领头立国的"率克拉尔族西徙，立萨热汗国")
@@ -28,8 +28,8 @@
  *         宗室在生卒下面,名臣、将领在官职下面);引兵入朝的「争储」写"引兵还朝，杀其兄某某，不即位"、叔父篡位的写"废其侄某某自立";
  *         被架空过的君主:「实权」一行(在位下面:"彭继桓  子，2585–2587",掌权的人能点)。
  *         联姻:「母亲」「配偶」排在父亲下面("风萦雪  大澜德宗之女，2610 年娶",她的名字、国名能点;娶亲的是女的,配偶是对方的宗室子,只写一行)
- *         后妃(gen/civ/consorts.ts):临朝的太后 —— 事迹、国家、民族、出身、生卒、临朝、配偶、子嗣、结局,主操作「临朝那年」,能关注她;
- *         嫁来的宗室女 —— 国家(小字"嫁入某国")、民族、生卒、父亲、出嫁、子嗣、结局,主操作「世系图」(娘家那一朝)。
+ *         后妃(gen/civ/consorts.ts):临朝的太后 —— 事迹、国家、民族、姓、出身、生卒、临朝、配偶、子嗣、结局,主操作「临朝那年」,能关注她;
+ *         嫁来的宗室女 —— 国家(小字"嫁入某国")、民族、姓、生卒、父亲、出嫁、子嗣、结局,主操作「世系图」(娘家那一朝)。
  *         幼主的「实权」写"太后某某  母，临朝 2414–2421，还政";临朝篡位的女君多「临朝」「配偶」、「争位」写"以太后废其子某某自立"
  *   掌权时 / 联姻  掌权、了结那几条(幼主即位时的摄政、篡位改朝换代、即位接着先君的那一条也算)/ 结亲那一条和那以后两国本为姻亲的结盟,新的在上
  *   放逐 / 出奔  徙居(出奔)那一条、卒于中立地(或中立地撤销、回了本国那一条),新的在上
@@ -47,7 +47,7 @@ import { Fragment, useMemo, useState, type ReactNode } from 'react';
 import type { Civ, Person, PersonSpouse, RulerLeanings } from '../gen/civ/types';
 import { polityName, polityTierAt } from '../gen/readers/openQuery';
 import { buildChronicle, cnNumber, filterChronicle, reignEntries, type ChronicleEntry } from '../gen/civ/story/chronicle';
-import { commandFoes, inferredCulture, peopleIndex, personFame, personSpan, rulerNeighbors, type Foe } from '../gen/civ/story/peopleInfo';
+import { commandFoes, inferredCulture, peopleIndex, personFame, personSpan, personSurname, rulerNeighbors, type Foe } from '../gen/civ/story/peopleInfo';
 import { LEANING_KEYS, LEANING_TEXT, ageAt, consortRole, dowagerSpans, dowagerWordOf, generalRole, isConsul, kinOf, leaningsText, ministerRole, personName, princeRef, princeRole, rulerBare, rulerFateWord, rulerRef, rulerRole, rulerShort, rulerTitle, seatPolity, splitSurname } from '../gen/civ/story/peopleText';
 import { REGENCY_END, REGENCY_VERB, brideMatchOf, brideName, heldOver, kinAt, overlapOf, polityShort, type Held } from '../gen/civ/story/regentInfo';
 import { eastRank, heOrShe, isFemale, kinWord, wedVerb, westRank } from '../gen/civ/story/gender';
@@ -608,6 +608,13 @@ function folkLine(civ: Civ, x: Person): Line | null {
   return { k: '民族', node: <Link to={{ kind: 'culture', id }}>{name}</Link>, text: name };
 }
 
+/** 姓一行:只有这种语感的人名带姓时才从全名拆出来。西幻、边塞、山海不写。 */
+function surnameLine(civ: Civ, x: Person): Line | null {
+  const sur = personSurname(civ, x);
+  if (!sur) return null;
+  return { k: '姓', node: sur, text: sur };
+}
+
 /** 概况里除了「来历」的那些行(按身份) */
 function personFacts(civ: Civ, x: Person, era: Era | undefined): Line[] {
   if (x.role === 'consort') return consortFacts(civ, x, era);
@@ -622,6 +629,8 @@ function personFacts(civ: Civ, x: Person, era: Era | undefined): Line[] {
   out.push({ k: '国家', node: <Link to={{ kind: 'polity', id: p.id }}>{pn}</Link>, text: pn });
   const folk = folkLine(civ, x);
   if (folk) out.push(folk);
+  const sur = surnameLine(civ, x);
+  if (sur) out.push(sur);
   if (x.role === 'minister' || x.role === 'general') styleLines(civ, x, out);
   if (x.died !== undefined) {
     // 享年按实际活了多久算(和编年史的"时年"一样),不是两个年份相减
@@ -1044,6 +1053,12 @@ function consortFacts(civ: Civ, x: Person, era: Era | undefined): Line[] {
   if (folk) {
     const at = out.findIndex((l) => l.k === '国家');
     out.splice(at >= 0 ? at + 1 : out.length, 0, folk);
+  }
+  const sur = surnameLine(civ, x);
+  if (sur) {
+    const at = out.findIndex((l) => l.k === '民族');
+    const after = at >= 0 ? at : out.findIndex((l) => l.k === '国家');
+    out.splice(after >= 0 ? after + 1 : out.length, 0, sur);
   }
   if (x.died !== undefined) {
     const age = ageAt(x, x.died);

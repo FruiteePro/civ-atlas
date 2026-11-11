@@ -282,6 +282,11 @@ const EASTERN_PERSONS: Record<string, EasternPersonStyle> = {
   },
 };
 
+/** 这种语感的人名带不带姓。接触语、方言都跟底层,不在这里另判。 */
+export function styleSurnamed(styleId: string): boolean {
+  return !!EASTERN_PERSONS[styleId]?.surnames;
+}
+
 /** 女名(东方;带姓的语感姓照用男名那一张) */
 const EASTERN_FEMALE: Record<string, EasternPersonStyle> = {
   central: {
