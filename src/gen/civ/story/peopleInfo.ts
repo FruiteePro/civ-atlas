@@ -10,6 +10,7 @@
  *           亲征 +1;称大帝、殉国 +3
  *     将领:攻下 3 州以上 +2×州数;击退来攻 3 次以上 +2×次数;战死 +3
  *   名人的"事迹"(卡片概况第一行)只写为什么出名;人物页的一行(fameLine)前面加国名和身份、伐谁抗谁。名臣不算名人(有自己的一档)。
+ * - inferredCulture 人物卡片上的民族:推演里人物没有民族字段,按籍贯城或所在国推断,不能凭名字断定
  */
 import type { Annal, Civ, Person, PersonCommand, Year } from '../types';
 import { polityName, polityShortTitle, polityTierAt } from '../growth';
@@ -404,4 +405,18 @@ export function personMentions(civ: Civ, text: string, ids: readonly number[] | 
   }
   if (k < text.length) out.push({ text: text.slice(k) });
   return out;
+}
+
+/**
+ * 人物卡片上的民族:推演里人物没有民族字段,这里是推断。
+ * 有籍贯城就用那座城建城时的民族(Settlement.culture),否则退到他所在国的主体民族(Polity.culture)。
+ * 名字是按所在国的语感起的,不能用来证明他是哪一族。
+ */
+export function inferredCulture(civ: Pick<Civ, 'settlements' | 'polities' | 'cultures'>, x: Pick<Person, 'home' | 'polity'>): number | null {
+  if (x.home !== undefined) {
+    const cu = civ.settlements[x.home]?.culture;
+    if (cu !== undefined && civ.cultures[cu]) return cu;
+  }
+  const cu = civ.polities[x.polity]?.culture;
+  return cu !== undefined && civ.cultures[cu] ? cu : null;
 }
