@@ -196,6 +196,7 @@ function sanitizeSecrets(v: unknown): AiSecrets {
   const out: AiSecrets = {};
   if (typeof o.deepseek === 'string' && o.deepseek) out.deepseek = o.deepseek;
   if (typeof o.bailian === 'string' && o.bailian) out.bailian = o.bailian;
+  if (typeof o.openai === 'string' && o.openai) out.openai = o.openai;
   return out;
 }
 
@@ -315,6 +316,21 @@ export function scrubSecrets(text: string): string {
     if (k && k.length >= 6) out = out.split(k).join('***');
   }
   return out.replace(/\bsk-[A-Za-z0-9_-]{6,}/g, 'sk-***');
+}
+
+
+/** 这次调用该用哪套模型设置:带了角色就用该角色的,否则用默认配置 */
+export function settingsForCall(role?: AiRole): {
+  deepseek: AiSettings['deepseek'];
+  bailian: AiSettings['bailian'];
+  openai: AiSettings['openai'];
+} {
+  if (role === 'story' || role === 'intervention') {
+    const r = resolveRoleConfig(role);
+    return { deepseek: r.deepseek, bailian: r.bailian, openai: r.openai };
+  }
+  const s = getAiSettings();
+  return { deepseek: s.deepseek, bailian: s.bailian, openai: s.openai };
 }
 
 /** 解析角色配置：如果是'inherit'则返回默认配置 */

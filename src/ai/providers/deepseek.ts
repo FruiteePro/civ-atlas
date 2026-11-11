@@ -10,7 +10,7 @@
  */
 import type { AiProvider } from '../client';
 import { AiError } from '../types';
-import { getAiSettings, getSecrets } from '../settings';
+import { getAiSettings, getSecrets, settingsForCall } from '../settings';
 import { compatChat } from './compat';
 
 export const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
@@ -30,7 +30,7 @@ export const deepseekProvider: AiProvider = {
     return { ready: true, model: s.model };
   },
   async chat(req, opts) {
-    const s = getAiSettings().deepseek;
+    const s = settingsForCall(req.role).deepseek;
     const key = getSecrets().deepseek;
     if (!key) throw new AiError('not-configured', '还没填 DeepSeek 的 API 密钥:到"AI"设置里填上');
     return compatChat(

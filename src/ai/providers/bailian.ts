@@ -13,7 +13,7 @@
  */
 import type { AiProvider } from '../client';
 import { AiError } from '../types';
-import { getAiSettings, getSecrets, type BailianRegion } from '../settings';
+import { getAiSettings, getSecrets, settingsForCall, type BailianRegion } from '../settings';
 import { compatChat, type HttpErrorInfo } from './compat';
 
 export const BAILIAN_URLS: Record<BailianRegion, string> = {
@@ -69,7 +69,7 @@ export const bailianProvider: AiProvider = {
     return { ready: true, model: s.model };
   },
   async chat(req, opts) {
-    const s = getAiSettings().bailian;
+    const s = settingsForCall(req.role).bailian;
     const key = getSecrets().bailian;
     if (!key) throw new AiError('not-configured', '还没填阿里云百炼的 API 密钥:到"AI"设置里填上');
     return compatChat(

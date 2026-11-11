@@ -672,6 +672,11 @@
 }
 
 /* ---- AI 角色配置 ---- */
+.ai-role-block {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
 .ai-role-tabs {
   display: flex;
   gap: 0.5rem;

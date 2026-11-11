@@ -12,7 +12,7 @@
  */
 import type { AiProvider } from '../client';
 import { AiError } from '../types';
-import { DEFAULT_OPENAI_BASE, getAiSettings, getSecrets } from '../settings';
+import { DEFAULT_OPENAI_BASE, getAiSettings, getSecrets, settingsForCall } from '../settings';
 import { compatChat } from './compat';
 
 /** 界面上的名字,也用在中文报错里 */
@@ -69,7 +69,7 @@ export const openaiProvider: AiProvider = {
     return { ready: true, model: s.model };
   },
   async chat(req, opts) {
-    const s = getAiSettings().openai;
+    const s = settingsForCall(req.role).openai;
     const url = openaiChatUrl(s.baseUrl);
     const key = getSecrets().openai;
     if (!url) throw new AiError('not-configured', BAD_URL);

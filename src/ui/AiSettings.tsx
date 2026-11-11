@@ -14,7 +14,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { aiChat, getActiveProvider, setAiSettingsOpener, useAiOn, useAiStatus } from '../ai/client';
 import { AiError, type AiProviderKind } from '../ai/types';
-import { chooseProvider, cleanKey, DEFAULT_OPENAI_BASE, getAiSettings, getProviderForRole, getSecrets, isRoleConfigured, setAiEnabled, setSecret, updateAiSettings, updateRoleConfig, useAiSettingsVersion, type AiRole } from '../ai/settings';
+import { chooseProvider, cleanKey, DEFAULT_OPENAI_BASE, getAiSettings, getSecrets, setAiEnabled, setSecret, updateAiSettings, updateRoleConfig, useAiSettingsVersion, type AiRole, type BailianRegion } from '../ai/settings';
 import { DEEPSEEK_MODELS } from '../ai/providers/deepseek';
 import { BAILIAN_MODELS, BAILIAN_REGIONS } from '../ai/providers/bailian';
 import { OPENAI_MODELS, openaiChatUrl } from '../ai/providers/openai';
@@ -171,118 +171,144 @@ function SettingsTab() {
 
   return (
     <div className="ai-settings">
-      <div className="ai-role-tabs" role="tablist">
-        <button
-          role="tab"
-          aria-selected={roleTab === 'story'}
-          className={roleTab === 'story' ? 'on' : ''}
-          onClick={() => setRoleTab('story')}
-          data-role-tab="story"
-        >
-          故事生成
-        </button>
-        <button
-          role="tab"
-          aria-selected={roleTab === 'intervention'}
-          className={roleTab === 'intervention' ? 'on' : ''}
-          onClick={() => setRoleTab('intervention')}
-          data-role-tab="intervention"
-        >
-          干预建议
-        </button>
+      <p className="ai-role-note">先选一家，填上 API 密钥。下面两个角色默认跟这一套走，也可以分开设。</p>
+
+      <div className="ai-choices" role="radiogroup" aria-label="默认用哪家 AI">
+        {choices.map((c) => {
+          const b = badge(c.kind);
+          const disabled = forced && c.kind !== 'mock';
+          return (
+            <button
+              key={c.kind}
+              role="radio"
+              aria-checked={active === c.kind}
+              data-ai={c.kind}
+              className={`ai-choice${active === c.kind ? ' on' : ''}`}
+              disabled={disabled}
+              onClick={() => chooseProvider(c.kind)}
+            >
+              <i className="ai-radio" />
+              <span className="ai-choice-text">
+                <b>
+                  {c.name}
+                  <em className={`ai-badge${b.cls ? ` ${b.cls}` : ''}`}>{b.text}</em>
+                </b>
+                <span>{c.desc}</span>
+              </span>
+            </button>
+          );
+        })}
       </div>
-      <p className="ai-role-note">
-        {roleTab === 'story' ? '生成历史叙述、编年史、名字释义等只读内容' : '提出修改建议，需要你确认后才生效'}
-      </p>
-      
-      <label className="ai-check ai-inherit" data-role-inherit>
-        <input 
-          type="checkbox" 
-          checked={isInherit} 
-          onChange={(e) => updateRoleConfig(roleTab, { provider: e.target.checked ? 'inherit' : (active ?? null) })}
-        />
-        <span>使用默认配置{isInherit && active ? ` (当前: ${choices.find(c => c.kind === active)?.name})` : ''}</span>
-      </label>
 
-      {!isInherit && (
-        <>
-          <div className="ai-choices" role="radiogroup" aria-label={`${roleTab === 'story' ? '故事生成' : '干预建议'}用哪家 AI`}>
-            {choices.map((c) => {
-              const b = badge(c.kind);
-              const disabled = forced && c.kind !== 'mock';
-              return (
-                <button
-                  key={c.kind}
-                  role="radio"
-                  aria-checked={roleProvider === c.kind}
-                  data-ai={c.kind}
-                  data-role={roleTab}
-                  className={`ai-choice${roleProvider === c.kind ? ' on' : ''}`}
-                  disabled={disabled}
-                  onClick={() => updateRoleConfig(roleTab, { provider: c.kind })}
-                >
-                  <i className="ai-radio" />
-                  <span className="ai-choice-text">
-                    <b>
-                      {c.name}
-                      <em className={`ai-badge${b.cls ? ` ${b.cls}` : ''}`}>{b.text}</em>
-                    </b>
-                    <span>{c.desc}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+      {forced && <p className="ai-note warn">网址带 ai=mock,只能用测试用假 AI</p>}
 
-          {forced && <p className="ai-note warn">网址带 ai=mock,只能用测试用假 AI</p>}
-
-          {roleProvider === 'deepseek' && (
-            <div className="ai-detail" data-detail="deepseek" data-role={roleTab}>
-              <KeyField slot="deepseek" where={<a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noreferrer">DeepSeek 开放平台</a>} />
-              <ModelField value={roleConfig.deepseek.model} presets={DEEPSEEK_MODELS} placeholder="比如 deepseek-v4-pro" onChange={(model) => updateRoleConfig(roleTab, { deepseek: { ...roleConfig.deepseek, model } })} />
-              <Thinking value={roleConfig.deepseek.thinking} onChange={(thinking) => updateRoleConfig(roleTab, { deepseek: { ...roleConfig.deepseek, thinking } })} />
-              <TestRow disabled={!sec.deepseek} sig={`${roleTab}|deepseek|${roleConfig.deepseek.model}|${roleConfig.deepseek.thinking}|${sec.deepseek?.length ?? 0}`} />
-            </div>
-          )}
-          {roleProvider === 'bailian' && (
-            <div className="ai-detail" data-detail="bailian" data-role={roleTab}>
-              <div className="ai-row">
-                <label className="ai-label">地域</label>
-                <div className="ai-opts">
-                  {BAILIAN_REGIONS.map((r) => (
-                    <button key={r.id} className={`ai-opt${roleConfig.bailian.region === r.id ? ' on' : ''}`} aria-pressed={roleConfig.bailian.region === r.id} onClick={() => updateRoleConfig(roleTab, { bailian: { ...roleConfig.bailian, region: r.id } })}>
-                      {r.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <p className="ai-note sub">选创建密钥时的地域</p>
-              <KeyField slot="bailian" where={<a href="https://bailian.console.aliyun.com/" target="_blank" rel="noreferrer">百炼控制台</a>} />
-              <ModelField value={roleConfig.bailian.model} presets={BAILIAN_MODELS} placeholder="比如 qwen-max-latest" onChange={(model) => updateRoleConfig(roleTab, { bailian: { ...roleConfig.bailian, model } })} />
-              <Thinking value={roleConfig.bailian.thinking} onChange={(thinking) => updateRoleConfig(roleTab, { bailian: { ...roleConfig.bailian, thinking } })} />
-              <TestRow disabled={!sec.bailian} sig={`${roleTab}|bailian|${roleConfig.bailian.region}|${roleConfig.bailian.model}|${roleConfig.bailian.thinking}|${sec.bailian?.length ?? 0}`} />
-            </div>
-          )}
-          {roleProvider === 'openai' && (
-            <div className="ai-detail" data-detail="openai" data-role={roleTab}>
-              <BaseUrlField value={roleConfig.openai.baseUrl} onChange={(baseUrl) => updateRoleConfig(roleTab, { openai: { ...roleConfig.openai, baseUrl } })} />
-              <KeyField slot="openai" where={<span>服务商的文档或控制台</span>} />
-              <ModelField value={roleConfig.openai.model} presets={OPENAI_MODELS} placeholder="以服务商的文档为准,比如 gpt-4o-mini" onChange={(model) => updateRoleConfig(roleTab, { openai: { ...roleConfig.openai, model } })} />
-              <TestRow disabled={!sec.openai} sig={`${roleTab}|openai|${roleConfig.openai.baseUrl}|${roleConfig.openai.model}|${sec.openai?.length ?? 0}`} />
-            </div>
-          )}
-          {roleProvider === 'mock' && (
-            <div className="ai-detail" data-detail="mock" data-role={roleTab}>
-              <TestRow disabled={false} sig={`${roleTab}|mock`} />
-            </div>
-          )}
-        </>
-      )}
+      <ProviderDetails
+        kind={active}
+        deepseek={s.deepseek}
+        bailian={s.bailian}
+        openai={s.openai}
+        onDeepseek={(patch) => updateAiSettings({ deepseek: patch })}
+        onBailian={(patch) => updateAiSettings({ bailian: patch })}
+        onOpenai={(patch) => updateAiSettings({ openai: patch })}
+      />
 
       <label className="ai-check ai-remember" title="关掉:只在这次打开的页面里有效,刷新就忘">
         <input type="checkbox" checked={s.remember} onChange={(e) => updateAiSettings({ remember: e.target.checked })} />
         <span>下次打开时记住密钥</span>
       </label>
+
+      <div className="ai-role-block">
+        <div className="ai-role-tabs" role="tablist">
+          <button
+            role="tab"
+            aria-selected={roleTab === 'story'}
+            className={roleTab === 'story' ? 'on' : ''}
+            onClick={() => setRoleTab('story')}
+            data-role-tab="story"
+          >
+            故事生成
+          </button>
+          <button
+            role="tab"
+            aria-selected={roleTab === 'intervention'}
+            className={roleTab === 'intervention' ? 'on' : ''}
+            onClick={() => setRoleTab('intervention')}
+            data-role-tab="intervention"
+          >
+            干预建议
+          </button>
+        </div>
+        <p className="ai-role-note">
+          {roleTab === 'story' ? '生成历史叙述、编年史、名字释义等只读内容' : '提出修改建议，需要你确认后才生效'}
+        </p>
+
+        <label className="ai-check ai-inherit" data-role-inherit>
+          <input
+            type="checkbox"
+            checked={isInherit}
+            onChange={(e) => updateRoleConfig(roleTab, { provider: e.target.checked ? 'inherit' : (active ?? null) })}
+          />
+          <span>使用默认配置{isInherit && active ? ` (当前: ${choices.find((c) => c.kind === active)?.name})` : ''}</span>
+        </label>
+
+        {isInherit && !active && <p className="ai-note sub">请先在上面选一家，并填上密钥</p>}
+
+        {isInherit && active && (
+          <ProviderDetails
+            kind={active}
+            deepseek={roleConfig.deepseek}
+            bailian={roleConfig.bailian}
+            openai={roleConfig.openai}
+            onDeepseek={(patch) => updateRoleConfig(roleTab, { deepseek: { ...roleConfig.deepseek, ...patch } })}
+            onBailian={(patch) => updateRoleConfig(roleTab, { bailian: { ...roleConfig.bailian, ...patch } })}
+            onOpenai={(patch) => updateRoleConfig(roleTab, { openai: { ...roleConfig.openai, ...patch } })}
+            showKey={false}
+            role={roleTab}
+          />
+        )}
+
+        {!isInherit && (
+          <>
+            <div className="ai-choices" role="radiogroup" aria-label={`${roleTab === 'story' ? '故事生成' : '干预建议'}用哪家 AI`}>
+              {choices.map((c) => {
+                const b = badge(c.kind);
+                const disabled = forced && c.kind !== 'mock';
+                return (
+                  <button
+                    key={c.kind}
+                    role="radio"
+                    aria-checked={roleProvider === c.kind}
+                    data-ai={c.kind}
+                    data-role={roleTab}
+                    className={`ai-choice${roleProvider === c.kind ? ' on' : ''}`}
+                    disabled={disabled}
+                    onClick={() => updateRoleConfig(roleTab, { provider: c.kind })}
+                  >
+                    <i className="ai-radio" />
+                    <span className="ai-choice-text">
+                      <b>
+                        {c.name}
+                        <em className={`ai-badge${b.cls ? ` ${b.cls}` : ''}`}>{b.text}</em>
+                      </b>
+                      <span>{c.desc}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <ProviderDetails
+              kind={roleProvider}
+              deepseek={roleConfig.deepseek}
+              bailian={roleConfig.bailian}
+              openai={roleConfig.openai}
+              onDeepseek={(patch) => updateRoleConfig(roleTab, { deepseek: { ...roleConfig.deepseek, ...patch } })}
+              onBailian={(patch) => updateRoleConfig(roleTab, { bailian: { ...roleConfig.bailian, ...patch } })}
+              onOpenai={(patch) => updateRoleConfig(roleTab, { openai: { ...roleConfig.openai, ...patch } })}
+              role={roleTab}
+            />
+          </>
+        )}
+      </div>
 
       <p className="ai-foot">
         <span>密钥只存在这个浏览器里</span>
@@ -292,6 +318,79 @@ function SettingsTab() {
       </p>
     </div>
   );
+}
+
+function ProviderDetails({
+  kind,
+  deepseek,
+  bailian,
+  openai,
+  onDeepseek,
+  onBailian,
+  onOpenai,
+  showKey = true,
+  role,
+}: {
+  kind: AiProviderKind | null;
+  deepseek: { model: string; thinking: boolean };
+  bailian: { model: string; region: BailianRegion; thinking: boolean };
+  openai: { baseUrl: string; model: string };
+  onDeepseek: (p: Partial<{ model: string; thinking: boolean }>) => void;
+  onBailian: (p: Partial<{ model: string; region: BailianRegion; thinking: boolean }>) => void;
+  onOpenai: (p: Partial<{ baseUrl: string; model: string }>) => void;
+  showKey?: boolean;
+  role?: AiRole;
+}) {
+  const sec = getSecrets();
+  if (kind === 'deepseek') {
+    return (
+      <div className="ai-detail" data-detail="deepseek" {...(role ? { 'data-role': role } : {})}>
+        {showKey && <KeyField slot="deepseek" where={<a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noreferrer">DeepSeek 开放平台</a>} />}
+        <ModelField value={deepseek.model} presets={DEEPSEEK_MODELS} placeholder="比如 deepseek-v4-pro" onChange={(model) => onDeepseek({ model })} />
+        <Thinking value={deepseek.thinking} onChange={(thinking) => onDeepseek({ thinking })} />
+        <TestRow disabled={!sec.deepseek} role={role} sig={`${role ?? 'default'}|deepseek|${deepseek.model}|${deepseek.thinking}|${sec.deepseek?.length ?? 0}`} />
+      </div>
+    );
+  }
+  if (kind === 'bailian') {
+    return (
+      <div className="ai-detail" data-detail="bailian" {...(role ? { 'data-role': role } : {})}>
+        <div className="ai-row">
+          <label className="ai-label">地域</label>
+          <div className="ai-opts">
+            {BAILIAN_REGIONS.map((r) => (
+              <button key={r.id} className={`ai-opt${bailian.region === r.id ? ' on' : ''}`} aria-pressed={bailian.region === r.id} onClick={() => onBailian({ region: r.id })}>
+                {r.name}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="ai-note sub">选创建密钥时的地域</p>
+        {showKey && <KeyField slot="bailian" where={<a href="https://bailian.console.aliyun.com/" target="_blank" rel="noreferrer">百炼控制台</a>} />}
+        <ModelField value={bailian.model} presets={BAILIAN_MODELS} placeholder="比如 qwen-max-latest" onChange={(model) => onBailian({ model })} />
+        <Thinking value={bailian.thinking} onChange={(thinking) => onBailian({ thinking })} />
+        <TestRow disabled={!sec.bailian} role={role} sig={`${role ?? 'default'}|bailian|${bailian.region}|${bailian.model}|${bailian.thinking}|${sec.bailian?.length ?? 0}`} />
+      </div>
+    );
+  }
+  if (kind === 'openai') {
+    return (
+      <div className="ai-detail" data-detail="openai" {...(role ? { 'data-role': role } : {})}>
+        <BaseUrlField value={openai.baseUrl} onChange={(baseUrl) => onOpenai({ baseUrl })} />
+        {showKey && <KeyField slot="openai" where={<span>服务商的文档或控制台</span>} />}
+        <ModelField value={openai.model} presets={OPENAI_MODELS} placeholder="以服务商的文档为准,比如 gpt-4o-mini" onChange={(model) => onOpenai({ model })} />
+        <TestRow disabled={!sec.openai} role={role} sig={`${role ?? 'default'}|openai|${openai.baseUrl}|${openai.model}|${sec.openai?.length ?? 0}`} />
+      </div>
+    );
+  }
+  if (kind === 'mock') {
+    return (
+      <div className="ai-detail" data-detail="mock" {...(role ? { 'data-role': role } : {})}>
+        <TestRow disabled={false} role={role} sig={`${role ?? 'default'}|mock`} />
+      </div>
+    );
+  }
+  return null;
 }
 
 /**
@@ -459,7 +558,7 @@ interface TestState {
 }
 
 /** "测试一下":发一个很小的请求(走 aiChat,调用记录里也会有一条) */
-function TestRow({ disabled, sig }: { disabled: boolean; sig: string }) {
+function TestRow({ disabled, sig, role }: { disabled: boolean; sig: string; role?: AiRole }) {
   const [st, setSt] = useState<TestState | null>(null);
   const ac = useRef<AbortController | null>(null);
   useEffect(() => () => ac.current?.abort(), []);
@@ -476,6 +575,7 @@ function TestRow({ disabled, sig }: { disabled: boolean; sig: string }) {
           title: 'AI 设置里点了"测试一下"',
           messages: [{ role: 'user', content: '这是一次连接测试。请只回复两个字:你好' }],
           temperature: 0,
+          ...(role ? { role } : {}),
         },
         { signal: ctl.signal },
       );

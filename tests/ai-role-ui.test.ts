@@ -11,6 +11,9 @@ import {  getAiSettings,
   resolveRoleConfig,
   isRoleConfigured,
   resetAiSettingsForTest,
+  setSecret,
+  getSecrets,
+  settingsForCall,
   type AiRole,
 } from '../src/ai/settings';
 import { aiChat, setActiveProvider } from '../src/ai/client';
@@ -309,6 +312,29 @@ describe('AI角色配置UI与路由', () => {
       
       expect(storyConfig.provider).toBe('deepseek');
       expect(interventionConfigResolved.provider).toBe('bailian');
+    });
+  });
+
+
+  describe('密钥保存与按角色选用模型', () => {
+    it('记住密钥时刷新后还在，包括 OpenAI 兼容接口', () => {
+      updateAiSettings({ remember: true });
+      setSecret('openai', 'sk-test-openai-key');
+      setSecret('deepseek', 'sk-test-ds');
+      resetAiSettingsForTest();
+      expect(getSecrets().openai).toBe('sk-test-openai-key');
+      expect(getSecrets().deepseek).toBe('sk-test-ds');
+    });
+
+    it('不带角色时用默认模型，带角色时用该角色的模型', () => {
+      updateAiSettings({ deepseek: { model: 'deepseek-flash', thinking: false } });
+      updateRoleConfig('intervention', {
+        provider: 'deepseek',
+        deepseek: { model: 'deepseek-chat', thinking: true },
+      });
+      expect(settingsForCall().deepseek.model).toBe('deepseek-flash');
+      expect(settingsForCall('intervention').deepseek.model).toBe('deepseek-chat');
+      expect(settingsForCall('intervention').deepseek.thinking).toBe(true);
     });
   });
 });
