@@ -113,12 +113,12 @@ import { pandemicsOf } from './pandemicInfo';
 import { HABITABLE_SUIT, cultureLabel, regionLabel, standPassName } from './display';
 import { ownersAt } from '../engine/timeline';
 import { plagueSpans } from './plagueSpans';
-import { Issue, REFORM_COUP, REFORM_REVOLUTION, councilBefore, isReformIssue, rulesAt } from '../councilRules';
-import { reformedSeg, royalSeg } from '../regime';
+import { Issue, REFORM_COUP, REFORM_LAICIZE, REFORM_REVOLUTION, REFORM_THEOCRACY, councilBefore, isReformIssue, rulesAt } from '../councilRules';
+import { reformedSeg, royalSeg, segRegime } from '../regime';
 import { IV_REIGNING, authorPostsFrom } from '../appoint';
 import { practicesAt } from './practiceInfo';
 import { Practice, hasPractice } from '../practices';
-import { ageAt, coreRoot, dowagerSpans, dowagerWordOf, generalRef, kinOf, leaderName, ministerRole, princeRef, princeTitle, reigningAt, rulerBare, rulerRef, rulerShort, rulerTitle, splitSurname } from './peopleText';
+import { ageAt, clericTitle, coreRoot, dowagerSpans, dowagerWordOf, generalRef, kinOf, leaderName, ministerRole, officeWord, princeRef, princeTitle, reigningAt, rulerBare, rulerRef, rulerShort, rulerTitle, splitSurname } from './peopleText';
 import { bySex, childWord, heOrShe, heirWord, isFemale, khanWord, kinWord, rivalsWord, westRank, type Sexed } from './gender';
 import { eraText, monthTail, type Era } from '../../era';
 import { biomeHas } from '../../biomes';
@@ -3342,7 +3342,7 @@ function councilText(civ: Civ, e: Annal, id: number, who: Person | null, ix: Peo
 }
 
 // ---------------------------------------------------------------------------
-// 改制(reform.ts):立宪、扩大参与、废君立共和、还政(议事),革命、政变、复辟(史事 reform)
+// 改制(reform.ts):立宪、扩大参与、废君立共和、还政(议事),革命、政变、复辟、立神权、废神权(史事 reform)
 
 /** 窘境写到几年以前 */
 const WOE_YEARS = 30;
@@ -3475,7 +3475,7 @@ function failedAsk(civ: Civ, A: readonly Annal[], i: number, p: number): string 
   return c.war === Issue.Charter ? '议立宪,不成;' : `议废${throneWord(polityOf(civ, p), c.year)},不成;`;
 }
 
-/** 史事 reform:革命(红)、政变(红)、复辟(蓝) */
+/** 史事 reform:革命(红)、政变(红)、复辟、立神权、废神权(蓝) */
 function reformEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
   const { civ } = ctx;
   const y = e.year;
@@ -3508,6 +3508,20 @@ function reformEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
     const t = `${before}${woe ? `${woe},` : ''}${body}久议不决;将军${nu ? nu.name : ''}率兵入${capital || '国都'},散${body},自为执政,国事决于军中`;
     return entry(t, '政', 'coup', nu, old);
   }
+  if (e.n === REFORM_THEOCRACY) {
+    // "大靖王朝国教既盛;废帝号,立国师田继徽主国事"
+    const office = clericTitle(P?.culture !== undefined ? civ.cultures[P.culture]?.style : undefined);
+    const king = old ? (east ? rulerBare(civ, old, y) : old.name) : '';
+    const prev = P ? officeWord(civ, P, y - 1 / 512) : '君主';
+    let t = `${before}${woe ? `${woe},` : ''}国教既盛`;
+    t += `${king ? `,废${king}` : prev === '执政' ? ',废执政' : ''}${east ? `,罢${P && polityTierAt(P, y - 1 / 512) >= 3 ? '帝' : '王'}号` : ''},立${office}${nu ? nu.name : ''}主国事`;
+    return entry(t, '教', 'reform', nu, old);
+  }
+  if (e.n === REFORM_LAICIZE) {
+    const office = old && P ? officeWord(civ, P, y - 1 / 512) : '国师';
+    const t = `${before}${woe ? `${woe},` : ''}废神权${old ? `,${office}${old.name}去位` : ''},国事复由${bodyOf(civ, e.a, y)}议定、推举执政`;
+    return entry(t, '制', 'reform', nu, old);
+  }
   // 复辟
   const head = woe ? `${before}${woe};` : before;
   if (e.b >= 0) {
@@ -3517,13 +3531,15 @@ function reformEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
     for (let k = rs.length - 1; k >= 0 && !last; k--) if ((rs[k].from ?? Infinity) < y && P && royalSeg(P, rs[k].dynasty ?? 0)) last = rs[k];
     const kin = nu && last ? (nu.parent === last.id ? `之${childWord(nu)}` : '之后') : '';
     const lastRef = last ? (east ? rulerBare(civ, last, y) : last.name) : '';
-    const t = `${head}${woe ? '' : ','}${east ? '宗室、旧臣' : '王党'}迎${lastRef ? `${lastRef}${kin}` : '旧王室之后'}${nu ? nu.name : ''}即位,罢共和,复称${after}`;
+    const prevForm = P && reformedSeg(P, dynastyIndexAt(P, y - 1 / 512)) && segRegime(P, dynastyIndexAt(P, y - 1 / 512)) === 'theocracy' ? '神权' : P && segRegime(P, dynastyIndexAt(P, y - 1 / 512)) === 'junta' ? '军政' : '共和';
+    const t = `${head}${woe ? '' : ','}${east ? '宗室、旧臣' : '王党'}迎${lastRef ? `${lastRef}${kin}` : '旧王室之后'}${nu ? nu.name : ''}即位,罢${prevForm},复称${after}`;
     return entry(t, '辟', 'reform', nu, last ?? null);
   }
   // 旧王室没人了:执政 / 将军自立为君,当成换了一朝
   const rank = east ? (P && polityTierAt(P, y) >= 3 ? '帝' : '王') : nu ? westRank(nu, P?.lineage, Math.max(1, P ? polityTierAt(P, y) : 2)) : '王';
   const same = !!P && polityRootAt(P, y) === polityRootAt(P, y - 1 / 512);
-  const ruler = P && reformedSeg(P, P ? dynastyIndexAt(P, y - 1 / 512) : 0) ? '执政' : '将军';
+  const prevI = P ? dynastyIndexAt(P, y - 1 / 512) : 0;
+  const ruler = P && segRegime(P, prevI) === 'theocracy' ? officeWord(civ, P, y - 1 / 512) : P && reformedSeg(P, prevI) ? '执政' : '将军';
   const t = `${head}${woe ? '' : ','}${ruler}${nu ? nu.name : ''}废${bodyOf(civ, e.a, y - 1 / 512)},自立为${rank},国号${same ? '复称' : '改称'}${after}`;
   return entry(t, '辟', 'reform', nu);
 }
@@ -3545,7 +3561,7 @@ function revolutionSplitEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
 
 /**
  * 改制那一条的正文(朝政页「历次改制」用,和编年史里那一条一样):第 id 条史事是议事(立宪、废君、还政、扩大参与)、
- * 改制(革命、政变、复辟)或革命据地自立(split,cause = revolution);别的 = 空串
+ * 改制(革命、政变、复辟、立神权、废神权)或革命据地自立(split,cause = revolution);别的 = 空串
  */
 export function reformText(civ: Civ, id: number): string {
   const e = civ.annals[id];
@@ -4772,7 +4788,7 @@ function pushReigns(civ: Civ, ix: PeopleIndex | null, list: readonly Person[], o
     const ref = rulerRef(civ, prev, y);
     const minis: Person[] = [];
     let text: string;
-    if (!royalSeg(p, x.dynasty ?? 0)) text = `${ref}任满,${x.name}继任`;
+    if (!royalSeg(p, x.dynasty ?? 0)) text = segRegime(p, x.dynasty ?? 0) === 'theocracy' ? `${ref}殁,${x.name}继任` : `${ref}任满,${x.name}继任`;
     else if (prev.author !== undefined) {
       // 作者立的君主到期退位(生死归人物卡管),继他之位的不连成他的儿子
       const then = p.eastern && (p.lineage === 'khanate' || tier <= 0) ? `${x.name}继为${p.lineage === 'khanate' && tier > 0 ? khanWord(x) : '首领'}` : p.eastern ? `${x.name}即位${x.title ? `,是为${rulerTitle(civ, x)}` : ''}` : `${rulerShort(civ, x)}即位`;

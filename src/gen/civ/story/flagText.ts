@@ -194,14 +194,14 @@ function formerName(civ: Civ, id: number, year: number, short = false): string {
   return short && !p.eastern && n.startsWith(p.name) && n.length > p.name.length ? n.slice(p.name.length) : n;
 }
 
-/** 那一刻开这一段的是哪一种改制:废君、革命、政变、还政、复辟(找不到 = '') */
+/** 那一刻开这一段的是哪一种改制:废君、革命、政变、还政、立神权、废神权、复辟(找不到 = '') */
 function reformWord(civ: Civ, id: number, year: number): string {
   const p = civ.polities[id];
   for (const a of civ.annals) {
     if (a.year > year) break;
     if (a.year !== year || a.a !== id || !opensSeg(a)) continue;
     if (a.kind === 'council') return a.war === Issue.Return ? '还政' : p.eastern ? '罢帝号、立共和' : p.lineage === 'khanate' ? '废汗立共和' : '废王立共和';
-    return a.n === 0 ? '革命立共和' : a.n === 1 ? '政变' : '复辟';
+    return a.n === 0 ? '革命立共和' : a.n === 1 ? '政变' : a.n === 3 ? '立神权' : a.n === 4 ? '废神权' : '复辟';
   }
   return '';
 }

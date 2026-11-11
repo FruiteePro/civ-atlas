@@ -12,7 +12,7 @@
  *     另立一国    选一州(默认他的出生地)、国号(不填自动起);加进单子的是两条:在那里立国、他即新国君位
  *   到哪年下台    到卒年(N 年)| 到某一年(−10 [年份] +10,后面写"退位，在位 N 年");人物没写卒年时第一项照寻常君主算
  *                 下面一个勾「在位期间保住王室」(默认勾上;干预里记 keep: true,他在位那些年不改朝换代、不被篡位),
- *                 一句这一朝已立几年、照常推演哪年会改朝换代(keepInfo.ts 的 crownKeepHint);那年是共和国 / 军政府的没有这个勾(按那一年的政体,复辟以后照君主国)
+ *                 一句这一朝已立几年、照常推演哪年会改朝换代(keepInfo.ts 的 crownKeepHint);那年是共和国 / 军政府 / 神权国的没有这个勾(按那一年的政体,复辟以后照君主国)
  *   性格          四条滑条,和人物卡上的是同一份(松手就存进人物卡)
  *   底部          返回 / 加入待推演(另立一国写"(2 条)";逐年推演写「加入」)
  * 国家干预页「立作者的人物为君主」选人进来的也是这一页(CommandPage.tsx):卡片顶上是国家,国家先选好、即位年份是那里的生效年份。
@@ -336,7 +336,7 @@ export function CrownPage({
                       {x.id === home && <em className="cp-num-note">{he}的国家</em>}
                     </b>
                     <span>
-                      {x.regions} 州{x.ruler && `，${x.ruler}${x.republic ? '执政' : '在位'}`}
+                      {x.regions} 州{x.ruler && `，${x.ruler}${x.republic ? x.office : '在位'}`}
                     </span>
                   </span>
                   {x.id === pid && <span className="cr-check">✓</span>}
@@ -450,7 +450,7 @@ export function CrownPage({
                 </div>
                 <span className="cp-note">
                   {before && P
-                    ? `那年${pRow?.republic ? '执政' : '在位'}的是${personName(civ, before)}，${after ? `${heOrShe(before)}下台后由${c.name}继位` : `${heOrShe(before)}让位给${c.name}`}。`
+                    ? `那年${pRow?.republic ? pRow.office : '在位'}的是${personName(civ, before)}，${after ? `${heOrShe(before)}下台后由${c.name}继位` : `${heOrShe(before)}让位给${c.name}`}。`
                     : ''}
                   {!P && home >= 0 ? `人物卡上${he}的国家${yearAt(y, era)}不在了，点「换一国」选一个。` : ''}
                   {`${yearFull(y, era)}还在的 ${alive.length} 国都能选${polity !== undefined ? '。' : `，默认是人物卡上${he}的国家。`}`}

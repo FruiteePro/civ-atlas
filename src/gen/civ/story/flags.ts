@@ -304,7 +304,7 @@ export function flagAt(eras: readonly FlagEra[], year: number): FlagEra {
 }
 
 /** 历朝:没改朝换代过 = 一朝(立国那年、国都) */
-function dynastiesOf(p: Polity): { year: number; name: string; seat: number; regime?: 'republic' | 'junta'; house?: number }[] {
+function dynastiesOf(p: Polity): { year: number; name: string; seat: number; regime?: 'republic' | 'junta' | 'theocracy'; house?: number }[] {
   return p.dynasties && p.dynasties.length ? p.dynasties : [{ year: p.founded, name: p.name, seat: p.capital }];
 }
 
@@ -488,8 +488,8 @@ function polityEras(ctx: Ctx, id: number): FlagEra[] {
     const why: FlagWhy = { kind: 'west', dyn: i, city, seat };
     const d = dyn[i];
     const kindOf = (x: FlagSpec): FlagWhy['kind'] => (isEastern(x) ? 'east' : x.charge?.sym === 'tamga' ? 'khan' : 'west');
-    if (d.regime && (d.regime === 'junta' || dyn[i - 1].regime)) {
-      // 政变、还政:君主没变(本来就没有),旗不换
+    if (d.regime && (d.regime === 'junta' || d.regime === 'theocracy' || dyn[i - 1].regime)) {
+      // 政变、还政、立神权:国号和旗都照前面那一段,不换
       push(i, copy(prev), { ...why, kind: kindOf(prev), reform: 'keep', prior: i - 1 });
       continue;
     }

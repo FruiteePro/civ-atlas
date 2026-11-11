@@ -302,11 +302,11 @@ export interface Polity {
    * - usurper:掌实权的名臣、大臣篡位开的这一朝(regency.ts):他的生年、倾向(和掌权时一样),这一朝的第一位就是他(在位表照它排,rulers.ts);
    *   改制(reform.ts)开的那几段也借它:政变的将军、革命起兵的人、复辟时自立为君的执政 / 将军;别的朝不给
    * - regime:改制(reform.ts)开的一段 —— 不是换了一家王室,是改了政体:republic 共和(议事会推举执政,有任期)、
-   *   junta 军政府(将军执政)。这一段没有王室(不结亲、不立储、不摄政),东方语感的国名词根照抄上一段;
-   *   王室的那几段(立国那一朝、改朝换代、复辟)不给。某一年是什么政体用 regime.ts 的 regimeAt / lineageAt 查
+   *   junta 军政府(将军执政)、theocracy 神权(教宗 / 大祭司 / 国师主国,按教职终身继任)。这一段没有王室(不结亲、不立储、不摄政),
+   *   东方语感的国名词根照抄上一段;王室的那几段(立国那一朝、改朝换代、复辟)不给。某一年是什么政体用 regime.ts 的 regimeAt / lineageAt 查
    * - house:复辟迎回的是第几朝的王室(这一段的国名词根、旗照那一朝);拥立的人自己做君主的复辟、寻常改朝换代不给
    */
-  dynasties?: { year: Year; name: string; seat: number; usurper?: { born: Year; leanings: RulerLeanings }; regime?: 'republic' | 'junta'; house?: number }[];
+  dynasties?: { year: Year; name: string; seat: number; usurper?: { born: Year; leanings: RulerLeanings }; regime?: 'republic' | 'junta' | 'theocracy'; house?: number }[];
 }
 
 /** 国号一系 */

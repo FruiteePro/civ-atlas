@@ -170,6 +170,8 @@ export type ReignPolity = Pick<Polity, 'founded' | 'dynasties' | 'lineage' | 'ki
 
 /** 军政府那一段的执政(将军)倾向偏移:好战、开拓偏高(加在共和一系的偏移上) */
 export const JUNTA_SHIFT: Partial<RulerLeanings> = { war: 15, expand: 5, develop: -10 };
+/** 神权那一段的教宗 / 国师:少开战、偏内治(加在共和一系的偏移上) */
+export const THEOCRACY_SHIFT: Partial<RulerLeanings> = { war: -8, expand: -5, develop: 5 };
 /** 改出来的共和国的执政:开战要议事会点头,比海洋城邦共和一系还少开战(加在共和一系的偏移上) */
 export const COMMONWEALTH_SHIFT: Partial<RulerLeanings> = { war: -10 };
 
@@ -188,10 +190,12 @@ export function reignStep(
   kind: CultureKind,
   born?: Year,
   shift?: Partial<RulerLeanings>,
+  /** 神权:按教职终身继任(年纪照执政那样另起,在位长短照君主) */
+  clerical?: boolean,
 ): { age: number; natural: Year; leanings: RulerLeanings } {
   const { FOUNDER_AGE, HEIR_AGE, HEIR_EXP, REIGN_MAX, REIGN_EXP, CONSUL_AGE, TERM, MAX_AGE } = knobs.get(RULERS_KNOBS);
   const R = (use: number) => keyed4(base, tag, k, use, K_RULER);
-  const republic = lineage === 'republic';
+  const republic = lineage === 'republic' && !clerical;
   let A: number;
   let L: number;
   if (republic) {
@@ -199,7 +203,8 @@ export function reignStep(
     A = born !== undefined ? from - born : lerp(CONSUL_AGE, R(U_AGE));
     L = lerp(TERM, R(U_REIGN));
   } else {
-    A = born !== undefined ? from - born : j === 0 ? lerp(FOUNDER_AGE, R(U_AGE)) : HEIR_AGE[0] + (HEIR_AGE[1] - HEIR_AGE[0]) * fpow(R(U_AGE), HEIR_EXP);
+    // 神权的第一位、后来接任的都按执政那样另起年纪(不立储),在位到终老
+    A = born !== undefined ? from - born : clerical ? lerp(CONSUL_AGE, R(U_AGE)) : j === 0 ? lerp(FOUNDER_AGE, R(U_AGE)) : HEIR_AGE[0] + (HEIR_AGE[1] - HEIR_AGE[0]) * fpow(R(U_AGE), HEIR_EXP);
     L = 1 + REIGN_MAX * fpow(R(U_REIGN), REIGN_EXP);
   }
   if (A + L > MAX_AGE) L = Math.max(1, MAX_AGE - A);
@@ -329,11 +334,11 @@ export function actsFrom(annals: readonly Annal[], list: readonly Intervention[]
  * 即位时已年近(或过了)MAX_AGE 岁的至少在位一年(和寻常君主的规矩一样;要别的年份就在干预里写 until)。
  * 等前一位下台再即位的,到即位时 until 已经过了的当作没给
  */
-function crownNatural(K: RulersKnobs, base: number, tag: number, k: number, from: Year, c: Crown, lineage: PolityLineage | undefined): Year {
+function crownNatural(K: RulersKnobs, base: number, tag: number, k: number, from: Year, c: Crown, lineage: PolityLineage | undefined, clerical?: boolean): Year {
   const { TERM, REIGN_MAX, REIGN_EXP, MAX_AGE } = K;
   if (c.until !== undefined && q(c.until) > from) return q(c.until);
   const u = keyed4(base, tag, k, U_REIGN, K_RULER);
-  let L = lineage === 'republic' ? lerp(TERM, u) : 1 + REIGN_MAX * fpow(u, REIGN_EXP);
+  let L = lineage === 'republic' && !clerical ? lerp(TERM, u) : 1 + REIGN_MAX * fpow(u, REIGN_EXP);
   const age = from - c.born;
   if (age + L > MAX_AGE) L = Math.max(1, MAX_AGE - age);
   return q(from + L);
@@ -449,10 +454,11 @@ export function reignBook(knobs: KnobSet, base: number, tag: number, p: ReignPol
   /** 寻常的第 k 位(这一朝第 j 位)从 from 即位;掌实权的名臣、大臣篡位开的朝(Polity.dynasties 的 usurper),第一位照他的生年、倾向 */
   const regular = (k: number, dynasty: number, j: number, from: Year): Reign => {
     const u = j === 0 && dynasty > 0 ? segs?.[dynasty]?.usurper : undefined;
-    // 改制开的共和、军政府那几段照共和一系排(执政有任期);军政府的执政好战
+    // 改制开的共和、军政府那几段照共和一系排(执政有任期);神权按教职终身继任;军政府的执政好战
     const regime = segs?.[dynasty]?.regime;
-    const shift = regime === 'junta' ? JUNTA_SHIFT : regime === 'republic' && p.lineage !== 'republic' ? COMMONWEALTH_SHIFT : undefined;
-    const s = reignStep(knobs, base, tag, k, j, from, segLineage(p, dynasty), p.kind, u ? u.born : k === 0 ? p.prince : undefined, shift);
+    const clerical = regime === 'theocracy';
+    const shift = regime === 'junta' ? JUNTA_SHIFT : regime === 'theocracy' ? THEOCRACY_SHIFT : regime === 'republic' && p.lineage !== 'republic' ? COMMONWEALTH_SHIFT : undefined;
+    const s = reignStep(knobs, base, tag, k, j, from, segLineage(p, dynasty), p.kind, u ? u.born : k === 0 ? p.prince : undefined, shift, clerical);
     const leanings = u ? { ...u.leanings } : s.leanings;
     return { k, dynasty, j, from, age: s.age, natural: s.natural, leanings, eff: leaningEffect(leanings) };
   };
@@ -475,7 +481,7 @@ export function reignBook(knobs: KnobSet, base: number, tag: number, p: ReignPol
     j,
     from,
     age: from - c.born,
-    natural: crownNatural(K, base, tag, k, from, c, segLineage(p, dynasty)),
+    natural: crownNatural(K, base, tag, k, from, c, segLineage(p, dynasty), segs?.[dynasty]?.regime === 'theocracy'),
     leanings: c.leanings,
     eff: leaningEffect(c.leanings),
     crown: c,

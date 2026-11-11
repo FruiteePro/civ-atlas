@@ -156,10 +156,12 @@ export function applyReform(r: Rules, e: Pick<Annal, 'year' | 'n' | 'opt'>): voi
   } else if (e.n === REFORM_RESTORE) r.charter = 0;
 }
 
-/** 史事 reform 的 n:革命、政变、复辟 */
+/** 史事 reform 的 n:革命、政变、复辟、立神权、废神权复行共和 */
 export const REFORM_REVOLUTION = 0;
 export const REFORM_COUP = 1;
 export const REFORM_RESTORE = 2;
+export const REFORM_THEOCRACY = 3;
+export const REFORM_LAICIZE = 4;
 
 /** 革命据地自立的共和国立国时:设了议会,有产者能议政 */
 export const REVOLT_CHARTER = 2;

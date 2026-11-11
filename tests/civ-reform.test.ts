@@ -77,6 +77,13 @@ describe('改制', () => {
         } else if (e.n === REFORM_COUP) {
           // 政变:国号不变
           expect([was, now, after], tag).toEqual(['republic', 'junta', before]);
+        } else if (e.n === 3) {
+          // 立神权:国号不变
+          expect(now, tag).toBe('theocracy');
+          expect(after, tag).toBe(before);
+        } else if (e.n === 4) {
+          // 废神权、复行共和
+          expect([was, now], tag).toEqual(['theocracy', 'republic']);
         } else {
           // 复辟:有君主了;迎回旧王室的用回改制前的国号
           expect(now, tag).toBe('crown');
@@ -90,6 +97,7 @@ describe('改制', () => {
         // 政体名跟着变(立宪、复辟按当时的制度重推,不一定变)
         const form = polityFormAt(civ, e.a, e.year)!.name;
         if (now === 'junta') expect(form, tag).toBe('军政府');
+        if (now === 'theocracy') expect(form, tag).toBe('神权国');
         if (now === 'republic' && P.lineage !== 'republic') expect(form, tag).toMatch(/共和国$/);
         n++;
       }
@@ -109,9 +117,9 @@ describe('改制', () => {
         const now = flagAt(eras, e.year);
         expect(eras.length, tag).toBe(P.dynasties!.length);
         expect(now.year, tag).toBe(e.year);
-        expect(flagNote(now, civ, book, e.a), tag).toMatch(/改制|政变|还政|复辟|共和/);
+        expect(flagNote(now, civ, book, e.a), tag).toMatch(/改制|政变|还政|复辟|共和|神权/);
         const regime = regimeAt(P, e.year);
-        if (regime === 'junta' || (regime === 'republic' && regimeAt(P, e.year - EPS) === 'junta')) {
+        if (regime === 'junta' || regime === 'theocracy' || (regime === 'republic' && (regimeAt(P, e.year - EPS) === 'junta' || regimeAt(P, e.year - EPS) === 'theocracy'))) {
           expect(now.why.reform, tag).toBe('keep');
           expect(now.spec, tag).toEqual(was.spec);
         } else if (regime === 'republic') {

@@ -289,6 +289,8 @@ export function formWhy(f: FormLook): string {
       return '游牧一系，国号升到大汗国';
     case '诸侯割据':
       return '过半的州割据，朝廷名存实亡';
+    case '神权国':
+      return '没有君主，由教宗、大祭司或国师主国，按教职终身继任';
     case '军政府':
       return '将军执政，议事会散了，国事决于军中';
     case '贵族共和国':
@@ -323,6 +325,7 @@ export function regimeSays(civ: Civ, p: number, year: Year, form: FormLook, era?
   const body = d.council >= 3 ? '议会' : '议事会';
   let succ: string;
   if (f.regime === 'junta') succ = `${yearAt(segFrom, era)}起将军拥兵执政，由军中拥立。`;
+  else if (f.regime === 'theocracy') succ = `${f.reformed ? since(segFrom) : '立国以来'}由教宗、大祭司或国师主国，终老继任${f.reformed ? '，不再父子相传' : ''}。`;
   else if (f.regime === 'republic') succ = `${f.reformed ? since(segFrom) : '立国以来'}执政由${body}推举，任满改选${f.reformed ? '，不再父子相传' : ''}。`;
   else succ = P?.dynasties?.[seg]?.house !== undefined ? `${yearAt(segFrom, era)}复辟，迎回旧王室，君位父子相传。` : '君位父子相传。';
   // 议政:设议事会、议会是哪一年(最近一次改了议政的议事、革命)
@@ -335,18 +338,25 @@ export function regimeSays(civ: Civ, p: number, year: Year, form: FormLook, era?
   }
   let delib: string;
   if (f.regime === 'junta') delib = '议事会散了，国事决于军中。';
+  else if (f.regime === 'theocracy') delib = `${f.reformed ? since(segFrom) : '立国以来'}国事决于教职，教宗、大祭司或国师主之。`;
   else if (f.regime === 'republic') delib = `${f.reformed ? since(Math.max(segFrom, set > -Infinity ? set : segFrom)) : '立国以来'}国事由${body}议定，执政照办。`;
   else if (d.council >= 3) delib = `${yearAt(set, era)}立宪，国事经议会议定，君主不复独断。`;
   else if (d.council === 2) delib = `${yearAt(set, era)}起大事先咨议事会，君权照旧。`;
   else delib = '国事由君主独断。';
-  const elect = f.regime === 'crown' ? '' : '、推执政';
+  const elect = f.regime === 'crown' || f.regime === 'theocracy' ? '' : '、推执政';
   const voice =
-    f.regime === 'junta' ? '议事会散了，议政的只剩军中将领。' : f.regime === 'crown' && f.charter === 0 ? '议政的只有王族贵族。' : `${FRANCHISE_SAY[d.franchise]}能进${body}${elect}。`;
+    f.regime === 'junta'
+      ? '议事会散了，议政的只剩军中将领。'
+      : f.regime === 'theocracy'
+        ? '议政的只有教职。'
+        : f.regime === 'crown' && f.charter === 0
+          ? '议政的只有王族贵族。'
+          : `${FRANCHISE_SAY[d.franchise]}能进${body}${elect}。`;
   return [succ, delib, voice];
 }
 
 /**
- * 历次改制一条:因为改制(立宪、废君、还政、扩大参与、革命、政变、复辟)的那一句 —— 编年史那一条,国名前文已经写了的去掉;
+ * 历次改制一条:因为改制(立宪、废君、还政、扩大参与、革命、政变、复辟、立神权、废神权)的那一句 —— 编年史那一条,国名前文已经写了的去掉;
  * 革命、政变、复辟开头写是哪一种("革命：……"),复辟用回旧旗的写上
  */
 function reformChangeSay(civ: Civ, p: number, ch: FormChange, era?: Era): string {
@@ -355,7 +365,7 @@ function reformChangeSay(civ: Civ, p: number, ch: FormChange, era?: Era): string
   const P = civ.polities[p];
   let t = reformText(src, ch.event);
   for (const n of P ? [polityName(P, e.year - 1 / 512), polityName(P, e.year)] : []) if (t.startsWith(n)) t = t.slice(n.length);
-  const head = e.kind === 'reform' ? (['革命：', '政变：', '复辟：'][e.n ?? 0] ?? '') : e.kind === 'split' ? '革命：' : '';
+  const head = e.kind === 'reform' ? (['革命：', '政变：', '复辟：', '立神权：', '废神权：'][e.n ?? 0] ?? '') : e.kind === 'split' ? '革命：' : '';
   // 复辟迎回旧王室:旗用回改制那一年(这一段前面那一串共和、军政府的头一段)以前那面
   let back = '';
   const d = P?.dynasties;

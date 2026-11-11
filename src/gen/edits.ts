@@ -652,6 +652,7 @@
  *      族名另起,后来的名字按接触语那样混两支语感。地形不变,历史重新推演
  *  66:国内少数族早年日常自治更松,中古以后日常收紧;危机里自立、复国、割据按这族占地和是否异教另加一截,中古以后照样起得来。地形不变,历史重新推演
  *  67:各语感的教名、民间信仰后缀和说明加厚,和风、海东、天竺、波斯、南洋、萨赫勒各有专名;地形、历史、疆域兴亡不变,只有教名和相关说明变了
+ *  68:神权是单独一种政体(和君主、共和、军政府并列):国教既盛时可立教宗 / 大祭司 / 国师主国,按教职终身继任,日后也可废神权或复辟;地形不变,历史重新推演
  */
 import type { Civ, Culture, Faith, MigrationDir, Person, Place, Polity, Regions, RulerLeanings, Settlement } from './civ/types';
 import { FRAGMENT_MODE_CHOICES, type FragmentModeChoice } from './civ/fragmentMode';
@@ -668,7 +669,7 @@ import { SLUMP_CHOICES, SLUMP_DEFAULT, type Calamity } from './civ/calamity';
 import { stampCalc, type RuleSet } from './civ/ruleSet';
 
 /** 生成器版本:生成算法有改动、同种子会得到不同世界时加一(存档读档时核对);加一时在 GENERATOR_CHANGES 里补一条 */
-export const GENERATOR_VERSION = 67;
+export const GENERATOR_VERSION = 68;
 
 /**
  * 一版生成器的改动有多大(从小到大):打开旧存档、旧链接时,按跨过的几版里最大的那一种说清变了什么(savefile.ts 的 versionNote)
@@ -756,6 +757,7 @@ export const GENERATOR_CHANGES: Readonly<Record<number, { change: GeneratorChang
   65: { change: 'history' },
   66: { change: 'history' },
   67: { change: 'names' },
+  68: { change: 'history' },
 };
 
 /** 干预的种类(见文件头的表) */

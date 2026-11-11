@@ -7,6 +7,7 @@
  *   | 名字                       | 条件                                                                   |
  *   |----------------------------|------------------------------------------------------------------------|
  *   | 诸侯割据                   | 至少 WARLORDS_MIN 州,一半以上的州割据                                  |
+ *   | 神权国                     | 改制以后立教宗 / 大祭司 / 国师主国的那一段                             |
  *   | 军政府                     | 改制(reform.ts)以后政变、将军执政的那一段                             |
  *   | 贵族共和国 / 共和国        | 改出来的共和国(本国原来有君主):只有贵族能议政 / 其余                 |
  *   | 城邦 / 商人共和国 / 海上帝国 | 海洋共和一系:国号第 0 档 / 第 1–2 档 / 第 3 档                          |
@@ -21,7 +22,7 @@
  * 改出来的共和国不管多大都叫共和国(海洋一系第 3 档叫海上帝国,这里不跟)。
  *
  * **继任、议政、参与**(朝政页的三条,讨论稿 6c 的维度 1–3;formDims):共用"少数人 ↔ 众人"的轴,各四档 ——
- *   继任:拥立(军政府)/ 世袭(有君主)/ 推举 / 任期(共和);议政:军人 / 独断 / 议事会 / 议会;
+ *   继任:拥立(军政府)/ 世袭(有君主)/ 推举(神权)/ 任期(共和);议政:军人 / 独断 / 议事会 / 议会;
  *   参与:王族贵族 / 有产者 / 全体男子 / 全体成年人(海洋共和一系从有产者起;有君主、没设议事会的只算贵族)。
  *
  * **历次改制**:只在这一国议事、国号升格、管辖快照(每 20 年一份,割据从它来)的那几年看一次,名字变了就记一条
@@ -64,7 +65,7 @@ export interface FormFacts {
   /** 州数、其中割据的州数(管辖快照) */
   regions: number;
   lords: number;
-  /** 改制(regime.ts):那一段的政体、是不是改出来的共和 / 军政府(本国原来有君主);议政设到哪(0 没设、1 议事会、2 议会)、参与多了几档 */
+  /** 改制(regime.ts):那一段的政体、是不是改出来的共和 / 军政府 / 神权(本国原来有君主);议政设到哪(0 没设、1 议事会、2 议会)、参与多了几档 */
   regime: Regime;
   reformed: boolean;
   charter: number;
@@ -83,11 +84,11 @@ export interface FormDims {
 
 /** 那几样 → 继任、议政、参与 */
 export function formDims(f: Pick<FormFacts, 'regime' | 'lineage' | 'reformed' | 'charter' | 'franchise'>): FormDims {
-  const succession = f.regime === 'junta' ? 0 : f.regime === 'crown' ? 1 : 3;
-  const council = f.regime === 'junta' ? 0 : f.regime === 'crown' ? 1 + Math.min(2, f.charter) : f.charter >= 2 ? 3 : 2;
+  const succession = f.regime === 'junta' ? 0 : f.regime === 'crown' ? 1 : f.regime === 'theocracy' ? 2 : 3;
+  const council = f.regime === 'junta' ? 0 : f.regime === 'theocracy' ? 2 : f.regime === 'crown' ? 1 + Math.min(2, f.charter) : f.charter >= 2 ? 3 : 2;
   const base = f.lineage === 'republic' && !f.reformed ? 1 : 0;
   // 军政府:议事会散了,议政的只剩将领,算最少的那一档;有君主、没设议事会的只算贵族
-  const franchise = f.regime === 'junta' || (f.regime === 'crown' && f.charter === 0) ? 0 : Math.min(3, base + f.franchise);
+  const franchise = f.regime === 'junta' || f.regime === 'theocracy' || (f.regime === 'crown' && f.charter === 0) ? 0 : Math.min(3, base + f.franchise);
   return { succession, council, franchise };
 }
 
@@ -113,6 +114,7 @@ const commonwealth = (f: FormFacts) => f.reformed && f.regime === 'republic';
 /** 政体名的表:一行一个名字,从上往下先对上的算数 */
 export const FORMS = [
   { name: '诸侯割据', test: (f: FormFacts) => f.regions >= WARLORDS_MIN && lordShare(f) >= WARLORDS_SHARE },
+  { name: '神权国', test: (f: FormFacts) => f.regime === 'theocracy' },
   { name: '军政府', test: (f: FormFacts) => f.regime === 'junta' },
   { name: '贵族共和国', test: (f: FormFacts) => commonwealth(f) && formDims(f).franchise === 0 },
   { name: '共和国', test: (f: FormFacts) => commonwealth(f) },

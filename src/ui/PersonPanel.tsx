@@ -15,7 +15,7 @@
  *         父亲(收养的写「养父」;父亲在别国的,小字写那一国)、子嗣(世系图里有的人,没即位的写"未即位")、
  *         争储(即位时诸子争储怎么得的位:以军功越过兄长、举兵、谮杀……,对手能点)/ 争位(据地自立的:不服谁即位、据哪里自立)、
  *         结局、即位前领兵(做王子时领的兵)、亲征(在位时)、将领(在位时本国领兵的)、名臣(在位时在朝的);
- *         右上「世系图」打开这国的世系图,停在他那一朝、圈出他。共和国写"在任""执政",没有父亲、子嗣、世系图
+ *         右上「世系图」打开这国的世系图,停在他那一朝、圈出他。共和国写"在任""执政",神权国写"在任"和国师 / 教宗 / 大祭司,没有父亲、子嗣、世系图
  *         将领:事迹、国家、民族、姓、字号、籍贯、生卒、官职、历任、领兵(伐谁 / 抗谁)、效力(那几年在位的君主)、对手(同一场仗对面的统帅)、结局
  *         名臣:事迹(经手的事)、国家、民族、姓、字号、籍贯、生卒、官职(做到最高的那个官和任期)、历任(之前的官和年份)、效力、结局
  *         宗室:国家、民族、姓、生卒、父亲、子嗣、领兵(替父兄出征打的仗)、效力(派他出征的君主,小字写父 / 兄)、结局(战死、争储被杀)、
@@ -48,7 +48,7 @@ import type { Civ, Person, PersonSpouse, RulerLeanings } from '../gen/civ/types'
 import { polityName, polityTierAt } from '../gen/readers/openQuery';
 import { buildChronicle, cnNumber, filterChronicle, reignEntries, type ChronicleEntry } from '../gen/civ/story/chronicle';
 import { commandFoes, inferredCulture, peopleIndex, personFame, personSpan, personSurname, rulerNeighbors, type Foe } from '../gen/civ/story/peopleInfo';
-import { LEANING_KEYS, LEANING_TEXT, ageAt, consortRole, dowagerSpans, dowagerWordOf, generalRole, isConsul, kinOf, leaningsText, ministerRole, personName, princeRef, princeRole, rulerBare, rulerFateWord, rulerRef, rulerRole, rulerShort, rulerTitle, seatPolity, splitSurname } from '../gen/civ/story/peopleText';
+import { LEANING_KEYS, LEANING_TEXT, ageAt, consortRole, dowagerSpans, dowagerWordOf, generalRole, isConsul, isTheocrat, kinOf, leaningsText, ministerRole, personName, princeRef, princeRole, rulerBare, rulerFateWord, rulerRef, rulerRole, rulerShort, rulerTitle, seatPolity, splitSurname } from '../gen/civ/story/peopleText';
 import { REGENCY_END, REGENCY_VERB, brideMatchOf, brideName, heldOver, kinAt, overlapOf, polityShort, type Held } from '../gen/civ/story/regentInfo';
 import { eastRank, heOrShe, isFemale, kinWord, wedVerb, westRank } from '../gen/civ/story/gender';
 import { treatyBook } from '../gen/civ/story/treatyInfo';
@@ -229,7 +229,7 @@ export function PersonPanel({ civ, id, year }: DetailProps) {
   // 后妃:临朝的太后(主按钮「临朝那年」、能「关注她」)、嫁来的宗室女(主按钮「世系图」,娘家那一朝)
   const dowagerOf = consort ? dowagerSpans(x)[0] : undefined;
   const bride = consort && !dowagerOf;
-  const consul = isConsul(civ, x);
+  const consul = isConsul(civ, x) || isTheocrat(civ, x);
   const span = personSpan(x);
   const end = span.until ?? civ.endYear;
   const sub = dowagerOf
@@ -1088,7 +1088,7 @@ function consortFacts(civ: Civ, x: Person, era: Era | undefined): Line[] {
 }
 
 function rulerLines(civ: Civ, x: Person, out: Line[], foes: Foe[], era: Era | undefined, held: Line | null) {
-  const consul = isConsul(civ, x);
+  const consul = isConsul(civ, x) || isTheocrat(civ, x);
   const from = x.from ?? x.born;
   if (x.until !== undefined) {
     const n = F(x.until) - F(from);

@@ -1,6 +1,7 @@
 /**
  * 世界概览人物页「君主 / 执政」档的名字(src/ui/WorldOverviewPeople.tsx 的 rulersTabName):
- * 按那年的政体,不按立国时的一系。君主国后来改成共和的写"执政";全部国家那年有君主国也有共和国,写"君主、执政"。
+ * 按那年的政体,不按立国时的一系。君主国后来改成共和的写"执政";神权按语感写"国师" / "教宗" / "大祭司";
+ * 全部国家那年有君主国也有共和国,写"君主、执政";有神权国的一并写上。
  */
 import { describe, expect, it } from 'vitest';
 import type { Civ, Polity } from '../src/gen/civ/types';
@@ -12,13 +13,14 @@ function p(
     lineage?: Polity['lineage'];
     founded?: number;
     ended?: number;
+    culture?: number;
     dynasties?: Polity['dynasties'];
   } = {},
 ): Polity {
   return {
     id,
     name: `P${id}`,
-    culture: 0,
+    culture: o.culture ?? 0,
     capital: 0,
     founded: o.founded ?? 100,
     kind: 'river',
@@ -30,10 +32,11 @@ function p(
   };
 }
 
-function civ(ps: Polity[], endYear = 3000): Pick<Civ, 'polities' | 'endYear'> {
+function civ(ps: Polity[], endYear = 3000, styles: string[] = ['central']): Pick<Civ, 'polities' | 'endYear' | 'cultures'> {
   const polities: Polity[] = [];
   for (const x of ps) polities[x.id] = x;
-  return { polities, endYear };
+  const cultures = styles.map((style, id) => ({ id, name: `C${id}`, style, kind: 'river' as const, hearth: 0, born: 0, expansionism: 0, color: [0, 0, 0] as [number, number, number] }));
+  return { polities, endYear, cultures: cultures as Civ['cultures'] };
 }
 
 describe('概览人物页的君主档名', () => {
@@ -103,5 +106,25 @@ describe('概览人物页的君主档名', () => {
     // 已亡的共和国不进"那年还在"的账
     const dead = p(6, { lineage: 'republic', founded: 100, ended: 800 });
     expect(rulersTabName(civ([a, dead]), null, 1500)).toBe('君主');
+  });
+
+  it('神权按那年的语感写国师、教宗或大祭司,全部国家时和君主、执政并列', () => {
+    const theo = (id: number, culture: number) =>
+      p(id, { culture, dynasties: [{ year: 100, name: '', seat: 0 }, { year: 1400, name: '', seat: 0, regime: 'theocracy' }] });
+    const east = theo(6, 0);
+    east.culture = 0;
+    const west = theo(7, 1);
+    west.culture = 1;
+    const styles = ['central', 'imperial'];
+    expect(rulersTabName(civ([east], 3000, styles), 6, 1200)).toBe('君主');
+    expect(rulersTabName(civ([east], 3000, styles), 6, 1500)).toBe('国师');
+    expect(rulersTabTitle('国师')).toBe('历任国师,按朝代分组');
+    expect(rulersTabName(civ([west], 3000, styles), 7, 1500)).toBe('教宗');
+    expect(rulersTabTitle('教宗')).toBe('历任教宗,按朝代分组');
+    const crown = p(8, { lineage: 'realm' });
+    expect(rulersTabName(civ([crown, east], 3000, styles), null, 1500)).toBe('君主、国师');
+    expect(rulersTabTitle('君主、国师')).toBe('历代君主、国师,按朝代分组');
+    const sea = p(9, { lineage: 'republic', founded: 200 });
+    expect(rulersTabName(civ([crown, sea, east], 3000, styles), null, 1500)).toBe('君主、执政、国师');
   });
 });

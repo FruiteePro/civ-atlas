@@ -15,7 +15,7 @@ import type { Civ, Person, PersonRegency, Polity, RulerLeanings, Year } from '..
 import { polityName, polityRootAt, polityShortTitle, polityTierAt, polityTitles } from '../growth';
 import { isNameToken, nameForm } from '../nameToken';
 import { childWord, dowagerWord, eastRank, isFemale, khanWord, postTitle, princeWord, westRank } from './gender';
-import { reformedSeg, royalSeg } from '../regime';
+import { reformedSeg, regimeAt, royalSeg, segRegime } from '../regime';
 
 function polityOfPerson(civ: Civ, x: Person): Polity | null {
   return x.polity >= 0 && x.polity < civ.polities.length ? civ.polities[x.polity] : null;
@@ -79,8 +79,11 @@ function refOf(civ: Civ, x: Person, year: Year, realm: boolean): string {
   if (!p) return x.name;
   const tier = tierFor(p, x, year);
   const at = Math.min(Math.max(year, x.from ?? p.founded), (x.until ?? Infinity) - 1 / 512);
-  // 改出来的共和国、军政府的执政:"博戈维纳共和国执政某某""大靖执政某某"
-  if (x.role === 'ruler' && reformedSeg(p, x.dynasty ?? 0)) return `${realm ? (p.eastern ? polityShortTitle(p, 3, at) : polityName(p, at)) : ''}执政${x.name}`;
+  // 改出来的共和国、军政府的执政、神权的教宗 / 国师:"博戈维纳共和国执政某某""大靖执政某某""大靖国师某某"
+  if (x.role === 'ruler' && reformedSeg(p, x.dynasty ?? 0)) {
+    const office = clericOffice(civ, p, x.dynasty ?? 0);
+    return `${realm ? (p.eastern ? polityShortTitle(p, 3, at) : polityName(p, at)) : ''}${office}${x.name}`;
+  }
   const title = rulerTitle(civ, x);
   if (p.eastern) {
     const tribe = realm ? polityTitles(p, at)[0] : '';
@@ -167,7 +170,7 @@ export function rulerRole(civ: Civ, x: Person): string {
   if (!p) return '';
   const at = lastReignYear(civ, x);
   const tier = tierFor(p, x, at);
-  if (x.role === 'ruler' && reformedSeg(p, x.dynasty ?? 0)) return `${polityName(p, at)}执政`;
+  if (x.role === 'ruler' && reformedSeg(p, x.dynasty ?? 0)) return `${polityName(p, at)}${clericOffice(civ, p, x.dynasty ?? 0)}`;
   if (p.eastern) {
     if (p.lineage === 'khanate') return tier <= 0 ? `${polityTitles(p, at)[0]}首领` : `${polityName(p, at)}${khanWord(x)}`;
     if (tier <= 0) return `${polityTitles(p, at)[0]}首领`;
@@ -270,7 +273,32 @@ export function personRoleShort(civ: Civ, x: Person): string {
 /** 共和国的执政官(写"执政""在任""任满",不写"君主""在位"):海洋城邦共和一系,和改制开的共和、军政府那几段 */
 export function isConsul(civ: Civ, x: Person): boolean {
   const p = polityOfPerson(civ, x);
-  return x.role === 'ruler' && !!p && !royalSeg(p, x.dynasty ?? 0);
+  return x.role === 'ruler' && !!p && !royalSeg(p, x.dynasty ?? 0) && segRegime(p, x.dynasty ?? 0) !== 'theocracy';
+}
+
+/** 这一位是不是神权那一段的教宗 / 大祭司 / 国师 */
+export function isTheocrat(civ: Civ, x: Person): boolean {
+  const p = polityOfPerson(civ, x);
+  return x.role === 'ruler' && !!p && segRegime(p, x.dynasty ?? 0) === 'theocracy';
+}
+
+/** 国师(中原 / 仙侠 / 边塞 / 海东)、教宗(西土帝制 / 王国 / 斯拉夫)、其余语感用大祭司 */
+export function clericTitle(style: string | undefined): '国师' | '教宗' | '大祭司' {
+  if (style === 'central' || style === 'xianxia' || style === 'frontier' || style === 'haedong') return '国师';
+  if (style === 'imperial' || style === 'kingdom' || style === 'slavic') return '教宗';
+  return '大祭司';
+}
+
+/** 这个国家那一年主国的人怎么称呼:君主 / 执政 / 国师、教宗、大祭司 */
+export function officeWord(civ: Pick<Civ, 'cultures'>, p: Pick<Polity, 'lineage' | 'dynasties' | 'culture'>, year: number): '君主' | '执政' | '国师' | '教宗' | '大祭司' {
+  if (regimeAt(p, year) === 'theocracy') return clericTitle(p.culture !== undefined ? civ.cultures[p.culture]?.style : undefined);
+  if (regimeAt(p, year) === 'republic' || regimeAt(p, year) === 'junta') return '执政';
+  return p.lineage === 'republic' ? '执政' : '君主';
+}
+
+/** 改出来的那一段的官称:神权用教宗 / 国师,其余用执政 */
+function clericOffice(civ: Civ, p: Polity, dynasty: number): string {
+  return segRegime(p, dynasty) === 'theocracy' ? clericTitle(p.culture !== undefined ? civ.cultures[p.culture]?.style : undefined) : '执政';
 }
 
 /** 往上数几代的祖先(0 = 自己);没记父亲的到此为止 */

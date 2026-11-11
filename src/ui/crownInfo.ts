@@ -13,7 +13,7 @@ import { polityAlive, polityName, polityTierAt, ownersAt, rulerAt } from '../gen
 import { dynastyTitle, polityShortTitle, polityTitles } from '../gen/civ/growth';
 import { peopleIndex } from '../gen/civ/story/peopleInfo';
 import { royalAt } from '../gen/civ/regime';
-import { personName } from '../gen/civ/story/peopleText';
+import { officeWord, personName } from '../gen/civ/story/peopleText';
 import { heOrShe } from '../gen/civ/story/gender';
 import { interventionFate } from '../gen/stepwise';
 import { cleanIntervention, commandAt, resolveKey, ticksAt, type Intervention, type WorldEdits } from '../gen/edits';
@@ -71,14 +71,16 @@ export function crownWho(civ: Civ, char: number, chars: readonly AuthorCharacter
   return chars?.find((c) => c.id === char)?.name || civ.authorNames?.[char] || AUTHOR_RULER_DEFAULT;
 }
 
-/** 那一年还在的国家(有国土的):大的在前;州数、那年在位的君主(共和国 = 执政) */
+/** 那一年还在的国家(有国土的):大的在前;州数、那年在位的君主(共和国 = 执政,神权国 = 国师 / 教宗 / 大祭司) */
 export interface AlivePolity {
   id: number;
   name: string;
   regions: number;
   ruler: string;
-  /** 那一年没有王室、写"执政":海洋城邦共和一系,和改制以后的共和、军政府那些年(复辟以后照君主国) */
+  /** 那一年没有王室:海洋城邦共和一系,和改制以后的共和、军政府、神权那些年(复辟以后照君主国) */
   republic: boolean;
+  /** 那年主国的人怎么称呼:君主国写在位,共和 / 军政府写执政,神权写国师 / 教宗 / 大祭司 */
+  office: string;
 }
 
 export function alivePolities(civ: Civ, year: number): AlivePolity[] {
@@ -91,7 +93,7 @@ export function alivePolities(civ: Civ, year: number): AlivePolity[] {
     .map(([id, regions]) => {
       const p = civ.polities[id];
       const r = rulerAt(civ, id, y);
-      return { id, name: nameAt(p, y), regions, ruler: r ? personName(civ, r) : '', republic: !royalAt(p, y) };
+      return { id, name: nameAt(p, y), regions, ruler: r ? personName(civ, r) : '', republic: !royalAt(p, y), office: officeWord(civ, p, y) };
     });
 }
 

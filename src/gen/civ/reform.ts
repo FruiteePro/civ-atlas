@@ -3,9 +3,9 @@
  * 议不成、动荡大的起兵革命;共和国禁军强、国用窘迫时统兵的将军政变;新制不到五十年、朝廷窘迫时复辟。
  * 挂在议事(council.ts)的看内政上:议事够格的国家(州数、立国年数、不在打仗)每回先看这里,出了一件就不再议别的(一回只出一件)。
  *
- * **政体**(regime.ts):在位表的每一段(Polity.dynasties)是王室的一朝,或改制开的共和(regime = republic)、军政府(junta)。
- * 改共和、政变、还政、复辟都往 Polity.dynasties 加一段,在位表跟着重排(polities.ts 的 dynastyReign):
- *   共和、军政府的执政有任期(rulers.ts 照共和一系排),没有王室;复辟迎回旧王室的那一段记 house(国名词根、旗照那一朝)。
+ * **政体**(regime.ts):在位表的每一段(Polity.dynasties)是王室的一朝,或改制开的共和(regime = republic)、军政府(junta)、神权(theocracy)。
+ * 改共和、政变、还政、复辟、立神权、废神权都往 Polity.dynasties 加一段,在位表跟着重排(polities.ts 的 dynastyReign):
+ *   共和、军政府的执政有任期(rulers.ts 照共和一系排),神权按教职终身继任,都没有王室;复辟迎回旧王室的那一段记 house(国名词根、旗照那一朝)。
  * 议政、参与两样(界面的「议政」「参与」两条,讨论稿的维度 2、3)由议事、改制的史事重建(councilRules.ts 的 Rules.charter、franchise)。
  *
  * **思潮**(ideology.ts,各国国中各说的接受度,最近算的那一步):
@@ -35,8 +35,13 @@
  *      再晚的旧王室没人了,此刻的执政 / 将军自立为君(当成换了一朝,记 reform n = 2,b = −1)。
  *   ⑤ 还政(军政府满 RETURN_AGE 年):议事,x = RET_0 + RET_PUSH × (共治 + 民权)− RET_WAR × (好战 − 50) / 50 + 随机;办成复行共和、搁置。
  *   ⑥ 扩大参与(共和那几段):同 ②。
+ *   ⑦ 立神权(王室的一段、共和那几段;军政府不走这条):国教不是民间信仰、本国信国教的州到 THEO_FAITH,
+ *      上回改制满 REFORM_GAP 年 —— 赔率 THEO_ODDS × (1 + 国教占比超过门槛的那一截,再乘天命)× (1 + THEO_CRISIS × 窘迫);
+ *      掷中就废君号 / 废执政,立教宗、大祭司或国师主国(记 reform n = 3)。
+ *   ⑧ 废神权(神权那一段):满 THEO_LEAVE 年、共治 + 民权盛或国教占比掉下去 —— 赔率 THEO_LEAVE_ODDS × (1 + 共治民权)× (1 − 国教占比);
+ *      本国原来有君主的也可走上面的复辟;掷中废神权、复行共和(记 reform n = 4)。
  *
- * **政体脾气**:改出来的共和国执政少开战、军政府的执政好战(rulers.ts 的 COMMONWEALTH_SHIFT、JUNTA_SHIFT,加在共和一系的倾向偏移上);
+ * **政体脾气**:改出来的共和国执政少开战、军政府的执政好战、神权少开战偏内治(rulers.ts 的 COMMONWEALTH_SHIFT、JUNTA_SHIFT、THEOCRACY_SHIFT,加在共和一系的倾向偏移上);
  *   改制开的一段不算"改朝换代之乱"(wars.ts、treaties.ts 的乘乱),但和改朝换代一样从头算"当朝几年"(动荡、国用宽限)。
  *
  * **不存内存状态**:政体在 Polity.dynasties,议政、参与、上回改制的年份由史事重建(resumeCouncil)。
@@ -51,8 +56,9 @@ import type { WarModel } from './wars';
 import type { ControlModel } from './control';
 import { capitalAt, populationAt } from './growth';
 import { drawLeanings, reignBorn } from './rulers';
-import { Issue, Outcome, REFORM_COUP, REFORM_RESTORE, REFORM_REVOLUTION, REVOLT_CHARTER, REVOLT_FRANCHISE, applyReform, type Rules } from './councilRules';
+import { Issue, Outcome, REFORM_COUP, REFORM_LAICIZE, REFORM_RESTORE, REFORM_REVOLUTION, REFORM_THEOCRACY, REVOLT_CHARTER, REVOLT_FRANCHISE, applyReform, type Rules } from './councilRules';
 import { segRegime } from './regime';
+import { faithSimOf } from './religion';
 import { ideoModelOf, nationalNow } from './ideology';
 import { civApi } from './api';
 import { defineKnobs } from './engine/knobs';
@@ -126,9 +132,18 @@ export const REFORM_KNOBS = defineKnobs('reform', {
   RET_WAR: 0.3,
   /** 政变的将军、革命起兵的人:年纪(随机)、倾向偏移(将军好战) */
   LEADER_AGE: [36, 58] as [number, number],
+  /** 立神权:本国信国教的州至少多少;赔率;窘迫加几成;天命再乘多少 */
+  THEO_FAITH: 0.45,
+  THEO_ODDS: 0.055,
+  THEO_CRISIS: 0.4,
+  THEO_SKY: 0.6,
+  /** 废神权:满多少年才看;赔率 */
+  THEO_LEAVE: 40,
+  THEO_LEAVE_ODDS: 0.08,
 });
 const GENERAL_SHIFT = { war: 15, expand: 5 };
 const REBEL_SHIFT = { develop: 15, war: 5 };
+const CLERIC_SHIFT = { develop: 5, war: -8, expand: -5 };
 
 // 随机数用途(keyed4 第四位)
 const U_JIT = 1;
@@ -136,6 +151,8 @@ const U_REV = 2;
 const U_COUP = 3;
 const U_RESTORE = 4;
 const U_AGE = 5;
+const U_THEO = 6;
+const U_THEO_LEAVE = 7;
 /** 倾向的随机数从这里起(drawLeanings 的用途号加上去) */
 const U_LEAN = 64;
 
@@ -202,6 +219,7 @@ export function reformCheck(cx: ReformCtx): boolean {
   const since = t - cx.rules.reformed;
 
   if (regime === 'crown') {
+    if (tryTheocracy(cx, crisis, sky, since, R)) return true;
     if (push < PUSH_MIN) return false;
     const r = cx.rules;
     let issue: Issue | null = null;
@@ -225,12 +243,12 @@ export function reformCheck(cx: ReformCtx): boolean {
     return true;
   }
 
-  // 共和、军政府:复辟、政变、还政、扩大参与
-  // 复辟:窘迫,或者天命之说比共治、民权还盛(人心思旧)
+  // 共和、军政府、神权:复辟、政变、还政、立神权、废神权、扩大参与
+  // 复辟:窘迫,或者天命之说比共治、民权还盛(人心思旧);神权也能复辟
   if (since >= REFORM_GAP && (crisis > 0 || sky > share + right) && P.lineage !== 'republic') {
     const crown = lastCrown(P, seg);
     const abolished = crown >= 0 ? P.dynasties![crown + 1].year : -Infinity;
-    if (t - abolished < RESTORE_YEARS && (regime === 'junta' || sky >= RESTORE_SKY)) {
+    if (t - abolished < RESTORE_YEARS && (regime === 'junta' || regime === 'theocracy' || sky >= RESTORE_SKY)) {
       const odds = RESTORE_ODDS * (1 + crisis) * (1 + sky);
       if (R(U_RESTORE) < odds) {
         const now = rulerOf(pm, p, t);
@@ -251,6 +269,11 @@ export function reformCheck(cx: ReformCtx): boolean {
       openSeg(cx, { regime: 'junta', usurper: leader(cx, R, GENERAL_SHIFT) });
       return true;
     }
+  }
+  if (regime === 'republic' && tryTheocracy(cx, crisis, sky, since, R)) return true;
+  if (regime === 'theocracy') {
+    if (tryLaicize(cx, share, right, since, R)) return true;
+    return false;
   }
   if (regime === 'junta') {
     const age = t - P.dynasties![seg].year;
@@ -279,6 +302,45 @@ function openness(K: ReformKnobs, push: number, now: number, extra: number): num
   return Math.min(3, Math.max(now, push >= OPEN_PUSH ? 1 : 0) + extra);
 }
 
+/** 本国信国教的州占几成(没有国教、只剩民间信仰 = 0) */
+function stateFaithShare(cx: ReformCtx): number {
+  const fs = faithSimOf(cx.sim);
+  if (!fs) return 0;
+  const fid = fs.stateFaith(cx.P.id);
+  if (fid < 0 || fs.folk(fid)) return 0;
+  const lands = cx.pm.lands[cx.P.id];
+  if (!lands.length) return 0;
+  let hit = 0;
+  for (const r of lands) if (fs.faith[r] === fid) hit++;
+  return hit / lands.length;
+}
+
+/** 立神权:国教既盛,废君号或废执政,立教宗 / 大祭司 / 国师主国 */
+function tryTheocracy(cx: ReformCtx, crisis: number, sky: number, since: number, R: (use: number) => number): boolean {
+  const { REFORM_GAP, THEO_FAITH, THEO_ODDS, THEO_CRISIS, THEO_SKY } = cx.pm.knobs.get(REFORM_KNOBS);
+  if (since < REFORM_GAP) return false;
+  const share = stateFaithShare(cx);
+  if (share < THEO_FAITH) return false;
+  const fill = THEO_FAITH >= 1 ? 1 : (share - THEO_FAITH) / (1 - THEO_FAITH);
+  const odds = THEO_ODDS * (1 + fill * (1 + THEO_SKY * sky)) * (1 + THEO_CRISIS * crisis);
+  if (R(U_THEO) >= odds / (1 + odds)) return false;
+  note(cx, { b: -1, region: cx.capR, settlement: capitalAt(cx.P, cx.t), n: REFORM_THEOCRACY });
+  openSeg(cx, { regime: 'theocracy', usurper: leader(cx, R, CLERIC_SHIFT) });
+  return true;
+}
+
+/** 废神权、复行共和(本国原来有君主的也可走复辟,这里只管回到共和) */
+function tryLaicize(cx: ReformCtx, share: number, right: number, since: number, R: (use: number) => number): boolean {
+  const { THEO_LEAVE, THEO_LEAVE_ODDS } = cx.pm.knobs.get(REFORM_KNOBS);
+  if (since < THEO_LEAVE) return false;
+  const faith = stateFaithShare(cx);
+  const odds = THEO_LEAVE_ODDS * (1 + share + right) * (1 - faith);
+  if (R(U_THEO_LEAVE) >= odds / (1 + odds)) return false;
+  note(cx, { b: -1, region: cx.capR, settlement: capitalAt(cx.P, cx.t), n: REFORM_LAICIZE });
+  openSeg(cx, { regime: 'republic' });
+  return true;
+}
+
 /** 第 seg 段往前最近的一段王室(没有 = −1) */
 function lastCrown(P: Polity, seg: number): number {
   const d = P.dynasties;
@@ -301,7 +363,7 @@ function note(cx: ReformCtx, f: Pick<Annal, 'b' | 'region' | 'settlement' | 'n'>
 }
 
 /** 往在位表加一段(改共和、政变、还政、复辟):国都照旧;在位表重排,这一段的第一位下一刻起在位 */
-function openSeg(cx: ReformCtx, seg: { regime?: 'republic' | 'junta'; house?: number; usurper?: { born: Year; leanings: RulerLeanings } }): void {
+function openSeg(cx: ReformCtx, seg: { regime?: 'republic' | 'junta' | 'theocracy'; house?: number; usurper?: { born: Year; leanings: RulerLeanings } }): void {
   const { P, t } = cx;
   if (!P.dynasties) P.dynasties = [{ year: P.founded, name: '', seat: P.capital }];
   P.dynasties.push({

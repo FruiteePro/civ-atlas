@@ -163,7 +163,7 @@ export interface SimRegions {
 
 export type SimOwnerField = 'polity' | 'culture' | 'faith';
 
-export type Regime = 'crown' | 'republic' | 'junta';
+export type Regime = 'crown' | 'republic' | 'junta' | 'theocracy';
 
 export interface SimPolity {
   id: number;

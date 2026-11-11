@@ -19,11 +19,11 @@ export type V1Seed = (typeof V1_SEEDS)[number];
 
 export const V1_PINS: Record<V1Seed, { weariness: { digest: string } & Record<string, unknown>; faith: { digest: string } & Record<string, unknown> }> = {
   1: {
-    weariness: { before: { wars: 72, meanYears: 6.11, long: 24 }, after: { wars: 46, meanYears: 4.39, long: 7 }, treaties: 19, digest: '445f69909d3b6b85' },
-    faith: { before: { wars: 311, farWars: 41, pacts: 25, samePacts: 18 }, after: { wars: 253, farWars: 34, pacts: 30, samePacts: 18 }, declare: 0, ally: 5, digest: '0f6754967d8d6f72' },
+    weariness: { before: { wars: 37, meanYears: 4.86, long: 8 }, after: { wars: 24, meanYears: 3.48, long: 1 }, treaties: 8, digest: '748119fb30d6281b' },
+    faith: { before: { wars: 211, farWars: 25, pacts: 15, samePacts: 11 }, after: { wars: 251, farWars: 33, pacts: 29, samePacts: 22 }, declare: 0, ally: 5, digest: '57f3d3f16c3f08a9' },
   },
   2024: {
-    weariness: { before: { wars: 16, meanYears: 4.48, long: 2 }, after: { wars: 17, meanYears: 3.54, long: 1 }, treaties: 7, digest: '7df76acc3ae14fab' },
-    faith: { before: { wars: 174, farWars: 42, pacts: 11, samePacts: 5 }, after: { wars: 213, farWars: 27, pacts: 34, samePacts: 25 }, declare: 0, ally: 9, digest: '88d02ddd9a818648' },
+    weariness: { before: { wars: 47, meanYears: 4.82, long: 1 }, after: { wars: 33, meanYears: 4.56, long: 2 }, treaties: 20, digest: '098209ffe9a9e26c' },
+    faith: { before: { wars: 184, farWars: 20, pacts: 17, samePacts: 7 }, after: { wars: 155, farWars: 54, pacts: 11, samePacts: 4 }, declare: 2, ally: 3, digest: 'a1645c7c1cb11e1b' },
   },
 };
