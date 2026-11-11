@@ -7,7 +7,7 @@
  * → 动荡底(读这一步刚算完的离国都多远、窘迫)→ 动荡(压到 0 以上、加上割据);国力(读管得到几成)。
  * 输入表(事件层每年填好):国(编号表,州 → 国);各州离国都的路程、是不是国都、是不是异族、被征服了几年、有没有大城、是不是割据的地盘、
  * 乡村人口上限、长得多快、上一步以来的兵灾几件、上一步以来的饥荒水旱几件;按地块的:分到一州上限的几成、有几个邻块有人住过、地经不经得住种;
- * 各国国都所在州的行政能力、危机、当朝几年、近年闹饥荒 / 染疫的州数、在讨伐的民变、割据几处、有几州、在打几场仗、纳贡收贡。
+ * 各国国都所在州的行政能力、时代、危机、当朝几年、近年闹饥荒 / 染疫的州数、在讨伐的民变、割据几处、有几州、在打几场仗、纳贡收贡。
  * 各州城的人口(每年填);每 FISCAL_EVERY 年填一次(只给按州的三样收入用):生产和运输能力、有没有港口、大河。
  * 各国的军力系数、方针给的国力倍数(每年填)。
  * 各国议事定下的(council.ts,每年填):直征多收的几成、直征的开销、分封了边地没有、改制以后的余波(动荡加多少)、
@@ -58,6 +58,9 @@ export interface ControlRuleConsts {
   REACH: number;
   ADMIN_GAIN: number;
   FOREIGN: number;
+  FOREIGN_LATE: number;
+  FOREIGN_ERA0: number;
+  FOREIGN_ERA1: number;
   RECENT: number;
   RECENT_CUT: number;
   BIG_CITY: number;
@@ -177,6 +180,7 @@ export function stateCards(c: ControlRuleConsts, u: UnrestRuleConsts, f: FiscalR
     num('港口', '有没有港口(同上)'),
     num('大河', '有没有大河(同上)'),
     pol('国都行政', '国都所在州的行政能力'),
+    pol('国都时代', '国都所在州的时代数值(少数族日常管治松紧按它收)'),
     pol('危机', '危机(国土大、刚丢了国都 / 迁了都、正在打仗、接连丢州)'),
     pol('当朝', '当朝几年了'),
     pol('饥荒', '近年闹饥荒的州数'),
@@ -219,8 +223,9 @@ export function stateCards(c: ControlRuleConsts, u: UnrestRuleConsts, f: FiscalR
       // 铨选的多管一截(官升;许了自辟少管一截)只算在这里,不算进离国都远近;有了铁路(做法表)管得到的远近再乘 RAIL_REACH
       'let 行政 = 1 + ADMIN_GAIN * max(0, 国都行政 + 官升)',
       `let x = if(路程 >= NEVER, 4, 路程 / (REACH * 行政 * if(做法.铁路 > 0, RAIL_REACH, 1)${plug.reach ? ' * 远近' : ''}))`,
-      // 异族、刚被征服(随年数淡去)、当地有大城都打折
-      'let c = 1 / (1 + x * x) * if(异族, FOREIGN, 1) * if(新征 < RECENT, 1 - RECENT_CUT * (1 - 新征 / RECENT), 1) * if(大城, BIG_CITY, 1)',
+      // 异族(早年 FOREIGN,国都时代到 FOREIGN_ERA1 以后收到 FOREIGN_LATE)、刚被征服(随年数淡去)、当地有大城都打折
+      'let 族控 = FOREIGN + (FOREIGN_LATE - FOREIGN) * clamp((国都时代 - FOREIGN_ERA0) / (FOREIGN_ERA1 - FOREIGN_ERA0), 0, 1)',
+      'let c = 1 / (1 + x * x) * if(异族, 族控, 1) * if(新征 < RECENT, 1 - RECENT_CUT * (1 - 新征 / RECENT), 1) * if(大城, BIG_CITY, 1)',
       'if(not has(国), 0, if(是国都, 1, c))',
     ].join('\n'),
   };

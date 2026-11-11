@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { TableEngine, type Backend } from '../src/gen/civ/engine/tables';
 import { stateCards } from '../src/gen/civ/stateTables';
 import { NEVER } from '../src/gen/civ/devTables';
-import { FISCAL_CONSTS as F, controlConsts } from '../src/gen/civ/control';
+import { FISCAL_CONSTS as F, controlConsts, foreignControlMul } from '../src/gen/civ/control';
 import { unrestConsts } from '../src/gen/civ/unrest';
 import { popConsts } from '../src/gen/civ/population';
 import { councilConsts } from '../src/gen/civ/councilRules';
@@ -121,6 +121,7 @@ function inputs(k: number) {
     border: u(100 + p, 24) > 0.8 ? 1 : 0,
     officeLift: u(100 + p, 26) < 0.4 ? 2 * u(100 + p, 27) - 1 : 0,
     officeCost: u(100 + p, 26) < 0.4 ? 0.04 * (2 * u(100 + p, 27) - 1) : 0,
+    era: 6 * u(100 + p, 28),
   }));
   return { reg, pol };
 }
@@ -227,7 +228,7 @@ function reference(x: ReturnType<typeof inputs>, k: number, led: Ledger) {
     if (g.seat) return 1;
     const xx = g.dist >= NEVER ? 4 : g.dist / (C.REACH * reach(g.p));
     let c = 1 / (1 + xx * xx);
-    if (g.foreign) c *= C.FOREIGN;
+    if (g.foreign) c *= foreignControlMul(x.pol[g.p].era, C);
     if (g.recent < C.RECENT) c *= 1 - C.RECENT_CUT * (1 - g.recent / C.RECENT);
     if (g.big) c *= C.BIG_CITY;
     return c;
@@ -324,6 +325,7 @@ describe('政局的数表', () => {
         set('新征', (r) => x.reg[r].recent);
         set('大城', (r) => x.reg[r].big);
         set('国都行政', (p) => x.pol[p].admin);
+        set('国都时代', (p) => x.pol[p].era);
         set('危机', (p) => x.pol[p].crisis);
         set('当朝', (p) => x.pol[p].age);
         set('饥荒', (p) => x.pol[p].famine);

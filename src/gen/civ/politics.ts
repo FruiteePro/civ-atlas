@@ -8,7 +8,9 @@
  *   一次最多出一件事,依次看:
  *
  *   ① 分裂 / 独立:国土 ≥ SPLIT_MIN_SIZE 州的大国,各州有"离心力"(借 Worlds 历史模拟器的思路:离国家核心越远,管理成本越高):
- *        离心力 = 离国都的路程 ÷ SPLIT_REACH + 异族 FOREIGN_D + 刚被征服不久 RECENT_D(随年数淡去)
+ *        离心力 = 离国都的路程 ÷ SPLIT_REACH + 异族(FOREIGN_D,中古以后收到 FOREIGN_D_LATE) + 刚被征服不久 RECENT_D(随年数淡去)
+ *      早年对国内少数族日常管得松;中古以后日常收紧,但危机(动荡过 CRISIS_MIN_U0)里少数族自立 / 复国另加一截,
+ *      按这族占地(CRISIS_MIN_SHARE 为满)和是否异教(CRISIS_FAITH_D)算,中古以后照样起得来。
  *      国家整体的"动荡"= 刚丢了国都 / 迁了都、刚改朝换代(dynasty.ts)、正在打仗、这些年接连丢州、国土太大(管理不过来),加在每一州上。
  *      离心力最大的那一州起兵的机会 = 赔率 SPLIT_ODDS × e^(SPLIT_K × (离心力 + 动荡 − SPLIT_D0)),换成概率。
  *      起兵的州连同周围离心力差不多大的州一起自立(从起事的州往外长,同族的、离得近的先并进来,国土成团;
@@ -60,6 +62,8 @@ import { BOOKED_AT_START, bookChain, quantize, type CivSim } from './engine/sim'
 import { addPolity, canCross, coreOf, endPolity, foundingYear, moveCapital, polityModelOf, sailsOcean, type PolityModel } from './polities';
 import { joinCollapseFamily, warModelOf, type WarModel } from './wars';
 import { capacityAt, capitalAt, populationAt } from './growth';
+import { devModelOf, eraLevel } from './development';
+import { faithSimOf } from './religion';
 import type { ControlModel } from './control';
 import type { CivModule } from './modules';
 import { Ev } from './events';
@@ -82,6 +86,24 @@ export const POLITICS_KNOBS = defineKnobs('politics', {
   /** 离心力:离国都的路程(标准路程)÷ SPLIT_REACH;异族;刚被征服(RECENT 年内,随年数淡去) */
   SPLIT_REACH: 12,
   FOREIGN_D: 0.7,
+  /**
+   * 少数族日常离心力:FOREIGN_D 是早年(国都时代 < FOREIGN_D_ERA0)的加成,到 FOREIGN_D_ERA1 收到 FOREIGN_D_LATE。
+   * 危机里另加 minorityCrisisBonus,不靠把日常加成一直留得很大
+   */
+  FOREIGN_D_LATE: 0.35,
+  FOREIGN_D_ERA0: 2,
+  FOREIGN_D_ERA1: 5,
+  /**
+   * 危机里少数族自立 / 复国 / 割据:动荡过 CRISIS_MIN_U0 起算,到 CRISIS_MIN_U1 加满;
+   * 这族占地到 CRISIS_MIN_SHARE 为满额;CRISIS_MIN_D 加在离心力 / 割据赔率上,异教再加 CRISIS_FAITH_D;
+   * 复国的赔率再乘 1 + 权重 × CRISIS_RESTORE
+   */
+  CRISIS_MIN_U0: 0.8,
+  CRISIS_MIN_U1: 2,
+  CRISIS_MIN_SHARE: 0.2,
+  CRISIS_MIN_D: 0.7,
+  CRISIS_FAITH_D: 0.35,
+  CRISIS_RESTORE: 1.2,
   RECENT: 150,
   RECENT_D: 0.6,
   /** 动荡:CRISIS_YEARS 年内迁过都(多半是丢了国都)、正在打仗、接连丢州(最多加满 CRISIS_LOSS);国土大(每大 e 倍加 SIZE_D) */
@@ -183,6 +205,35 @@ export const POLITICS_KNOBS = defineKnobs('politics', {
 /** 这张表的值(一套数里取出来的) */
 export type PoliticsKnobs = typeof POLITICS_KNOBS.values;
 
+/** 国都所在州的时代 → 少数族日常离心力(早年 FOREIGN_D,中古以后收到 FOREIGN_D_LATE) */
+export function foreignSplitDrift(era: number, k: PoliticsKnobs): number {
+  const span = k.FOREIGN_D_ERA1 - k.FOREIGN_D_ERA0;
+  const t = span > 0 ? Math.min(1, Math.max(0, (era - k.FOREIGN_D_ERA0) / span)) : 0;
+  return k.FOREIGN_D + (k.FOREIGN_D_LATE - k.FOREIGN_D) * t;
+}
+
+/** 危机里少数族加成的权重(0–1):动荡过门槛、这族占地越大越满 */
+export function minorityCrisisWeight(unrest: number, share: number, k: PoliticsKnobs): number {
+  const span = k.CRISIS_MIN_U1 - k.CRISIS_MIN_U0;
+  const crisis = span > 0 ? Math.min(1, Math.max(0, (unrest - k.CRISIS_MIN_U0) / span)) : 0;
+  if (!(crisis > 0) || !(share > 0)) return 0;
+  return crisis * Math.min(1, share / Math.max(1e-9, k.CRISIS_MIN_SHARE));
+}
+
+/** 危机里少数族加在离心力 / 割据赔率上的一截(异教再加 CRISIS_FAITH_D) */
+export function minorityCrisisBonus(unrest: number, share: number, heteroFaith: boolean, k: PoliticsKnobs): number {
+  const w = minorityCrisisWeight(unrest, share, k);
+  return w > 0 ? w * (k.CRISIS_MIN_D + (heteroFaith ? k.CRISIS_FAITH_D : 0)) : 0;
+}
+
+/** 国家 p 治下,民族 cu 占国土几成 */
+export function cultureLandShare(lands: readonly (readonly number[])[], culture: ArrayLike<number>, p: number, cu: number, size: number): number {
+  if (!(size > 0)) return 0;
+  let n = 0;
+  for (const r of lands[p]) if (culture[r] === cu) n++;
+  return n / size;
+}
+
 // 随机数用途编号
 const U_CHECK_T = 1;
 const U_SPLIT = 2;
@@ -280,7 +331,7 @@ export function installPolitics(sim: CivSim, pm: PolityModel, world: World): Pol
 }
 
 function hook(sim: CivSim, pol: PoliticsModel): void {
-  const { CRISIS_YEARS, SETTLE, SIZE_D, SPLIT_MIN_SIZE, CRISIS_CAPITAL, CRISIS_WAR, CRISIS_LOSS, SPLIT_AGE, SPLIT_REST, DYNASTY_YEARS, CRISIS_DYNASTY, SPLIT_REACH, LORD_D, FOREIGN_D, RECENT, RECENT_D, RISE_JITTER, SPLIT_ODDS, SPLIT_K, SPLIT_D0, SPLIT_MAX_GROUP, SPLIT_MIN_GROUP, SPLIT_FRAC, GROUP_MIN_D, GROUP_DROP, GROUP_KIN, GROUP_COMPACT, MERGE_SMALL, MERGE_AGE, MERGE_RATIO, MERGE_ODDS, CAPMOVE_MIN, CAPMOVE_AGE, CAPMOVE_REST, ECC_PRE, CENTER_L, CAPMOVE_POP, CAPMOVE_TOP, ECC_RATIO, FRONT_RATIO, CAPMOVE_P, RESTORE_MIN_OWNER, W_WAR, RECENT_SPLIT, W_SPLIT, W_CAP, W_LOSS, RESTORE_FOREIGN, RESTORE_ODDS, RESTORE_MAX_GROUP, RESTORE_MIN_GROUP, RESTORE_FRAC, RESTORE_TRIES, EDGE_MENTOR_AGE, EDGE_MENTOR_SIZE, EDGE_CAP, EDGE_AGE, EDGE_POP, EDGE_P, EDGE_SPACING } = pol.k;
+  const { CRISIS_YEARS, SETTLE, SIZE_D, SPLIT_MIN_SIZE, CRISIS_CAPITAL, CRISIS_WAR, CRISIS_LOSS, SPLIT_AGE, SPLIT_REST, DYNASTY_YEARS, CRISIS_DYNASTY, SPLIT_REACH, LORD_D, RECENT, RECENT_D, RISE_JITTER, SPLIT_ODDS, SPLIT_K, SPLIT_D0, SPLIT_MAX_GROUP, SPLIT_MIN_GROUP, SPLIT_FRAC, GROUP_MIN_D, GROUP_DROP, GROUP_KIN, GROUP_COMPACT, MERGE_SMALL, MERGE_AGE, MERGE_RATIO, MERGE_ODDS, CAPMOVE_MIN, CAPMOVE_AGE, CAPMOVE_REST, ECC_PRE, CENTER_L, CAPMOVE_POP, CAPMOVE_TOP, ECC_RATIO, FRONT_RATIO, CAPMOVE_P, RESTORE_MIN_OWNER, W_WAR, RECENT_SPLIT, W_SPLIT, W_CAP, W_LOSS, RESTORE_FOREIGN, RESTORE_ODDS, RESTORE_MAX_GROUP, RESTORE_MIN_GROUP, RESTORE_FRAC, RESTORE_TRIES, EDGE_MENTOR_AGE, EDGE_MENTOR_SIZE, EDGE_CAP, EDGE_AGE, EDGE_POP, EDGE_P, EDGE_SPACING } = pol.k;
   const api = civApi(sim);
   models.set(sim, pol);
   const { pm, wm } = pol;
@@ -475,6 +526,25 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
     // 各州的离心力;挑起事的州
     const cm = pol.control;
     const lords = cm ? cm.mark(pid, t) : 0;
+    const dm = devModelOf(sim);
+    const era = dm ? eraLevel(dm.cur, capR) || 0 : 0;
+    const foreignD = foreignSplitDrift(era, pol.k);
+    const fs = faithSimOf(sim);
+    const shareOf = new Map<number, number>();
+    const share = (cu: number): number => {
+      let s = shareOf.get(cu);
+      if (s === undefined) {
+        s = cultureLandShare(pm.lands, culture, pid, cu, N);
+        shareOf.set(cu, s);
+      }
+      return s;
+    };
+    const faithDiff = (r: number): boolean => {
+      if (!fs) return false;
+      const a = fs.faith[r];
+      const b = fs.stateFaith(pid);
+      return a >= 0 && b >= 0 && a !== b;
+    };
     let r0 = -1;
     let s0 = -Infinity;
     for (const r of mine) {
@@ -482,7 +552,7 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
       // 离国都远:有"中央管到什么程度"(control.ts)时路程按行政能力折算(行政越强,远处越不算远),割据的州再加一截
       let d = cm ? cm.remote(pid, r, t) : Math.min(4, dist[r] / SPLIT_REACH); // 走不到国都(Infinity)的州按 4 算
       if (lords && cm!.inLord(r)) d += LORD_D;
-      if (culture[r] !== P.culture) d += FOREIGN_D;
+      if (culture[r] !== P.culture) d += foreignD + minorityCrisisBonus(g, share(culture[r]), faithDiff(r), pol.k);
       const age = t - wm.since[r];
       if (wm.prev[r] >= 0 && wm.prev[r] !== pid && age < RECENT) d += RECENT_D * (1 - age / RECENT);
       dis[r] = d;
@@ -733,7 +803,12 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
       weak += W_LOSS * Math.min(1, lostRecently(o, t) / 4);
       const foreign = O.culture !== F.culture ? RESTORE_FOREIGN : 1;
       const far = fexp(Math.min(3, pm.capDist[o][r] / SPLIT_REACH) - 1);
-      const odds = RESTORE_ODDS * weak * foreign * far;
+      const u = api.politics.unrest ? api.politics.unrest(O, t) : strain(O, t);
+      const rem = cultureLandShare(pm.lands, culture, o, F.culture, pm.size[o]);
+      const fs = faithSimOf(sim);
+      const hetero = !!fs && fs.faith[r] >= 0 && fs.stateFaith(o) >= 0 && fs.faith[r] !== fs.stateFaith(o);
+      const crisis = 1 + minorityCrisisWeight(u, rem, pol.k) * (pol.k.CRISIS_RESTORE + (hetero ? pol.k.CRISIS_FAITH_D : 0));
+      const odds = RESTORE_ODDS * weak * foreign * far * crisis;
       if (odds > bestOdds) {
         bestOdds = odds;
         c = r;

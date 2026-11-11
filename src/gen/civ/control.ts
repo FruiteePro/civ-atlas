@@ -10,7 +10,8 @@
  *     这一年里才换了国家的州还没管上(c = 0)。表的状态随发展度一起存(Civ.development.state.tables),接着推时接上。
  *
  *   **管得到几成**(raw):国都所在州 = 1;别的州
- *       c = 1 ÷ (1 + (离国都的路程 ÷ 管得到的远近)²) × 异族 FOREIGN × 刚被征服(RECENT 年内,随年数淡去)× 当地大城 BIG_CITY
+ *       c = 1 ÷ (1 + (离国都的路程 ÷ 管得到的远近)²) × 异族(FOREIGN,国都所在州的时代到 FOREIGN_ERA1 以后收到 FOREIGN_LATE) × 刚被征服(RECENT 年内,随年数淡去)× 当地大城 BIG_CITY
+ *     早年对国内少数族管得松(多落在自治);中古以后日常收紧,危机里自立 / 复国 / 割据另加一截(politics.ts,按这族占地和是否异教)。
  *     管得到的远近 = REACH × (1 + ADMIN_GAIN × 国都所在州的行政能力)(发展度,development.ts;行政能力 0–9;有了铁路的再乘 RAIL_REACH):
  *     行政越强,远处的州也管得住。分四档(controlTier):直辖、代管、自治,割据的州另算(见下)。
  *     行政能力也折进原来"离国都多远"的那几项(remote:路程 ÷ (FAR_REACH × 行政折算),行政越强远处越不算远):
@@ -53,7 +54,7 @@ import { type CivSim } from './engine/sim';
 import { polityModelOf, powerScaleOf, unrestShiftOf, type PolityModel } from './polities';
 import { POLICY_KNOBS } from './policy';
 import { WARS_KNOBS, collapseVigorFactor, warModelOf, type War, type WarModel } from './wars';
-import { politicsModelOf, type PoliticsModel } from './politics';
+import { minorityCrisisBonus, minorityCrisisWeight, politicsModelOf, type PoliticsModel } from './politics';
 import { Cap, CAP_COUNT, cityPopulationsAt, devModelOf, eraLevel, type DevModel } from './development';
 import { ERA_COL, Practice, RAIL_RECLAIM, WIRE_LORD, hasPractice, practiceMask } from './practices';
 import { capacityAt, capitalAt, populationAt } from './growth';
@@ -62,6 +63,7 @@ import { NEVER } from './devTables';
 import { stateCards, type ControlRuleConsts, type FiscalRuleConsts, type StatePlug } from './stateTables';
 import type { TableCard } from './engine/tables';
 import { UNREST_KNOBS, unrestConsts, unrestInputs, unrestModelOf } from './unrest';
+import { faithSimOf } from './religion';
 import { BOOK_WIDTH } from './fiscalBook';
 import { popConsts, POP_TABLES, POP_TILE_TABLES, cellsToTiles, popLayer, popTiles, spreadRural, tilesToCells } from './population';
 import { COUNCIL_RULES_KNOBS, councilConsts, cutDone, reorgCap } from './councilRules';
@@ -80,6 +82,13 @@ export const CONTROL_KNOBS = defineKnobs('control', {
   ADMIN_GAIN: 0.2,
   /** 异族的州、刚被征服的州(RECENT 年内,随年数淡去)、当地有大城(城的人口上限有国都的 BIG_RATIO 以上)打的折 */
   FOREIGN: 0.6,
+  /**
+   * 少数族日常管治:FOREIGN 是早年(国都时代 < FOREIGN_ERA0,铁器以前)的折扣,到 FOREIGN_ERA1(工业)收到 FOREIGN_LATE。
+   * 中古以后日常收紧,仍不到和统治民族一样;危机里能不能自立 / 割据见 politics.ts,不靠再把这里放宽
+   */
+  FOREIGN_LATE: 0.82,
+  FOREIGN_ERA0: 2,
+  FOREIGN_ERA1: 5,
   RECENT: 150,
   RECENT_CUT: 0.35,
   BIG_RATIO: 0.5,
@@ -136,6 +145,8 @@ const MIN_SIZE = 12;
 const MIN_AGE = 100;
 const MAX_LORDS = 3;
 const WARLORD_C = 0.22;
+/** 危机里少数族可割据的 c 上限再放宽这么多(满额时;与 minorityCrisisWeight 相乘),免得中古以后日常收紧就再也起不了割据 */
+const WARLORD_CRISIS_C = 0.18;
 const MIN_POP = 4;
 /** 起事、并进地盘的州要这么多年没换过国家(和分裂一样) */
 const SETTLE = 30;
@@ -295,9 +306,16 @@ export function resumeControl(sim: CivSim, civ: Civ): void {
 }
 
 /** 政局的数表(管得到几成、离国都多远、动荡;见 stateTables.ts)里归这里管的常数(按这个世界的那套数) */
+/** 国都所在州的时代 → 国内少数族管得到几成打的折(早年 FOREIGN,中古以后收到 FOREIGN_LATE) */
+export function foreignControlMul(era: number, c: Pick<ControlRuleConsts, 'FOREIGN' | 'FOREIGN_LATE' | 'FOREIGN_ERA0' | 'FOREIGN_ERA1'>): number {
+  const span = c.FOREIGN_ERA1 - c.FOREIGN_ERA0;
+  const t = span > 0 ? Math.min(1, Math.max(0, (era - c.FOREIGN_ERA0) / span)) : 0;
+  return c.FOREIGN + (c.FOREIGN_LATE - c.FOREIGN) * t;
+}
+
 export function controlConsts(knobs: KnobSet): ControlRuleConsts {
-  const { REACH, ADMIN_GAIN, FOREIGN, RECENT, RECENT_CUT, BIG_CITY, FAR_REACH, ADMIN_REF, REMOTE_MAX, LORD_U, LORD_U_MAX, LEVY_0 } = knobs.get(CONTROL_KNOBS);
-  return { REACH, ADMIN_GAIN, FOREIGN, RECENT, RECENT_CUT, BIG_CITY, FAR_REACH, ADMIN_REF, REMOTE_MAX, LORD_U, LORD_U_MAX, LEVY_0 };
+  const { REACH, ADMIN_GAIN, FOREIGN, FOREIGN_LATE, FOREIGN_ERA0, FOREIGN_ERA1, RECENT, RECENT_CUT, BIG_CITY, FAR_REACH, ADMIN_REF, REMOTE_MAX, LORD_U, LORD_U_MAX, LEVY_0 } = knobs.get(CONTROL_KNOBS);
+  return { REACH, ADMIN_GAIN, FOREIGN, FOREIGN_LATE, FOREIGN_ERA0, FOREIGN_ERA1, RECENT, RECENT_CUT, BIG_CITY, FAR_REACH, ADMIN_REF, REMOTE_MAX, LORD_U, LORD_U_MAX, LEVY_0 };
 }
 /** 钱粮的常数(见 stateTables.ts) */
 export const FISCAL_CONSTS: FiscalRuleConsts = {
@@ -396,7 +414,7 @@ function hook(sim: CivSim, seed: number, lords: Warlord[], saved: TablesState | 
   const pop = popLayer(sim, pm, dev, eng, saved === null ? null : saved && saved.last > -Infinity ? saved.last : Math.floor(sim.now));
   let capR = new Int32Array(0);
   let capCap = new Float64Array(0);
-  /** 填输入表:此刻各州的归属、离国都的路程、异族、刚被征服、大城;各国国都所在州的行政能力、危机、当朝几年、近年的饥荒疫病、民变、割据 */
+  /** 填输入表:此刻各州的归属、离国都的路程、异族、刚被征服、大城;各国国都所在州的行政能力、时代、危机、当朝几年、近年的饥荒疫病、民变、割据 */
   const fill = (t: number): void => {
     const NP = pm.polities.length;
     eng.setPolities(NP);
@@ -404,7 +422,7 @@ function hook(sim: CivSim, seed: number, lords: Warlord[], saved: TablesState | 
       capR = new Int32Array(NP);
       capCap = new Float64Array(NP);
     }
-    const [admin, crisis, age, famine, plague, quell, lordsN, size, mil, scale] = ['国都行政', '危机', '当朝', '饥荒', '疫病', '平叛', '割据', '州数', '军力', '国力倍数'].map((id) => eng.input(id));
+    const [admin, era, crisis, age, famine, plague, quell, lordsN, size, mil, scale] = ['国都行政', '国都时代', '危机', '当朝', '饥荒', '疫病', '平叛', '割据', '州数', '军力', '国力倍数'].map((id) => eng.input(id));
     const lordLand = eng.input('割据州').fill(0);
     // 国都所在州的五种能力和时代(做法表的前提,practices.ts)
     const capab = eng.input('国都能力');
@@ -413,7 +431,7 @@ function hook(sim: CivSim, seed: number, lords: Warlord[], saved: TablesState | 
       capR[p] = -1;
       const P = pm.polities[p];
       if (!(pm.size[p] > 0)) {
-        admin[p] = crisis[p] = age[p] = famine[p] = plague[p] = quell[p] = lordsN[p] = size[p] = mil[p] = scale[p] = 0;
+        admin[p] = era[p] = crisis[p] = age[p] = famine[p] = plague[p] = quell[p] = lordsN[p] = size[p] = mil[p] = scale[p] = 0;
         capab.fill(0, p * CW, p * CW + CW);
         continue;
       }
@@ -422,6 +440,7 @@ function hook(sim: CivSim, seed: number, lords: Warlord[], saved: TablesState | 
       capR[p] = r;
       capCap[p] = capacityAt(pm.settlements[sid], t);
       admin[p] = dev.cur[r * CAP_COUNT + Cap.Administration] || 0;
+      era[p] = eraLevel(dev.cur, r) || 0;
       for (let c = 0; c < CAP_COUNT; c++) capab[p * CW + c] = dev.cur[r * CAP_COUNT + c] || 0;
       capab[p * CW + ERA_COL] = eraLevel(dev.cur, r) || 0;
       crisis[p] = api.politics.strain!(P, t);
@@ -633,31 +652,54 @@ function hook(sim: CivSim, seed: number, lords: Warlord[], saved: TablesState | 
     if (pm.size[p] < MIN_SIZE || t - P.founded < MIN_AGE || ls.length >= MAX_LORDS) return false;
     if (vigorYoung(p, t)) return false; // 崩解继承国立国初期不割据
     if (wm.iv?.unites(p, t)) return false; // 阶段 4 干预"禁止分裂":也不割据
-    // 挑管得最松、有城的那州
+    // 挑管得最松、有城的那州;危机里少数族的 c 门槛放宽,免得中古以后日常收紧就再起不了割据
     stamp++;
     for (const w of ls) domain(w, t);
+    const fs = faithSimOf(sim);
+    const N = pm.size[p];
+    const shareOf = new Map<number, number>();
+    const share = (cu: number): number => {
+      let s = shareOf.get(cu);
+      if (s === undefined) {
+        let n = 0;
+        for (const r of pm.lands[p]) if (culture[r] === cu) n++;
+        s = N > 0 ? n / N : 0;
+        shareOf.set(cu, s);
+      }
+      return s;
+    };
+    const faithDiff = (r: number): boolean => {
+      if (!fs) return false;
+      const a = fs.faith[r];
+      const b = fs.stateFaith(p);
+      return a >= 0 && b >= 0 && a !== b;
+    };
     let r0 = -1;
     let c0 = Infinity;
     let s0 = Infinity;
+    let w0 = 0;
     for (const r of pm.lands[p]) {
       if (r === capR || mk[r] === stamp) continue;
       const s = pm.cityOf[r];
       if (s < 0 || pm.settlements[s].ended !== undefined) continue;
       if (t - wm.since[r] < SETTLE || wm.iv?.locked(r, t)) continue;
       const c = raw(p, r, t);
-      if (c >= WARLORD_C) continue;
+      const minority = culture[r] !== P.culture;
+      const w = minority ? minorityCrisisWeight(u, share(culture[r]), pol.k) : 0;
+      if (c >= WARLORD_C + (minority ? w * WARLORD_CRISIS_C : 0)) continue;
       if (populationAt(pm.settlements[s], t) < MIN_POP) continue;
       const score = c + JITTER * keyed4(cm.base, pm.ptag[p], reg.seat[r], k, U_PICK);
       if (score < s0) {
         s0 = score;
         c0 = c;
         r0 = r;
+        w0 = minority ? minorityCrisisBonus(u, share(culture[r]), faithDiff(r), pol.k) : 0;
       }
     }
     if (r0 < 0) return false;
     // 有了电报的,地方有变朝廷当日即知:赔率再乘 WIRE_LORD
     const wire = hasPractice(practices(p, t), Practice.Wire) ? WIRE_LORD : 1;
-    const odds = ODDS * fexp(K * (u + (WARLORD_C - c0) * GAP_W - U0)) * (cm.fiefOf?.(p, t) ? FIEF_LORD : 1) * (cm.lordOdds?.(p, t) ?? 1) * wire;
+    const odds = ODDS * fexp(K * (u + w0 + (WARLORD_C - c0) * GAP_W - U0)) * (cm.fiefOf?.(p, t) ? FIEF_LORD : 1) * (cm.lordOdds?.(p, t) ?? 1) * wire;
     if (keyed(cm.base, pm.ptag[p], k, U_RISE) >= odds / (1 + odds)) return false;
     rise(p, r0, t);
     return true;
