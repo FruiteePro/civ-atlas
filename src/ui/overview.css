@@ -2233,137 +2233,146 @@ button.ov-kv-row:hover {
 .ov-diplomacy {
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  padding: 24px;
+  gap: 22px;
+  padding: 16px 24px 24px;
 }
-
-.ov-diplo-legend {
+.ov-diplo-sum {
   margin: 0;
-  font-size: 12.5px;
-  line-height: 1.55;
+  font-size: 13px;
+  line-height: 1.5;
   color: var(--ink-2);
 }
-
-.ov-empty {
-  padding: 48px 24px;
-  text-align: center;
-  color: var(--ink-2);
+.ov-diplomacy .ov-empty {
+  padding: 48px 8px;
 }
-
-.ov-empty p {
+.ov-diplomacy .ov-empty p {
   margin: 0;
   font-size: 14px;
 }
-
-.ov-empty .ov-hint {
+.ov-diplo-hint {
   margin-top: 8px;
   font-size: 13px;
   color: var(--ink-3);
 }
-
 .ov-diplo-section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
-
 .ov-diplo-title {
   margin: 0;
-  font: 600 16px/1.4 var(--font-sans);
+  font: 600 15px/1.35 var(--font-serif);
   color: var(--ink);
 }
-
 .ov-diplo-count {
+  margin-left: 6px;
   font-weight: 400;
+  font-size: 13px;
   color: var(--ink-2);
-  font-size: 14px;
+  font-variant-numeric: tabular-nums;
 }
-
 .ov-diplo-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-
 .ov-diplo-row {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 12px;
-  background: var(--panel);
+  gap: 14px 18px;
+  padding: 12px 14px;
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--r-small);
+  border-radius: var(--r-btn);
 }
-
-.ov-diplo-row[data-kind="war"] {
+.ov-diplo-row[data-kind='war'] {
   border-left: 3px solid var(--ev-war);
 }
-
-.ov-diplo-row[data-kind="alliance"] {
+.ov-diplo-row[data-kind='alliance'] {
   border-left: 3px solid var(--accent);
 }
-
-.ov-diplo-row[data-kind="vassalage"] {
-  border-left: 3px solid var(--ink-3);
+.ov-diplo-row[data-kind='vassalage'] {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  border-left: 3px solid var(--ev-empire);
 }
-
-.ov-diplo-parties {
+.ov-diplo-parties,
+.ov-diplo-liege,
+.ov-diplo-vassal {
   display: flex;
   align-items: center;
   gap: 8px;
   flex: 1;
   min-width: 0;
+  flex-wrap: wrap;
 }
-
-.ov-diplo-sep {
-  font-size: 14px;
+.ov-diplo-liege {
+  flex: none;
+}
+.ov-diplo-rel {
+  flex: none;
+  font-size: 12px;
   color: var(--ink-2);
-  white-space: nowrap;
 }
-
 .ov-diplo-meta {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   font-size: 13px;
   color: var(--ink-2);
   white-space: nowrap;
+  flex: none;
 }
-
 .ov-diplo-foe {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.ov-diplo-since {
-  font-variant-numeric: tabular-nums;
-}
-
-.ov-pol {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 8px;
-  background: none;
-  border: none;
-  border-radius: var(--r-tag);
-  color: var(--ink);
-  font: inherit;
-  cursor: pointer;
-  transition: background 0.15s;
   min-width: 0;
 }
-
-.ov-pol:hover {
-  background: var(--hover);
+.ov-diplo-since {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
 }
-
-.ov-pol.dead {
+.ov-diplo-vassals {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ov-diplo-vassal .ov-diplo-since {
+  margin-left: auto;
+}
+.ov-diplomacy .ov-pol {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 9px 3px 5px;
+  background: var(--panel-solid);
+  border: 1px solid var(--line);
+  border-radius: var(--r-tag);
+  color: var(--ink);
+  font: 600 14px/1.3 var(--font-serif);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+  min-width: 0;
+}
+.ov-diplomacy .ov-pol:hover {
+  background: var(--hover-bg);
+  border-color: var(--line-strong);
+}
+.ov-diplomacy .ov-pol:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.ov-diplomacy .ov-pol.dead {
   opacity: 0.6;
 }
-
-.ov-pol-name {
+.ov-diplomacy .ov-pol-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2372,17 +2381,25 @@ button.ov-kv-row:hover {
 
 @media (max-width: 760px) {
   .ov-diplomacy {
-    padding: 16px;
+    padding: 14px 16px 20px;
     gap: 18px;
   }
   .ov-diplo-row {
     flex-wrap: wrap;
     gap: 8px 12px;
-    padding: 10px;
+    padding: 10px 12px;
+  }
+  .ov-diplo-row[data-kind='alliance'],
+  .ov-diplo-row[data-kind='war'] {
+    align-items: flex-start;
   }
   .ov-diplo-meta {
     width: 100%;
     justify-content: flex-start;
     flex-wrap: wrap;
+    white-space: normal;
+  }
+  .ov-diplo-vassal .ov-diplo-since {
+    margin-left: 0;
   }
 }

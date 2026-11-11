@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { generateWorld, DEFAULT_PARAMS } from '../src/gen/world';
 import { generateCiv } from '../src/gen/civ';
 import type { Annal, Civ, Polity } from '../src/gen/civ/types';
-import { extractDiplomacy } from '../src/ui/WorldOverviewDiplomacy';
+import { extractDiplomacy, groupVassalages } from '../src/ui/WorldOverviewDiplomacy';
 
 function polity(id: number, founded = 0, ended?: number): Polity {
   return { id, founded, ended, capital: 0, names: [{ year: founded, title: `P${id}` }] } as any;
@@ -134,5 +134,25 @@ describe('外交页面数据提取（生成世界冒烟）', () => {
     const alliancesBefore = civ.annals.filter((e) => e.kind === 'alliance' && e.year <= midYear);
     const warsBefore = civ.annals.filter((e) => e.kind === 'war' && e.year <= midYear);
     expect(alliancesBefore.length + warsBefore.length).toBeGreaterThan(0);
+  });
+});
+
+describe('宗藩按宗主分组', () => {
+  it('同一宗主的藩属收进一张,先出现的宗主在前,藩属保持原来的顺序', () => {
+    const rows = [
+      { lord: 0, vassal: 1, since: 100 },
+      { lord: 2, vassal: 3, since: 110 },
+      { lord: 0, vassal: 4, since: 120 },
+    ];
+    expect(groupVassalages(rows)).toEqual([
+      {
+        lord: 0,
+        vassals: [
+          { lord: 0, vassal: 1, since: 100 },
+          { lord: 0, vassal: 4, since: 120 },
+        ],
+      },
+      { lord: 2, vassals: [{ lord: 2, vassal: 3, since: 110 }] },
+    ]);
   });
 });
