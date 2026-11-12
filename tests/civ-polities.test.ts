@@ -86,7 +86,7 @@ describe('城市成长 + 国家', () => {
     expect(a.routes.length).toBe(b.routes.length);
   });
 
-  it('默认参数:先后立国 8–280 个(含分裂 / 复国出来的)、结束时在世 8–30 个,城镇每个有人州一座;国都之间隔得开;航海时代以前只有海洋国家有跨海领土', () => {
+  it('默认参数:先后立国 8–320 个(含分裂 / 复国出来的)、结束时在世 8–45 个,城镇每个有人州一座;国都之间隔得开;航海时代以前只有海洋国家有跨海领土', () => {
     for (const seed of [7, 2024, 3, 99]) {
       const civ = civOf({ ...DEFAULT_PARAMS, seed });
       expect(civ.polities.length, `seed ${seed}`).toBeGreaterThanOrEqual(8);
@@ -95,11 +95,15 @@ describe('城市成长 + 国家', () => {
       // GENERATOR_VERSION 46(大迁徙:迁来立的国、打进国都引起的大崩解多了几国)以后 seed 3 151 个:上限放到 180;
       // GENERATOR_VERSION 56(滚雪球:亡国多了,复国也多了)以后种子 1–20 先后立国 100–181 个(seed 3 164 个、7 100 个、99 100 个、2024 106 个):上限放到 190
       // GENERATOR_VERSION 58(大崩解后的平衡,继承国和收复更多)以后 seed 3 237 个:上限放到 280
-      expect(civ.polities.length, `seed ${seed}`).toBeLessThanOrEqual(280);
+      // GENERATOR_VERSION 65–72(民族自立、碎裂、神权、部落几轮:分裂多了,中古以后的自立 11.5 → 15.2、晚期 22.7 → 29.4 次/世界)以后
+      // 46 个种子平均 199 → 210 个、最多 280 → 297(seed 3;第 64 版 255,22 号 239 → 285):上限放到 320
+      expect(civ.polities.length, `seed ${seed}`).toBeLessThanOrEqual(320);
       // 阶段 3 有了战争、分合:有的国家灭亡了、被并了,也有分出来的
       const alive = civ.polities.filter((p) => polityAlive(p, civ.endYear)).length;
       expect(alive, `seed ${seed}`).toBeGreaterThanOrEqual(8);
-      expect(alive, `seed ${seed}`).toBeLessThanOrEqual(30);
+      // 结束时在世的:46 个种子第 64 版平均 18.6、最多 41(seed 23),第 72 版平均 21.0、最多 42(seed 3,第 70 版时 25)。
+      // 上限按第 64 版就有的尾巴放到 45
+      expect(alive, `seed ${seed}`).toBeLessThanOrEqual(45);
       const reg = civ.regions;
       // 城镇:每个有人住的州一座,在治所上;名字不重复
       // (阶段 3 城市兴衰:被毁的城在故址上重建的,同一州先后有几座 —— 前一座被毁了、后一座才建起,同族重建的沿用旧名)
