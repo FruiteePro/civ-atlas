@@ -191,7 +191,8 @@ describe('人物页 · 几处写法', () => {
       for (const h of hits) {
         if (h.kind !== 'person') continue;
         const x = P[h.id];
-        if (x.role === 'ruler' && x.title === '末帝' && civ.polities[x.polity].eastern) return { civ, x, hits, famous };
+        // 海洋城邦共和一系到了帝国一档称大执政、不称皇帝:只找帝制的末帝
+        if (x.role === 'ruler' && x.title === '末帝' && civ.polities[x.polity].eastern && civ.polities[x.polity].lineage !== 'republic') return { civ, x, hits, famous };
       }
     }
     return null;

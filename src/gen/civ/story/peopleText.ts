@@ -91,7 +91,7 @@ function refOf(civ: Civ, x: Person, year: Year, realm: boolean): string {
     if (tier <= 0) return `${tribe}首领${x.name}`;
     const root = polityRootAt(p, at);
     if (title) return !realm ? title : tier >= 3 ? `${polityShortTitle(p, 3, at)}${title}` : `${coreRoot(root)}${title}`;
-    if (tier >= 3) return `${realm ? polityShortTitle(p, 3, at) : ''}${eastRank(x, 3)}${x.name}`;
+    if (tier >= 3) return `${realm ? polityShortTitle(p, 3, at) : ''}${eastRank(x, 3, p.lineage)}${x.name}`;
     return `${coreRoot(root)}${eastRank(x, tier)}${x.name}`;
   }
   return `${realm ? polityRootAt(p, at) : ''}${westRank(x, p.lineage, tier)}${x.name}${title}`;
@@ -174,7 +174,7 @@ export function rulerRole(civ: Civ, x: Person): string {
   if (p.eastern) {
     if (p.lineage === 'khanate') return tier <= 0 ? `${polityTitles(p, at)[0]}首领` : `${polityName(p, at)}${khanWord(x)}`;
     if (tier <= 0) return `${polityTitles(p, at)[0]}首领`;
-    if (tier >= 3) return `${polityShortTitle(p, 3, at)}${eastRank(x, 3)}`;
+    if (tier >= 3) return `${polityShortTitle(p, 3, at)}${eastRank(x, 3, p.lineage)}`;
     return `${coreRoot(polityRootAt(p, at))}${eastRank(x, tier)}`;
   }
   return `${polityRootAt(p, at)}${westRank(x, p.lineage, tier)}`;

@@ -950,7 +950,7 @@ function rulerRank(civ: Civ, x: Person): string {
   const p = civ.polities[x.polity];
   if (!p) return '君主';
   const tier = Math.min(3, Math.max(0, polityTierAt(p, Math.max(x.from ?? 0, (x.until ?? civ.endYear) - 1 / 512))));
-  return p.eastern ? eastRank(x, tier) : westRank(x, p.lineage, tier);
+  return p.eastern ? eastRank(x, tier, p.lineage) : westRank(x, p.lineage, tier);
 }
 
 /** 幼主怎么称呼(太后那几行里):东方有称号的写称号("愍帝"),没有写名字;西幻 "塞尔维里努斯" */

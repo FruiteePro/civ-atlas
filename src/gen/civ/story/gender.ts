@@ -40,9 +40,14 @@ export function childWord(x: Sexed): '子' | '女' {
   return bySex(x, '子', '女');
 }
 
-/** 东方还在位的君号,按国号档位 0–3:首领、公、王、皇帝 / 首领、女君、女王、女帝 */
-export function eastRank(x: Sexed, tier: number): string {
-  return (isFemale(x) ? EAST_F : EAST_M)[Math.min(3, Math.max(0, tier))];
+/**
+ * 东方还在位的君号,按国号档位 0–3:首领、公、王、皇帝 / 首领、女君、女王、女帝;
+ * 海洋城邦共和一系(lineage = republic)到了帝国一档不称帝,称"大执政"(和"执政"一套说法,不分男女)
+ */
+export function eastRank(x: Sexed, tier: number, lineage?: string): string {
+  const t = Math.min(3, Math.max(0, tier));
+  if (lineage === 'republic' && t >= 3) return '大执政';
+  return (isFemale(x) ? EAST_F : EAST_M)[t];
 }
 const EAST_M = ['首领', '公', '王', '皇帝'] as const;
 const EAST_F = ['首领', '女君', '女王', '女帝'] as const;
@@ -52,7 +57,7 @@ export function khanWord(x: Sexed): '可汗' | '女可汗' {
   return bySex(x, '可汗', '女可汗');
 }
 
-/** 西幻的君号,按国号一系(realm / khanate / republic;没有 = realm)、档位 0–3 */
+/** 西幻的君号,按国号一系(realm / khanate / republic;没有 = realm)、档位 0–3;共和一系到了帝国一档称"大执政官"(不称帝,不分男女) */
 export function westRank(x: Sexed, lineage: string | undefined, tier: number): string {
   const t = isFemale(x) ? WEST_F : WEST_M;
   return (t[lineage ?? 'realm'] ?? t.realm)[Math.min(3, Math.max(0, tier))];
@@ -60,12 +65,12 @@ export function westRank(x: Sexed, lineage: string | undefined, tier: number): s
 const WEST_M: Record<string, readonly [string, string, string, string]> = {
   realm: ['酋长', '国王', '国王', '皇帝'],
   khanate: ['首领', '汗', '汗', '大汗'],
-  republic: ['执政官', '执政官', '执政官', '皇帝'],
+  republic: ['执政官', '执政官', '执政官', '大执政官'],
 };
 const WEST_F: Record<string, readonly [string, string, string, string]> = {
   realm: ['酋长', '女王', '女王', '女皇'],
   khanate: ['首领', '女汗', '女汗', '女大汗'],
-  republic: ['执政官', '执政官', '执政官', '女皇'],
+  republic: ['执政官', '执政官', '执政官', '大执政官'],
 };
 
 /**

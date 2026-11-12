@@ -9,6 +9,8 @@ import { DEFAULT_PARAMS, generateWorld } from '../src/gen/world';
 import { generateCiv, type Civ } from '../src/gen/civ';
 import type { Person, Polity } from '../src/gen/civ/types';
 import { polityTierAt } from '../src/gen/civ/growth';
+import { rulerRole } from '../src/gen/civ/story/peopleText';
+import { royalSeg } from '../src/gen/civ/regime';
 import {
   bySex,
   childWord,
@@ -52,6 +54,9 @@ describe('按性别取的字', () => {
     expect([0, 1, 2, 3].map((t) => eastRank(M, t))).toEqual(['首领', '公', '王', '皇帝']);
     expect([0, 1, 2, 3].map((t) => eastRank(F, t))).toEqual(['首领', '女君', '女王', '女帝']);
     expect([khanWord(M), khanWord(F)]).toEqual(['可汗', '女可汗']);
+    // 东方的海洋城邦共和一系到了帝国一档:大执政(不称帝、不分男女);不到帝国一档照旧
+    expect([eastRank(M, 3, 'republic'), eastRank(F, 3, 'republic')]).toEqual(['大执政', '大执政']);
+    expect(eastRank(M, 2, 'republic')).toBe('王');
   });
 
   it('西幻君号:国王 / 女王、皇帝 / 女皇、汗 / 女汗;酋长、执政官不分', () => {
@@ -60,7 +65,9 @@ describe('按性别取的字', () => {
     expect([0, 1, 2, 3].map((t) => westRank(F, undefined, t))).toEqual(['酋长', '女王', '女王', '女皇']);
     expect([0, 1, 2, 3].map((t) => westRank(M, 'khanate', t))).toEqual(['首领', '汗', '汗', '大汗']);
     expect([0, 1, 2, 3].map((t) => westRank(F, 'khanate', t))).toEqual(['首领', '女汗', '女汗', '女大汗']);
-    expect([0, 1, 2, 3].map((t) => westRank(F, 'republic', t))).toEqual(['执政官', '执政官', '执政官', '女皇']);
+    // 共和一系到了帝国一档不称帝:大执政官(男女一样)
+    expect([0, 1, 2, 3].map((t) => westRank(F, 'republic', t))).toEqual(['执政官', '执政官', '执政官', '大执政官']);
+    expect(westRank(M, 'republic', 3)).toBe('大执政官');
   });
 
   it('身后称号:王国谥号 + 女王、国谥号 + 君;帝国庙号、哀帝、西幻照旧', () => {
@@ -351,4 +358,22 @@ describe('推演出来的人物改成女的', () => {
     expect(now).not.toBe(was);
     expect(after.size).toBe(before.size);
   });
+
+  it('帝国一档的海洋城邦共和国:执政称大执政官 / 大执政,不称帝(种子 7、1 里按条件现找)', () => {
+    let n = 0;
+    for (const seed of [7, 1]) {
+      const civ = generateCiv(generateWorld({ ...DEFAULT_PARAMS, seed }));
+      for (const x of civ.people ?? []) {
+        const p = civ.polities[x.polity];
+        if (x.role !== 'ruler' || !p || p.lineage !== 'republic' || royalSeg(p, x.dynasty ?? 0) || (p.dynasties?.[x.dynasty ?? 0]?.regime ?? null)) continue;
+        const at = Math.max(x.from ?? 0, (x.until ?? civ.endYear) - 1 / 512);
+        if (polityTierAt(p, at) < 3) continue;
+        const role = rulerRole(civ, x);
+        expect(role, `seed ${seed} ${x.name}`).not.toMatch(/皇帝|女皇|女帝/);
+        expect(role, `seed ${seed} ${x.name}`).toMatch(p.eastern ? /大执政$/ : /大执政官$/);
+        n++;
+      }
+    }
+    expect(n).toBeGreaterThan(0);
+  }, 120_000);
 });
