@@ -16,10 +16,11 @@ import { keepWhy } from '../src/ui/keepInfo';
 import { IV_ROYAL_AGE, marryChoice, marryPartners, regentChoice } from '../src/ui/newIvInfo';
 
 /**
- * 7/21/22 盖废君、复辟;30 有从君主国政变的军政府;10 有神权(第 68 版以后)。几种改制的中间年都要取得到
- * (曾用 10+25;25 的政变段有时取不到中间年;更早 25+21、42、47、13)
+ * 7/21 盖复辟;10、30 有改成共和;9 有从君主国政变的军政府;都有神权(第 68 版以后)。几种改制的中间年都要取得到
+ * (第 72 版种子 1–22、30 里改制多半是立神权,军政府的一段只剩种子 9 有,换下 22;
+ * 以前用 7/21/22/30/10,曾用 10+25;25 的政变段有时取不到中间年;更早 25+21、42、47、13)
  */
-const SEEDS = [7, 10, 21, 22, 30];
+const SEEDS = [7, 9, 10, 21, 30];
 const civs = new Map<number, Civ>();
 const civOf = (seed: number) => {
   let c = civs.get(seed);

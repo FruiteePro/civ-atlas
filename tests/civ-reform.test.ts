@@ -19,7 +19,8 @@ import { flagNote } from '../src/gen/civ/story/flagText';
 
 // 崩解平衡以后复辟落在种子 22、6、23、25、38…;用 7(废君/革命)、21(政变)、22(复辟)盖住三种
 // (改进分裂以后是 7、21、1;第 57 湿地是 7、13、2024;第 56 滚雪球是 2;更早是 13)
-const SEEDS = [7, 21, 22];
+// 第 68 版有了神权以后改制多半是立神权,第 72 版种子 7 不再有废君或革命;种子 1–22、30 里有的是 4、5、9、14、17、19、30,换成 30
+const SEEDS = [30, 21, 22];
 const worlds = new Map<number, World>();
 const world = (seed: number) => {
   let w = worlds.get(seed);
