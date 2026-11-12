@@ -658,6 +658,8 @@
  *  70:信仰影响同化、邦交和开战意愿:同教相吸、异教相斥,神权在这条轴上更强。地形不变,历史重新推演
  *  71:收服部落地带看的时代、信仰改看那一刻以前存下来的发展度快照、算过的那一步(同教按国都那一州的信仰),接着推和一口气推完一样。地形不变,历史重新推演
  *  72:城名的接触语只在建城那一刻就是国都时偏统治层(后来才迁都过来的不算),推到哪一年城名都不变。地形、历史不变,一部分城名变了
+ *  73:地形大事那一刻接着推时,收服部落地带重放预约看的信仰照历史从头重放(推到一半拼的结果没有 Civ.religion,以前当不明),
+ *      有地形大事的世界和没有大事时一样。没有地形大事的世界不变
  */
 import type { Civ, Culture, Faith, MigrationDir, Person, Place, Polity, Regions, RulerLeanings, Settlement } from './civ/types';
 import { FRAGMENT_MODE_CHOICES, type FragmentModeChoice } from './civ/fragmentMode';
@@ -674,7 +676,7 @@ import { SLUMP_CHOICES, SLUMP_DEFAULT, type Calamity } from './civ/calamity';
 import { stampCalc, type RuleSet } from './civ/ruleSet';
 
 /** 生成器版本:生成算法有改动、同种子会得到不同世界时加一(存档读档时核对);加一时在 GENERATOR_CHANGES 里补一条 */
-export const GENERATOR_VERSION = 72;
+export const GENERATOR_VERSION = 73;
 
 /**
  * 一版生成器的改动有多大(从小到大):打开旧存档、旧链接时,按跨过的几版里最大的那一种说清变了什么(savefile.ts 的 versionNote)
@@ -767,6 +769,7 @@ export const GENERATOR_CHANGES: Readonly<Record<number, { change: GeneratorChang
   70: { change: 'history' },
   71: { change: 'history' },
   72: { change: 'names' },
+  73: { change: 'history' },
 };
 
 /** 干预的种类(见文件头的表) */

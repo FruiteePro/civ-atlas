@@ -642,8 +642,22 @@ function faithBefore(at: (s: Year, out?: Int16Array) => Int16Array): TribalLooku
   };
 }
 
-// 接着推:resumePolities 重放预约时照存下来的信仰(检查点 + 日志,和推演里 FaithSim.faithAt 同一个口径)
-tribalReplay.faith = (civ) => (civ.religion ? faithBefore((s, out) => faithAt(civ, s, out)) : () => -1);
+// 接着推:resumePolities 重放预约时照存下来的信仰(检查点 + 日志,和推演里 FaithSim.faithAt 同一个口径)。
+// 推到一半拼的结果(地形大事那一刻接着推,run.ts 的 halfOf)没有 Civ.religion:照历史从第 0 年重放到 civ.endYear
+// (和 resumeReligion 一样;头一回问到才算),不能当"不明"(−1),不然重放出来的预约和一口气推完的不一样
+tribalReplay.faith = (civ, eras) => {
+  if (civ.religion) return faithBefore((s, out) => faithAt(civ, s, out));
+  if (!civ.cultures.length) return () => -1;
+  let fs: FaithSim | undefined;
+  return faithBefore((s, out) => {
+    if (!fs) {
+      const src: FaithSource = { log: () => civ.log, settlements: () => civ.settlements, polities: () => civ.polities, cultures: () => civ.cultures };
+      fs = new FaithSim(civ.seed, src, civ.regions, eras);
+      for (let y = 0; y <= civ.endYear; y += STEP) fs.step(y);
+    }
+    return fs.faithAt(s, out);
+  });
+};
 
 function hook(sim: CivSim, fs: FaithSim, first: Year, pm?: PolityModel): void {
   sims.set(sim, fs);

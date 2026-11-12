@@ -4,7 +4,9 @@
  * 单独一个文件、不引别的模块:谁先载入都不会撞上还没定义的表
  */
 import type { Civ, Year } from './types';
+import type { FaithEra } from './religion';
 
 export type TribalLookup = (r: number, y: Year) => number;
 
-export const tribalReplay: { era?: (civ: Civ) => TribalLookup; faith?: (civ: Civ) => TribalLookup } = {};
+/** eras = 地形大事以前各段的州(信仰照历史重放时用,同 resumeReligion) */
+export const tribalReplay: { era?: (civ: Civ) => TribalLookup; faith?: (civ: Civ, eras: readonly FaithEra[]) => TribalLookup } = {};

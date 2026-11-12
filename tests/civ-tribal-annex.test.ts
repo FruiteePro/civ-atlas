@@ -149,7 +149,7 @@ describe('中古以后并吞部落地带', () => {
   it('接着推:重放预约照存下来的时代、信仰,和推演里一样;推到 3000 再推 300 和一口气推到 3300 的归属、日志一样', () => {
     const civ = civOf(7);
     const era = tribalReplay.era!(civ);
-    const faith = tribalReplay.faith!(civ);
+    const faith = tribalReplay.faith!(civ, civ.eras ?? []);
     const dev = civ.development!;
     // 时代:第 y 年以前最近的一份快照(整百年那一份到下一刻才算)
     const r = civ.settlements[capitalAt(civ.polities[0], 1000)].region;
@@ -158,6 +158,9 @@ describe('中古以后并吞部落地带', () => {
     expect(era(r, 1000.5)).toBeCloseTo(eraLevel(developmentAt(dev, 1000), r), 5);
     // 信仰:第 y 年以前最近算过的那一步(整 5 年那一步在那一刻的事件之后)
     expect(faith(r, 1000)).toBe(faithAt(civ, 995)[r]);
+    // 推到一半拼的结果(地形大事那一刻接着推)没有 Civ.religion:照历史重放,答得一样(以前当"不明",重放的预约就错开了)
+    const bare = tribalReplay.faith!({ ...civ, religion: undefined }, civ.eras ?? []);
+    for (const y of [1000, 1777.5, 2500]) for (const q of [r, 0, 5, 100]) expect(bare(q, y), `${q}@${y}`).toBe(faith(q, y));
     expect(faith(r, 1001)).toBe(faithAt(civ, 1000)[r]);
     expect(era(r, 0)).toBe(-1);
     expect(faith(r, 0)).toBe(-1);

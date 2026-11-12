@@ -51,6 +51,7 @@ import type { Intervention } from '../edits';
 import { actsFrom, leaningsAt, reignAt, reignBook, reignStart, rulerBase, type LeaningEffect, type Reign, type RulerAct } from './rulers';
 import { regimeAt } from './regime';
 import { tribalReplay } from './tribalReplay';
+import type { FaithEra } from './religion';
 import { POLICY_KNOBS, policiesFrom, policySeg, powerScale, segAt, segEffect, unrestShift, type PolicyIv, type PolicySeg } from './policy';
 import { regencyBase, regentAt, regentsFrom, type Regency, type RegencyCtx } from './regents';
 import type { CivModule } from './modules';
@@ -1452,7 +1453,7 @@ export function addPolity(m: PolityModel, sid: number, cu: number, t: Year, extr
  * 到期事件在同一刻里排在别的事件前面(只在地形大事、看王朝、即位、重看边地后面,其中只有地形大事改归属),
  * 所以排在那一刻的日志(大事改的除外)前面。门槛更低的新君即位、迁都的下一刻也一样重放。
  */
-export function resumePolities(sim: CivSim, world: World, civ: Civ, iv?: InterventionModel | null): void {
+export function resumePolities(sim: CivSim, world: World, civ: Civ, iv?: InterventionModel | null, eras: readonly FaithEra[] = civ.eras ?? []): void {
   const T = cultureTerrain(world, civ.habitat, civ.regions, civ.frontier);
   const reg = T.regions;
   const R = T.R;
@@ -1523,7 +1524,7 @@ export function resumePolities(sim: CivSim, world: World, civ: Civ, iv?: Interve
   installPolities(sim, m);
   // 下面重放预约时扩张算账要看的时代、信仰:照存下来的历史(development、religion 接着推时再换成推演里的)
   m.tribalEra = tribalReplay.era?.(civ);
-  m.tribalFaith = tribalReplay.faith?.(civ);
+  m.tribalFaith = tribalReplay.faith?.(civ, eras);
 
   const now = sim.now;
   const culture = sim.owners[Layer.Culture];
@@ -1952,5 +1953,5 @@ export const politiesModule: CivModule = {
   install: (c) => {
     if (c.pm) installPolities(c.sim, c.pm);
   },
-  resume: (c) => resumePolities(c.sim, c.world, c.extra.length ? { ...c.civ, cultures: [...c.civ.cultures, ...c.extra] } : c.civ, c.iv),
+  resume: (c) => resumePolities(c.sim, c.world, c.extra.length ? { ...c.civ, cultures: [...c.civ.cultures, ...c.extra] } : c.civ, c.iv, c.eras),
 };
