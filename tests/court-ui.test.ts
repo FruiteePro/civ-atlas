@@ -129,7 +129,8 @@ describe('朝政', () => {
         const e = civ.annals[c.event];
         const say = formChangeSay(civ, P.id, c, false);
         expect(say.length, say).toBeGreaterThan(6);
-        if (e.kind === 'reform') expect(say).toMatch(e.n === 0 ? /^革命：/ : e.n === 1 ? /^政变：/ : /^复辟：/);
+        // 第 68 版起改制还有立神权(n = 3)、废神权(n = 4)
+        if (e.kind === 'reform') expect(say).toMatch([/^革命：/, /^政变：/, /^复辟：/, /^立神权：/, /^废神权：/][e.n ?? 0]);
         if (e.kind === 'reform' && e.n === 2 && e.b >= 0) expect(say).toMatch(/旗用回.+以前那面$/);
         const form = polityFormAt(civ, P.id, c.year)!;
         const d = formDims(form.facts);
