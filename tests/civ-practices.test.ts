@@ -59,12 +59,13 @@ describe('时代做法', () => {
   });
 
   it('推演里:数表的"做法"和事件层现算的一样;直征、禁军和监军、铨选和参半都是有了前提才办成的', () => {
-    const seed = 7;
+    // 第 68 版有了神权以后收兵权办成的少了:第 72 版种子 7 第 1500 年以后一次也没有(种子 30 有两次、11 有一次),两个种子合起来看
+    const checked = [0, 0, 0];
+    for (const seed of [7, 30]) {
     const half = generateCiv(world(seed), { endYear: 1500 });
     const sim = resumeCiv(world(seed), half);
     const cm = controlModelOf(sim)!;
     const council = councilModelOf(sim)!;
-    const checked = [0, 0, 0];
     const record = sim.record.bind(sim);
     sim.record = (kind, f = {}) => {
       if (kind === 'council' && f.a !== undefined && (f.n === 0 || f.n === 1)) {
@@ -88,8 +89,6 @@ describe('时代做法', () => {
       record(kind, f);
     };
     sim.run(3000);
-    // 三样都碰上过
-    expect(checked.every((n) => n > 0), JSON.stringify(checked)).toBe(true);
     // 数表"做法"(这一年年初按国都能力算的)和现算的一样(这一年迁过都的不比)
     const table = cm.eng.get('做法');
     const W = PRACTICES.length;
@@ -103,7 +102,10 @@ describe('时代做法', () => {
       n++;
     }
     expect(n).toBeGreaterThan(5);
-  }, 120_000);
+    }
+    // 三样都碰上过
+    expect(checked.every((n) => n > 0), JSON.stringify(checked)).toBe(true);
+  }, 240_000);
 
   it('编年史:一国头一回直征、收兵权、收任免办成换个说法,以后照旧;不另加条目', () => {
     let firsts = 0;
