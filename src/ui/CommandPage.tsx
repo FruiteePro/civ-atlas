@@ -68,7 +68,7 @@ import { zoneChoices } from './treatyIv';
 
 let owners: Owners | undefined;
 
-type Cmd = 'policy' | 'boost' | 'protect' | 'unity' | 'keep' | 'halt' | 'ally' | 'treaty' | 'neutral' | 'declare' | 'move' | AuthorIvRole | 'destroy' | 'collapse' | 'disaster' | 'trek';
+type Cmd = 'policy' | 'boost' | 'protect' | 'unity' | 'keep' | 'halt' | 'theocracy' | 'ally' | 'treaty' | 'neutral' | 'declare' | 'move' | AuthorIvRole | 'destroy' | 'collapse' | 'disaster' | 'trek';
 
 const CMDS: { k: Cmd; name: string; desc: string; pick: boolean; go?: string }[] = [
   { k: 'policy', name: '方针', desc: '这国从这年起照方针自己走，直到换下一条', pick: true, go: '选方针 ›' },
@@ -77,6 +77,7 @@ const CMDS: { k: Cmd; name: string; desc: string; pick: boolean; go?: string }[]
   { k: 'unity', name: '禁止分裂', desc: '该国不会分裂出新国家', pick: false },
   { k: 'keep', name: '保住王室', desc: '不改朝换代，君主不会被权臣所废', pick: false },
   { k: 'halt', name: '禁止扩张', desc: '不再主动扩张,被打时仍会夺回失地', pick: false },
+  { k: 'theocracy', name: '立神权', desc: '废君号或执政，立教职主国；已是神权国的改为废神权、复行共和', pick: false },
   { k: 'ally', name: '结盟', desc: '选择一个国家,两国不再交战', pick: true },
   { k: 'treaty', name: '立约', desc: '和一国或几国约定若干年互不侵犯', pick: true, go: '选几国 ›' },
   { k: 'neutral', name: '划中立地', desc: '交界的一州不归任何一国，几国都不进兵', pick: true, go: '选地方 ›' },
@@ -127,6 +128,8 @@ export function CommandPage({ civ, raster, world, id, year }: { civ: Civ; raster
   const until = limited ? { until: ui.y } : {};
 
   const alive = polityAlive(p, yv);
+  /** 生效那年是不是神权国(是 = 「立神权」这一条换成「废神权」) */
+  const theoNow = regimeAt(p, yv) === 'theocracy';
   const noKeep = keepWhy(p, yv);
   const { size, near } = useMemo(() => neighborsAt(civ, id, yv), [civ, id, yv]);
   // 宣战打得成的:接壤、那年没和本国在交战的(已在交战的推演里那条宣战跳过)
@@ -172,6 +175,7 @@ export function CommandPage({ civ, raster, world, id, year }: { civ: Civ; raster
     if (k === 'declare' && !near.size) return '该年没有相邻的国家';
     if (k === 'declare' && !canDeclare.size) return '该年相邻的国家都已在交战';
     if (k === 'move' && !cities.length) return '该年本国没有别的城市';
+    if (k === 'theocracy' && queued(k)) return step ? STEP_QUEUED : '已在待推演里';
     return null;
   };
 
@@ -200,6 +204,11 @@ export function CommandPage({ civ, raster, world, id, year }: { civ: Civ; raster
     }
     if (k === 'unity') {
       setMsg(order({ kind: k, a: key, from: y }, null));
+      return;
+    }
+    if (k === 'theocracy') {
+      // 那年已是神权国:这条就是废神权
+      setMsg(order(theoNow ? { kind: k, a: key, from: y, end: true } : { kind: k, a: key, from: y }, null));
       return;
     }
     const base = { sub: `${yearAt(y, era)}起生效`, source: `polity:${id}`, self: id, near, year: y };
@@ -337,8 +346,8 @@ export function CommandPage({ civ, raster, world, id, year }: { civ: Civ; raster
             return (
               <button key={c.k} className={`cp-cmd${off ? ' off' : ''}`} data-cmd={c.k} disabled={!!off} onClick={() => run(c.k)}>
                 <span className="cp-cmd-main">
-                  <span className="cp-cmd-name">{c.name}</span>
-                  <span className="cp-cmd-desc">{off ?? c.desc}</span>
+                  <span className="cp-cmd-name">{c.k === 'theocracy' && theoNow ? '废神权' : c.name}</span>
+                  <span className="cp-cmd-desc">{off ?? (c.k === 'theocracy' && theoNow ? '罢教职主国，复行共和、推举执政' : c.desc)}</span>
                 </span>
                 {!off && <span className="cp-cmd-go">{c.go ?? (c.pick ? '选择对象 ›' : step ? '加入' : '加入待推演')}</span>}
               </button>

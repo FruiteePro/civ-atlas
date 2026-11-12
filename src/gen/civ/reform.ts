@@ -153,6 +153,8 @@ const U_RESTORE = 4;
 const U_AGE = 5;
 const U_THEO = 6;
 const U_THEO_LEAVE = 7;
+/** 作者干预立神权:keyed4 第三位 = 这个数 + 第几条干预(和看内政的第几次错开) */
+const U_AUTHOR_IV = 1 << 24;
 /** 倾向的随机数从这里起(drawLeanings 的用途号加上去) */
 const U_LEAN = 64;
 
@@ -341,6 +343,28 @@ function tryLaicize(cx: ReformCtx, share: number, right: number, since: number, 
   return true;
 }
 
+/** 作者干预立 / 废神权:那时本来就是(立)、本来就不是(废)神权(史事 intervene 的 b 列) */
+export const IV_THEO_SAME = -4;
+
+/** 作者干预立 / 废神权要的那几样(council.ts 给;不看内政、不掷赔率) */
+export type AuthorTheocracyCtx = Pick<ReformCtx, 'sim' | 'pm' | 'P' | 't' | 'rules' | 'base' | 'capR'>;
+
+/**
+ * 作者干预立神权(end = false:君主国、共和、军政府都改立教职主国)/ 废神权(end = true:复行共和)。
+ * 先看能不能(返回史事 intervene 的 b 列:−1 能 / IV_THEO_SAME);do_ = true 时真改:记一条 reform(n = 立 / 废神权,和推演里的一样,
+ * 接着推时规矩照史事重建)、在位表加一段。教宗 / 大祭司的生年、倾向按"国家锚 + 第几条干预"取,和处理顺序无关
+ */
+export function authorTheocracy(cx: AuthorTheocracyCtx, end: boolean, iv: number, do_: boolean): number {
+  const seg = (cx.P.dynasties?.length ?? 1) - 1;
+  const theo = segRegime(cx.P, seg) === 'theocracy';
+  if (theo !== end) return IV_THEO_SAME;
+  if (!do_) return -1;
+  const R = (use: number) => keyed4(cx.base, cx.pm.ptag[cx.P.id], U_AUTHOR_IV + iv, use, 1);
+  note(cx, { b: -1, region: cx.capR, settlement: capitalAt(cx.P, cx.t), n: end ? REFORM_LAICIZE : REFORM_THEOCRACY });
+  openSeg(cx, end ? { regime: 'republic' } : { regime: 'theocracy', usurper: leader(cx, R, CLERIC_SHIFT) });
+  return -1;
+}
+
 /** 第 seg 段往前最近的一段王室(没有 = −1) */
 function lastCrown(P: Polity, seg: number): number {
   const d = P.dynasties;
@@ -350,20 +374,20 @@ function lastCrown(P: Polity, seg: number): number {
 }
 
 /** 政变的将军、革命起兵的人:生年、倾向 */
-function leader(cx: ReformCtx, R: (use: number) => number, shift: Partial<Record<'expand' | 'war' | 'develop' | 'trade', number>>) {
+function leader(cx: AuthorTheocracyCtx, R: (use: number) => number, shift: Partial<Record<'expand' | 'war' | 'develop' | 'trade', number>>) {
   const { LEADER_AGE } = cx.pm.knobs.get(REFORM_KNOBS);
   const age = LEADER_AGE[0] + (LEADER_AGE[1] - LEADER_AGE[0]) * R(U_AGE);
   return { born: Math.round((cx.t - age) * 256) / 256, leanings: drawLeanings((use) => R(U_LEAN + use), 'republic', cx.P.kind, shift) };
 }
 
 /** 记一条史事 reform,规矩跟着改(和接着推时由史事重建的一样,councilRules.ts 的 applyReform) */
-function note(cx: ReformCtx, f: Pick<Annal, 'b' | 'region' | 'settlement' | 'n'> & { opt?: number }): void {
+function note(cx: AuthorTheocracyCtx, f: Pick<Annal, 'b' | 'region' | 'settlement' | 'n'> & { opt?: number }): void {
   cx.sim.record('reform', { a: cx.P.id, ...f });
   applyReform(cx.rules, { year: cx.t, n: f.n, opt: f.opt });
 }
 
 /** 往在位表加一段(改共和、政变、还政、复辟):国都照旧;在位表重排,这一段的第一位下一刻起在位 */
-function openSeg(cx: ReformCtx, seg: { regime?: 'republic' | 'junta' | 'theocracy'; house?: number; usurper?: { born: Year; leanings: RulerLeanings } }): void {
+function openSeg(cx: AuthorTheocracyCtx, seg: { regime?: 'republic' | 'junta' | 'theocracy'; house?: number; usurper?: { born: Year; leanings: RulerLeanings } }): void {
   const { P, t } = cx;
   if (!P.dynasties) P.dynasties = [{ year: P.founded, name: '', seat: P.capital }];
   P.dynasties.push({

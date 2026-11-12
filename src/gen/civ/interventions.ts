@@ -837,6 +837,16 @@ export function installInterventions(sim: CivSim, iv: InterventionModel): void {
       collapseIv(v, i, a, t);
       return;
     }
+    if (v.kind === 'theocracy') {
+      // 立神权 / 废神权:改制的模型看能不能(b 列:−1 生效 / −3 已亡 / −4 本来就是、本来就不是神权 / −2 没有改制的模型),先记 intervene 再改(接一条 reform)
+      const sid = capitalAt(pm.polities[a], t);
+      const end = v.end === true;
+      const go = api.politics.authorTheocracy;
+      const b = !alive(a) ? -3 : go ? go(a, t, end, i, false) : -2;
+      sim.record('intervene', { a, b, region: S[sid]?.region ?? -1, settlement: sid, war: i });
+      if (b === -1) go!(a, t, end, i, true);
+      return;
+    }
     if (v.kind === 'death' || v.kind === 'temper') {
       person(v, i, a, t);
       return;

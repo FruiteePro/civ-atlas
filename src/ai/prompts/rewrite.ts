@@ -18,6 +18,7 @@
 import type { World } from '../../gen/world';
 import type { Civ, Place, Polity } from '../../gen/civ/types';
 import { canCross } from '../../gen/civ/polities';
+import { regimeAt } from '../../gen/civ/regime';
 import { BIOMES } from '../../gen/biomes';
 import { HABITABLE_SUIT, KIND_INFO, cultureLabel, regionLabel, regionNamed } from '../../gen/civ/story/display';
 import { capitalAt, polityAlive, polityName, populationAt, ownersAt } from '../../gen/readers/openQuery';
@@ -646,6 +647,8 @@ function ivText(civ: Civ, v: Intervention): string {
       return `${folk(v.folk)} 不许大迁徙${until(v.until)}`;
     case 'appoint':
       return `${id(v.a, 'polity', 'P')} 任作者的人物为${v.role === 'general' ? '将领' : '名臣'}${until(v.until)}`;
+    case 'theocracy':
+      return `${id(v.a, 'polity', 'P')} ${v.end ? '废神权,复行共和' : '立神权'}`;
   }
 }
 
@@ -928,6 +931,8 @@ const OP_ALIAS: Record<string, string> = {
   立国: 'found',
   灭国: 'destroy',
   大崩解: 'collapse',
+  立神权: 'theocracy',
+  神权: 'theocracy',
   改名: 'rename',
   火山: 'volcano',
   湖: 'lake',
@@ -1106,7 +1111,10 @@ class Checker {
       case 'found':
       case 'destroy':
       case 'collapse':
+      case 'theocracy':
         return this.command(op, o);
+      case '废神权':
+        return this.command('theocracy', { ...o, end: true });
       case 'rename':
         return this.rename(o);
       case 'volcano':
@@ -1205,6 +1213,13 @@ class Checker {
       } else if (kind === 'unity') {
         text = `${A.name}:${label}`;
         v = { kind, a, from };
+      } else if (kind === 'theocracy') {
+        const end = o.end === true || o.end === 'true';
+        const theo = regimeAt(P[A.id], from) === 'theocracy';
+        text = end ? `${A.name}废神权,复行共和` : `${A.name}立神权`;
+        if (end && !theo) return fail(text, `第 ${from} 年${A.name}不是神权国,无从废起`);
+        if (!end && theo) return fail(text, `第 ${from} 年${A.name}本来就是神权国`);
+        v = end ? { kind, a, from, end: true } : { kind, a, from };
       } else if (kind === 'ally' || kind === 'declare') {
         const B = pol(o.other ?? o.b ?? o.target ?? o['对方'], '对方国家');
         if (typeof B === 'string') return fail(`${A.name}${label}`, B);
@@ -1508,6 +1523,7 @@ const KIND_LABEL: Record<Intervention['kind'], string> = {
   trek: '大迁徙',
   stay: '不许迁',
   appoint: '任作者的人物为将 / 为臣',
+  theocracy: '立神权',
 };
 
 // ---------------------------------------------------------------------------

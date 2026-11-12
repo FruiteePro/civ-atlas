@@ -168,6 +168,12 @@ export interface PoliticsApi {
   lordCheck?: (P: Polity, k: number, t: Year) => boolean;
   /** 看内政最后(分裂、割据、合并、迁都都没出事):议一件事(council.ts 提供) */
   councilCheck?: (P: Polity, k: number, t: Year) => void;
+  /**
+   * 作者干预立神权 / 废神权(council.ts 提供,照 reform.ts 的 authorTheocracy):end = 废。
+   * 返回史事 intervene 的 b 列:−1 生效 / −4 那时本来就是(立)、本来就不是(废)神权。apply = false 只看能不能;
+   * apply = true 真改:记一条 reform(和推演里立、废神权的一样)、在位表加一段(调用方先记 intervene 再 apply)
+   */
+  authorTheocracy?: (p: number, t: Year, end: boolean, iv: number, apply: boolean) => number;
 }
 
 /** diplomacy那一组(原来挂在 DiplomacyModel 上) */

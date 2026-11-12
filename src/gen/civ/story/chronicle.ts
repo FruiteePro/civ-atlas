@@ -1101,6 +1101,14 @@ function interveneStory(civ: Civ, e: Annal, id: number): IvStory {
       }
       return done(`${A}大崩解,未能裂出继承国`);
     }
+    case 'theocracy': {
+      // 立 / 废神权:生效了紧跟一条 reform(正文照推演里立、废神权的写法另记一条),这里只写下令
+      const what = v.end ? '废神权' : '立神权';
+      if (e.b === -3) return fail(`欲令${A}${what},然${A}已亡`, `那一年${A}已亡`);
+      if (e.b === -4) return fail(v.end ? `欲令${A}废神权,然${A}本非神权` : `欲令${A}立神权,然${A}本已神权主国`, v.end ? `那一年${A}不是神权国` : `那一年${A}本来就是神权国`);
+      if (e.b !== -1) return fail(`欲令${A}${what},未成`, '没有生效');
+      return done(v.end ? `${A}废神权,复行共和` : `${A}立神权,以教职主国`);
+    }
     case 'death':
     case 'temper':
       return personStory(civ, e, v, A, fail, done);

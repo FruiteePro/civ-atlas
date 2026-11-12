@@ -375,6 +375,9 @@ function ivText(civ: Civ, v: Intervention, i: number, a: string | undefined): st
       // "彭继桓:引兵入朝掌权，到君主去世即位""孙嵩曜:专权，5 年后还政";作者的人物 "苏晚以大臣专权掌大定国政，5 年后还政"(authorIvInfo.ts)
       if (v.char !== undefined) return postLine(authorName(civ, v.char), A, v, getEdits().era);
       return `${personKeyName(civ, v.person)}:${regentHowWord(v.how, personOfKey(civ, v.person))}掌权，${regentEndWord(v.end, v.years)}`;
+    case 'theocracy':
+      // "大靖王朝:立神权" / "大靖神权国:废神权，复行共和"
+      return `${A}:${v.end ? '废神权，复行共和' : '立神权'}`;
     case 'appoint':
       // "林小满为大定将，到 1530 年卸任""林小满入大定为臣，到卒年（1561 年）"(authorIvInfo.ts)
       return postLine(authorName(civ, v.char), A, v, getEdits().era);

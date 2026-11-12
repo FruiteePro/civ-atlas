@@ -73,7 +73,7 @@ import { capitalAt, populationAt } from './growth';
 import { Cap, CAP_COUNT, devModelOf, type DevModel } from './development';
 import type { ControlModel, Warlord } from './control';
 import { COUNCIL_RULES_KNOBS, ISSUES, Issue, Outcome, applyRule, newRules, replayRule, rulesAnnal, type Rules } from './councilRules';
-import { reformCheck } from './reform';
+import { authorTheocracy, reformCheck } from './reform';
 import { CENSUS_COST, CENSUS_LIFT, EXAM_STAKE, FIEF_LESS_EASE, FIEF_LESS_ODDS, Practice, hasPractice } from './practices';
 import type { CivModule } from './modules';
 import { Ev } from './events';
@@ -420,6 +420,11 @@ function hook(sim: CivSim, seed: number, book: Map<number, Rules>): CouncilModel
   };
 
   api.politics.councilCheck = (P, k, t) => check(sim, pm, pol, wm, cm, dev, base, rbase, book, P, k, t);
+  api.politics.authorTheocracy = (p, t, end, iv, apply) => {
+    const P = pm.polities[p];
+    const capR = pm.settlements[capitalAt(P, t)].region;
+    return authorTheocracy({ sim, pm, P, t, rules: rulesOf(book, p), base: rbase, capR }, end, iv, apply);
+  };
   return model;
 }
 
