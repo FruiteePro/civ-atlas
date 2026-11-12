@@ -5,7 +5,7 @@
  *              每一步多长、多久停一下(出大事也停)、倒计时,每组下面一句写清选了会怎样;
  *              导播一行(「改」原地展开导播设置);推演模式里这一年以后下过的干预,默认都勾着(到那一年照样发生),能逐条去掉。
  *              电脑上是浮在正中的窗口,手机上从底部升起、几乎占满屏(「开始演绎」贴底)
- *   推进设置   中途改(侧栏「这个故事」):你是 + 同样三组 + 导播,下一步起照新的走
+ *   推进设置   中途改(侧栏「这个故事」):你是 + 同样三组 + 导播 + AI 导演(AiDirectorFields),下一步起照新的走
  *   存回推演模式  存成一个普通世界:默认存成新世界、原来的不动,也能覆盖原来的;存好以后打开它(默认开)。
  *              另开过支的,最上面一行写明存的是在用的这一支,另外几支不跟着存
  *   从这里重新演绎  先问一句:世界回到那一年年初,从这里往下另开一支;原来那条(那以后演绎出来的历史、那以后加的干预)
@@ -36,6 +36,10 @@ import { alivePolities } from './crownInfo';
 import { nameAt } from './Interventions';
 import { getCivTime, getSelection } from './civView';
 import { FlagIcon } from './Flag';
+import { AI_DIR_AGGR_LABEL, AI_DIR_GOAL_MAX, AI_DIR_KINDS, AI_DIR_STYLES, AI_DIR_STYLE_LABEL, aiDirCallEstimate, cleanAiDir, type AiDirSettings } from '../ai/director';
+import { openAiSettings, useAiStatus } from '../ai/client';
+import { getAiDir, setAiDir } from './aiDirectorStore';
+import type { InterventionKind } from '../gen/edits';
 import { flagOf, useFlags } from './flagStore';
 import { rolePolity } from './policyInfo';
 import { armRole, setRole, useRole } from './roleStore';
@@ -284,6 +288,135 @@ function DirectorRow({ civ, phone, on, setOn }: { civ: Civ | null; phone: boolea
 }
 
 // ---------------------------------------------------------------------------
+// AI 导演(见 ai/director.ts):开关、导演 / 目标、每隔几年、风格、轻重、上限、能下哪几种,和大约调用几次
+
+const AI_MODE_SEG = [
+  { v: 'director', label: '导演' },
+  { v: 'goal', label: '目标' },
+] as const;
+const AI_STYLE_SEG = AI_DIR_STYLES.map((v) => ({ v, label: AI_DIR_STYLE_LABEL[v] }));
+const AI_AGGR_SEG = ([1, 2, 3] as const).map((v) => ({ v: String(v), label: AI_DIR_AGGR_LABEL[v] }));
+const AI_EVERY_SEG = [50, 100, 200, 500].map((n) => ({ v: String(n), label: `${n} 年` }));
+const AI_STEP_SEG = [1, 2, 3].map((n) => ({ v: String(n), label: `${n} 条` }));
+const AI_CENTURY_SEG = [1, 3, 5, 10].map((n) => ({ v: String(n), label: `${n} 条` }));
+const AI_KIND_LABEL: Partial<Record<InterventionKind, string>> = {
+  protect: '保护',
+  unity: '禁分裂',
+  halt: '禁扩张',
+  ally: '结盟',
+  declare: '宣战',
+  move: '迁都',
+  cede: '划地',
+  found: '立国',
+  destroy: '灭国',
+  collapse: '大崩解',
+  theocracy: '神权',
+};
+
+/** AI 导演几项设置(草稿;按「好」才存,见 AdvanceDialog) */
+export function AiDirectorFields({ value, set, phone }: { value: AiDirSettings; set: (s: AiDirSettings) => void; phone: boolean }) {
+  const ai = useAiStatus();
+  const s = value;
+  const put = (p: Partial<AiDirSettings>) => set(cleanAiDir({ ...s, ...p }));
+  const n = aiDirCallEstimate(s);
+  const brief = !s.on
+    ? '关着：历史照规则自己走'
+    : s.mode === 'goal' && !s.goal
+      ? '开着，但还没写目标：先不做事'
+      : `每 ${s.every} 年${s.onBig ? '或出了大事' : ''}看一眼，一次最多 ${s.perStep} 条命令`;
+  const why = !s.on
+    ? 'AI 只会在你打开以后、在推过的这一段里补几条命令（和你下的干预一样），从最早那条起重推；以后读档、切支线都不再问 AI。'
+    : `推一千年约调用 ${n} 次 AI${ai.ready ? '' : '；还没设好 AI，开着也不会做事'}。每条命令带一句缘由，写进编年史。没设 AI、超时、回得不对：这一次什么也不做，照常往下推。`;
+  return (
+    <div className={`sw-grp${phone ? ' white' : ''}`} data-act="ai-dir">
+      <div className="sw-r">
+        <span className="sw-r-main">
+          <span>AI 导演</span>
+          <small>{brief}</small>
+        </span>
+        <button className={`sw-sw${s.on ? ' on' : ''}`} role="switch" aria-checked={s.on} aria-label="AI 导演" data-act="ai-dir-on" onClick={() => put({ on: !s.on })} />
+      </div>
+      {s.on && (
+        <>
+          <div className="sw-r">
+            <span className="sw-r-main">做什么</span>
+            <Seg items={[...AI_MODE_SEG]} value={s.mode} act="ai-dir-mode" onPick={(v) => put({ mode: v })} />
+          </div>
+          {s.mode === 'goal' ? (
+            <div className="sw-r">
+              <input
+                className="br-name-in"
+                aria-label="目标"
+                data-act="ai-dir-goal"
+                placeholder="一句话目标，比如：让东方那几国最后统一"
+                maxLength={AI_DIR_GOAL_MAX}
+                value={s.goal}
+                onChange={(e) => set({ ...s, goal: e.target.value.slice(0, AI_DIR_GOAL_MAX) })}
+                onBlur={() => put({})}
+              />
+            </div>
+          ) : (
+            <div className="sw-r">
+              <span className="sw-r-main">
+                <span>风格</span>
+                <small>只管戏剧性和节奏，不偏袒任何一国</small>
+              </span>
+              <Seg items={AI_STYLE_SEG} value={s.style} act="ai-dir-style" onPick={(v) => put({ style: v })} />
+            </div>
+          )}
+          <div className="sw-r">
+            <span className="sw-r-main">每隔</span>
+            <Seg items={AI_EVERY_SEG} value={String(s.every)} wide={phone} act="ai-dir-every" onPick={(v) => put({ every: Number(v) })} />
+          </div>
+          <div className="sw-r">
+            <span className="sw-r-main">
+              <span>出大事也看一眼</span>
+            </span>
+            <button className={`sw-sw${s.onBig ? ' on' : ''}`} role="switch" aria-checked={s.onBig} aria-label="出大事也看一眼" data-act="ai-dir-big" onClick={() => put({ onBig: !s.onBig })} />
+          </div>
+          <div className="sw-r">
+            <span className="sw-r-main">下手</span>
+            <Seg items={AI_AGGR_SEG} value={String(s.aggr)} act="ai-dir-aggr" onPick={(v) => put({ aggr: Number(v) as 1 | 2 | 3 })} />
+          </div>
+          <div className="sw-r">
+            <span className="sw-r-main">每次最多</span>
+            <Seg items={AI_STEP_SEG} value={String(s.perStep)} act="ai-dir-step" onPick={(v) => put({ perStep: Number(v) })} />
+          </div>
+          <div className="sw-r">
+            <span className="sw-r-main">每一百年最多</span>
+            <Seg items={AI_CENTURY_SEG} value={String(s.perCentury)} act="ai-dir-century" onPick={(v) => put({ perCentury: Number(v) })} />
+          </div>
+          <div className="sw-r">
+            <span className="sw-r-main">能下的命令</span>
+            <span className="sw-seg wide sw-ai-kinds" role="group">
+              {AI_DIR_KINDS.map((k) => {
+                const has = s.kinds.includes(k);
+                return (
+                  <button key={k} role="checkbox" aria-checked={has} className={has ? 'on' : ''} data-act={`ai-dir-kind-${k}`} onClick={() => put({ kinds: has ? s.kinds.filter((x) => x !== k) : [...s.kinds, k] })}>
+                    {AI_KIND_LABEL[k] ?? k}
+                  </button>
+                );
+              })}
+            </span>
+          </div>
+        </>
+      )}
+      <div className="sw-why">
+        {why}
+        {s.on && !ai.ready && (
+          <>
+            {' '}
+            <button className="sw-r-link" data-act="ai-dir-setup" onClick={openAiSettings}>
+              去设置 AI
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // 你是:造物主 / 演一国
 
 const ROLE_SEG = [
@@ -433,6 +566,7 @@ function AdvanceDialog({ phone, civ, start }: { phone: boolean; civ: Civ; start:
   const era = useEra();
   const [adv, setAdv] = useState<Advance>(() => advanceOf(getEdits()));
   const [dirOn, setDirOn] = useState(stepDirectorOn);
+  const [aiDir, setAiDirDraft] = useState<AiDirSettings>(() => getAiDir().settings);
   // 你是:造物主 / 演一国(开始演绎:看的是开始那年;中途改:看"现在")
   const role = useRole();
   const roleYear = start ?? Math.min(civ.endYear, getStepwise().now);
@@ -446,6 +580,7 @@ function AdvanceDialog({ phone, civ, start }: { phone: boolean; civ: Civ; start:
     // 开始演绎:推进设置只写进另存出来的那个世界(原来的世界不动);演绎中改设置:写进这个世界
     if (start === null) setAdvance(adv);
     setStepDirectorOn(dirOn);
+    setAiDir(aiDir);
     close();
     // 演一国:开始演绎时先记下,新世界打开以后再认上去(RoleBar.tsx);中途改的直接换,导播跟着关注它
     const key = asOk ? polityKey(civ, as.who) : null;
@@ -522,6 +657,8 @@ function AdvanceDialog({ phone, civ, start }: { phone: boolean; civ: Civ; start:
             <AdvanceFields adv={adv} set={setAdv} phone />
             <div className="sw-sh">导播</div>
             <DirectorRow civ={civ} phone on={dirOn} setOn={setDirOn} />
+            <div className="sw-sh">AI 导演</div>
+            <AiDirectorFields value={aiDir} set={setAiDirDraft} phone />
             {laterSec}
           </div>
           <div className="sw-psheet-foot">
@@ -544,6 +681,10 @@ function AdvanceDialog({ phone, civ, start }: { phone: boolean; civ: Civ; start:
           <div className="sw-sec">
             <div className="sw-sec-head">导播</div>
             <DirectorRow civ={civ} phone={false} on={dirOn} setOn={setDirOn} />
+          </div>
+          <div className="sw-sec">
+            <div className="sw-sec-head">AI 导演</div>
+            <AiDirectorFields value={aiDir} set={setAiDirDraft} phone={false} />
           </div>
           {laterSec && <div className="sw-sec">{laterSec}</div>}
           <div className="sw-foot">

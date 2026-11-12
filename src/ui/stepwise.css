@@ -1420,3 +1420,10 @@
 .sw-count.small {
   font-size: 12.5px;
 }
+
+/* AI 导演:能下的命令一排排开(放不下就换行) */
+.sw-ai-kinds {
+  flex-wrap: wrap;
+  height: auto;
+  row-gap: 4px;
+}

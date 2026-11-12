@@ -2,6 +2,8 @@
  * AI 导演接进逐年推演(ui/aiDirectorStore.ts):开着、到了该看的年份才问;问着的时候 aiDirBusy(不请算下一步);
  * 收下了命令交给 App(aiReplay)照新进度重推;关着、回得不合格、问的时候进度变了:什么也不换。
  */
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { DEFAULT_PARAMS, generateWorld, type World } from '../src/gen/world';
 import { generateCiv } from '../src/gen/civ';
@@ -13,6 +15,8 @@ import { bordersAt } from '../src/ai/prompts/rewrite';
 import { _resetAiDir, aiDirAfterStep, aiDirBusy, getAiDir, setAiDir } from '../src/ui/aiDirectorStore';
 import { _resetStepwise, enterStepwise, setStepwiseActions, type StepwiseActions } from '../src/ui/stepwiseStore';
 import { clearEdits, getEdits, putEditsQuiet } from '../src/ui/editsStore';
+import { AiDirectorFields } from '../src/ui/StepwiseDialogs';
+import { AI_DIR_DEFAULTS } from '../src/ai/director';
 
 let world: World;
 let civ: Civ;
@@ -103,5 +107,17 @@ describe('AI 导演接进逐年推演', () => {
     await wait();
     expect(calls).toBe(1);
     expect(replays.length).toBe(0);
+  });
+
+  it('设置那一组:关着只有开关和一句话;开着列出几项和大约调用几次;目标模式有目标框', () => {
+    const off = renderToStaticMarkup(createElement(AiDirectorFields, { value: AI_DIR_DEFAULTS, set: () => {}, phone: false }));
+    expect(off).toContain('data-act="ai-dir-on"');
+    expect(off).not.toContain('ai-dir-style');
+    const on = renderToStaticMarkup(createElement(AiDirectorFields, { value: { ...AI_DIR_DEFAULTS, on: true, onBig: false }, set: () => {}, phone: false }));
+    for (const a of ['ai-dir-mode', 'ai-dir-style', 'ai-dir-every', 'ai-dir-aggr', 'ai-dir-step', 'ai-dir-century', 'ai-dir-kind-declare']) expect(on).toContain(a);
+    expect(on).toContain('推一千年约调用 10 次 AI');
+    const goal = renderToStaticMarkup(createElement(AiDirectorFields, { value: { ...AI_DIR_DEFAULTS, on: true, mode: 'goal' }, set: () => {}, phone: true }));
+    expect(goal).toContain('ai-dir-goal');
+    expect(goal).toContain('还没写目标');
   });
 });
