@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_PARAMS, generateWorld, type World } from '../src/gen/world';
 import { continueCiv, generateCiv, type Civ } from '../src/gen/civ';
-import { effOf, policyAt, polityModelOf, rulerOf } from '../src/gen/civ/polities';
+import { effOf, policyAt, polityModelOf, regentOf, rulerOf, rulingLeanings } from '../src/gen/civ/polities';
 import { leaningEffect } from '../src/gen/civ/rulers';
 import { POLICY_PRESETS, policyEffect, policyName, withPolicy } from '../src/gen/civ/policy';
 import { ownersAt } from '../src/gen/civ/engine/timeline';
@@ -131,11 +131,13 @@ describe.each([7, 2024])('方针 · seed=%i', (seed) => {
     // 推演里(接着推时重建的同一份):定方针那一刻照旧,下一刻起照方针
     const pm = polityModelOf(resumeCiv(w, civ))!;
     expect(policyAt(pm, pid, T)).toBeNull();
-    expect(effOf(pm, pid, T)).toBe(rulerOf(pm, pid, T).eff);
+    // 说了算的人:有人掌着实权(regency.ts)= 掌权的人,不然 = 在位君主(种子 2024 第 1200 年最大国正好有人掌着实权)
+    const r0 = rulerOf(pm, pid, T);
+    expect(effOf(pm, pid, T)).toBe((regentOf(pm, pid, T, r0) ?? r0).eff);
     for (const t of [T + 1 / 256, T + 50]) {
       if (civ.polities[pid].ended !== undefined && civ.polities[pid].ended! <= t) break;
       expect(policyAt(pm, pid, t)).toEqual(v);
-      expect(effOf(pm, pid, t)).toEqual(policyEffect(OFFICIAL_KNOBS, rulerOf(pm, pid, t).leanings, v));
+      expect(effOf(pm, pid, t)).toEqual(policyEffect(OFFICIAL_KNOBS, rulingLeanings(pm, pid, t), v));
     }
   }, 120_000);
 
