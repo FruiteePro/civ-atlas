@@ -250,6 +250,20 @@ export function useSimRunners(deps: SimRunnersDeps): void {
           putEditsQuiet(next);
         });
       },
+      aiReplay: (next, text) => {
+        // AI 导演收下了命令:只换进度里的命令(进度那一刻不变),照它从第 0 年重推(同切支线:地图先留着,推完换上、接着走)
+        const s = getStepwise();
+        const e0 = getEdits();
+        const cur = cleanPlay(e0.play);
+        const play = cleanPlay(next);
+        if (!s.on || s.busy || s.switching || waiting || resimInfo.current || regenRef.current || simGated(e0)) return false;
+        if (!cur || !play || playAt(play) !== playAt(cur)) return false;
+        stepAuto.current = !!getCivTime().playing;
+        rewindNote.current = null;
+        resimText.current = text;
+        putEditsQuiet({ ...e0, play });
+        return true;
+      },
     });
     return () => setStepwiseActions(null);
   }, [send]);

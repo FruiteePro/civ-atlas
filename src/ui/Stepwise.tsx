@@ -23,6 +23,7 @@ import { YEAR_TICKS, advanceOf, cleanPlay, commandsNow, type Advance } from '../
 import { eraText, yearShort, type Era } from '../gen/era';
 import { directorPlan, type DirectorPlan, type DirectorShot } from './directorPlan';
 import { directorFocusOf } from './followInfo';
+import { aiDirAfterStep, aiDirBusy } from './aiDirectorStore';
 import {
   directorBegin,
   directorDone,
@@ -399,6 +400,8 @@ export function StepwiseEngine({ world, civ }: { world: World; civ: Civ | null }
     if (stepMs.length > 50) stepMs.shift();
     const v = stepArrived(b.to, r.why ? { why: r.why, big: r.big } : null);
     if (v !== null) computed.current = computed.current === null ? v : computed.current * 0.6 + v * 0.4;
+    // AI 导演(开着才做事):该看一眼就问,问着的时候不请算下一步
+    aiDirAfterStep(world, civ, b.to, r.big.length);
   }, [civ]);
 
   // 检查脚本用:现在推到哪、这一段、停没停、最近几步每秒算几年
@@ -455,7 +458,7 @@ export function StepwiseEngine({ world, civ }: { world: World; civ: Civ | null }
     /** 播放头走进最后算好的那一步了:请算下一步(单子里的干预一起交出去,在"现在"生效:进度那一刻,停在年中的带着那一格) */
     const ask = (y: number) => {
       const s = getStepwise();
-      if (!s.on || s.busy || s.due || s.stop || s.stuck !== null) return;
+      if (!s.on || s.busy || s.due || s.stop || s.stuck !== null || aiDirBusy()) return;
       const plan = nextStep(advRef.current, s.since, s.now, monthsRef.current);
       if (plan.ticks <= 0) {
         stepArrived(s.now, { why: 'end', big: [] });

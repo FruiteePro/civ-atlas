@@ -22,7 +22,7 @@
  */
 import { createListeners } from './createStore';
 import type { ChronicleEntry } from '../gen/civ/story/chronicle';
-import { cleanPlay, commandsNow, issueCommands, type Advance, type Intervention, type WorldEdits } from '../gen/edits';
+import { cleanPlay, commandsNow, issueCommands, type Advance, type Intervention, type PlayState, type WorldEdits } from '../gen/edits';
 import { stepwiseToNormal } from '../gen/stepwise';
 import type { PauseWhy, StepPlan, StepReviewItem } from './stepwisePlan';
 import type { Pending } from './pendingStore';
@@ -229,6 +229,11 @@ export interface StepwiseActions {
   rewind(year: number, name: string): void;
   /** 切到编号 id 的那一支(在后台照它从第 0 年重推,推完换上) */
   switchBranch(id: number): void;
+  /**
+   * AI 导演收下了命令:进度换成 play(进度那一刻不变,命令并进去了),在后台照它从第 0 年重推到"现在",推完接着走;
+   * text = 提示条上写的。正在切支线、重推、生成、进度对不上:不换(false)
+   */
+  aiReplay(play: PlayState, text: string): boolean;
 }
 
 let actions: StepwiseActions | null = null;
