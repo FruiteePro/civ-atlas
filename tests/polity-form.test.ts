@@ -35,6 +35,7 @@ describe('政体名', () => {
   it('名字表的每一行都对得上(造出来的输入,一行一个)', () => {
     const cases: [FormName, FormFacts][] = [
       ['诸侯割据', f({ regions: 12, lords: 6 })],
+      ['神权国', f({ regime: 'theocracy', reformed: true })],
       ['军政府', f({ regime: 'junta', reformed: true })],
       ['贵族共和国', f({ regime: 'republic', reformed: true, charter: 1 })],
       ['共和国', f({ regime: 'republic', reformed: true, charter: 1, franchise: 1 })],
@@ -54,7 +55,7 @@ describe('政体名', () => {
       ['王国', f({})],
       ['帝国', f({ tier: 3 })],
     ];
-    // 表里 19 行,一行不漏
+    // 表里 20 行(GENERATOR_VERSION 68 加了神权国),一行不漏
     expect(cases.map((c) => c[0])).toEqual(FORMS.map((r) => r.name));
     for (const [name, facts] of cases) expect(formName(facts), name).toBe(name);
   });
@@ -93,7 +94,9 @@ describe('政体名', () => {
   it('种子 7、2024、3:立国时的名字、议事改出来的集权 / 封建、游牧一系、改制改出来的共和国 / 军政府都有,历次改制接得上', () => {
     // 历史重排以后国家会变,按条件找例子(不写死哪一国)。
     // GENERATOR_VERSION 57(湿地)以后种子 7、2024 里没有游牧帝国,添上种子 3;第 58 版种子 3 也没有了,再添上种子 6(1–20 里还有 9、12、14、16、17、19、21)
-    const all = [7, 2024, 3, 6].flatMap((seed) => {
+    // 集权王国 / 官僚帝国本来就少(第 64 版种子 1–9、2024 里只有种子 7、9 各一次);第 68 版有了神权以后改制多半改成神权国,
+    // 第 72 版种子 1–9、2024 里只剩种子 4 一次,再添上种子 4
+    const all = [7, 2024, 3, 6, 4].flatMap((seed) => {
       const civ = civOf(seed);
       return civ.polities.filter((P) => polityAlive(P, P.founded)).map((P) => ({ civ, P, changes: formChangesAt(civ, P.id, civ.endYear) }));
     });
