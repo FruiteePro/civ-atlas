@@ -92,9 +92,14 @@ describe('推一把发展(boost)', () => {
     expect(target).toBe(capEra + 1);
     const eras = erasOf(c, p, T);
     expect(n).toBe(eras.length);
-    // 那一年整国都在那个时代或更高;前一年照旧
+    // 那一年整国都在那个时代或更高;以前照旧:推的那一刻以前最后一份共有的快照逐州相同,前一年还没整国拉上去
+    // (时代图层是前后两份快照线性插值:直接进在那一刻补了一份"之前"的快照,前一年在 c 里插到它、在 c0 里插到下一份整百年快照,
+    // 两边插出来的值本来就不一样,不能逐州比前一年)
     expect(eras.every((k) => k >= target)).toBe(true);
-    expect(erasOf(c, p, T - 1)).toEqual(erasOf(c0, p, T - 1));
+    const snap = c0.development!.snapYears.filter((y) => y < T).at(-1)!;
+    expect(c.development!.snapYears).toContain(snap);
+    expect(erasOf(c, p, snap)).toEqual(erasOf(c0, p, snap));
+    expect(erasOf(c, p, T - 1).some((k) => k < target)).toBe(true);
     // 国都"始入"记在推的那一年
     const enter = c.development!.events.find((x) => x.kind === 'enter' && x.polity === p && x.era === target);
     expect(enter?.year).toBe(T);
