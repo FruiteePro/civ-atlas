@@ -527,8 +527,15 @@ export function rebuildCollapseFamilies(wm: WarModel, civ: Pick<Civ, 'annals' | 
       fi = collapseFamilyIndex(wm, ev.parent, ev.year)!;
     }
     const fam = wm.families[fi];
+    // 推演里登记的是切块那一刻母国手里的州(unrest.ts 的 collapse / authorCollapse / fragmentOnDestroy):
+    // 同一刻在崩解之前易手的(比如同一刻先被敌国攻占、议和割走的)不算。按变化日志走到这一次第一块继承国拿州的那一条,
+    // 那时母国手里的就是;没有继承国拿州的(对不上),退回这一刻结束时母国手里的 + 这一刻从母国手里出去的
+    const kids = new Set<number>();
+    for (const e of annals) if (e.kind === 'split' && e.cause === 'collapse' && e.b === ev.parent && Math.abs(e.year - ev.year) < 1e-6) kids.add(e.a);
     const cur = new Int16Array(civ.regions.count).fill(-1);
     const terr = new Set<number>(fam.regions);
+    const left: number[] = [];
+    let cut = false;
     for (let i = 0; i < log.size; i++) {
       if (log.layer[i] !== Layer.Polity) continue;
       const r = log.region[i];
@@ -537,12 +544,19 @@ export function rebuildCollapseFamilies(wm: WarModel, civ: Pick<Civ, 'annals' | 
         cur[r] = log.value[i];
         continue;
       }
-      if (Math.abs(y - ev.year) < 1e-6) {
-        if (cur[r] === ev.parent) terr.add(r);
-        cur[r] = log.value[i];
+      if (y > ev.year + 1e-6) continue;
+      if (kids.has(log.value[i])) {
+        for (let q = 0; q < cur.length; q++) if (cur[q] === ev.parent) terr.add(q);
+        cut = true;
+        break;
       }
+      if (cur[r] === ev.parent) left.push(r);
+      cur[r] = log.value[i];
     }
-    for (let r = 0; r < cur.length; r++) if (cur[r] === ev.parent) terr.add(r);
+    if (!cut) {
+      for (const r of left) terr.add(r);
+      for (let r = 0; r < cur.length; r++) if (cur[r] === ev.parent) terr.add(r);
+    }
     fam.regions = [...terr];
   }
 }
