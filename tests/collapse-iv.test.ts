@@ -283,4 +283,26 @@ describe('resume rebuilds collapse families', () => {
     const dest = wm.families.find((f) => f.parent === 3 && f.year === 120);
     expect(dest?.members.has(4)).toBe(true);
   });
+
+  it('treaty intervene with nobody to sign (b=−8, no n) is not an author collapse: no family, familyOf kept', () => {
+    const emptyLog = { size: 0, year: new Float32Array(), region: new Int32Array(), layer: new Int32Array(), value: new Int16Array(), cause: new Int32Array() };
+    const civ = {
+      annals: [
+        { year: 100, kind: 'collapse' as const, a: 1, b: 0, war: 2 },
+        { year: 100, kind: 'split' as const, a: 2, b: 1, cause: 'collapse' as const },
+        { year: 130, kind: 'intervene' as const, a: 2, b: -8, war: 5 },
+        { year: 140, kind: 'intervene' as const, a: 3, b: -8, n: 2, opt: 1, war: 6 },
+        { year: 140, kind: 'split' as const, a: 4, b: 3, cause: 'collapse' as const },
+      ],
+      log: emptyLog,
+      regions: { count: 0 },
+    } as unknown as Pick<Civ, 'annals' | 'log' | 'regions'>;
+    const wm = { families: [], familyOf: new Map(), collapsedAt: new Map(), collapseChild: new Map(), noReclaim: new Map() } as unknown as WarModel;
+    rebuildCollapseFamilies(wm, civ);
+    expect(wm.families.some((f) => f.parent === 2)).toBe(false);
+    const sib = wm.families.find((f) => f.parent === 1 && f.year === 100);
+    expect(wm.familyOf.get(2)).toBe(wm.families.indexOf(sib!));
+    const ok = wm.families.find((f) => f.parent === 3 && f.year === 140);
+    expect(ok?.members.has(4)).toBe(true);
+  });
 });

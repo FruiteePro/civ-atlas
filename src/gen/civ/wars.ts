@@ -483,12 +483,13 @@ export function joinCollapseFamily(wm: WarModel, parent: number, child: number, 
 }
 
 /**
- * 作者大崩解(b=−8)或灭国切出继承国(b=−1,n=继承国数,foe=剩余无主州数)。
+ * 作者大崩解(b=−8,n=继承国数)或灭国切出继承国(b=−1,n=继承国数,foe=剩余无主州数)。
  * 即位 / 任将 / 国运加成 / 停留等也写 b=−1,有的还带 n,不能只凭 n>0 判断。
  */
 function isAuthorCollapseAnnal(e: { kind: string; a?: number; b?: number; n?: number; foe?: number }): boolean {
   if (e.kind !== 'intervene' || (e.a ?? -1) < 0) return false;
-  if (e.b === -8) return true;
+  // b=−8 也是立约"没有对象"(treatyBook.ts 的 IV_NOBODY,不带 n):大崩解生效的那条一定带继承国数 n
+  if (e.b === -8) return (e.n ?? 0) > 0;
   return e.b === -1 && (e.n ?? 0) > 0 && e.foe !== undefined;
 }
 
