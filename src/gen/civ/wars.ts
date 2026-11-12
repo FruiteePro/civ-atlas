@@ -332,7 +332,8 @@ export interface War {
   /** 议和的年份(还在打 = undefined) */
   end?: Year;
   /** 这场战争里攻占的州(按先后):by = 攻占它的一方 */
-  takes: { year: Year; region: number; by: number }[];
+  /** 攻占的州(tribal = 顺手收服的无主部落州,史事 conquer 的 b = −1;接着推时由史事重建,一场每边的上限照它数) */
+  takes: { year: Year; region: number; by: number; tribal?: true }[];
 }
 
 export interface WarModel {
@@ -936,9 +937,12 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     api.war.onFall?.(w, x, y, t);
   };
 
-  /** 这场仗里各方已经顺手收服的无主部落州数(key = 战争编号 * 32768 + 国家) */
-  const tribalGot = new Map<number, number>();
-  const tribalKey = (w: War, x: number) => w.id * 32768 + x;
+  /** 这场仗里 x 已经顺手收服的无主部落州数(照 takes 数:接着推时 takes 由史事重建,和一口气推完一样) */
+  const tribalGot = (w: War, x: number) => {
+    let n = 0;
+    for (const e of w.takes) if (e.tribal && e.by === x) n++;
+    return n;
+  };
 
   /**
    * 中古以后,打仗时顺手收服和 r 接壤的无主部落州。按国都时代、政体、贫富、民族、信仰加权,
@@ -952,7 +956,7 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     const cap = pm.settlements[capitalAt(X, t)]?.region;
     const era = cap !== undefined ? (pm.eraAt?.(cap) ?? -1) : -1;
     if (era < TRIBAL_ERA0) return 0;
-    const already = tribalGot.get(tribalKey(w, x)) ?? 0;
+    const already = tribalGot(w, x);
     if (already >= TRIBAL_WAR_MAX) return 0;
     const haltMask = ownedAtHalt(x, t);
     const culture = sim.owners[Layer.Culture];
@@ -976,10 +980,9 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
       if (u >= odds / (1 + odds)) continue;
       sim.setOwner(Layer.Polity, j, x, Ev.Conquer);
       sim.record('conquer', { a: x, b: -1, region: j, settlement: pm.cityOf[j], war: w.id });
-      w.takes.push({ year: t, region: j, by: x });
+      w.takes.push({ year: t, region: j, by: x, tribal: true });
       got++;
     }
-    if (got) tribalGot.set(tribalKey(w, x), already + got);
     return got;
   };
 
@@ -1561,7 +1564,7 @@ export function resumeWars(sim: CivSim, world: World, civ: Civ): void {
     if (e.kind === 'war') {
       wm.wars[e.war] = { id: e.war, a: e.a, b: e.b, start: e.year, takes: [] };
       if (e.cause === 'quell' || e.cause === 'heir' || e.cause === 'trek') civil.add(e.war);
-    } else if (e.kind === 'conquer' && e.war >= 0) wm.wars[e.war]?.takes.push({ year: e.year, region: e.region, by: e.a });
+    } else if (e.kind === 'conquer' && e.war >= 0) wm.wars[e.war]?.takes.push({ year: e.year, region: e.region, by: e.a, ...(e.b === -1 ? { tribal: true as const } : {}) });
     else if (e.kind === 'peace') {
       const w = wm.wars[e.war];
       if (w) w.end = e.year;
