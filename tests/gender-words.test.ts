@@ -9,7 +9,6 @@ import { DEFAULT_PARAMS, generateWorld } from '../src/gen/world';
 import { generateCiv, type Civ } from '../src/gen/civ';
 import type { Person, Polity } from '../src/gen/civ/types';
 import { polityTierAt } from '../src/gen/civ/growth';
-import { rulerRole } from '../src/gen/civ/story/peopleText';
 import { royalSeg } from '../src/gen/civ/regime';
 import {
   bySex,
