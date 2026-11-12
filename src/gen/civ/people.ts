@@ -465,7 +465,9 @@ function peopleOnce(civ: PeopleInput, kills: Kills): { people: Person[]; ids: Ma
         byK[p.id].set(k, person);
         // 预定的继承人(在位表里的下一位,royals.ts)的名字:和他真的接着即位时起的一样(即位以前就以这个名字领兵)
         if (!republic) {
-          const nxt = book[n];
+          // 下一位要排出来再看:在位表只排到"此刻在位的那一位"为止,推演里往后看过几眼的才多排了一位(看没看过,接着推和一口气推不一样)。
+          // 这一位在位到最后、表里还没有下一位的,往后排到他到期那一刻,下一位就是他的继承人
+          const nxt = book[n] ?? (n === book.length && r.natural > end ? reignBook(knobs, base, tag[p.id], p, r.natural, acts.get(p.id))[n] : undefined);
           const heirBorn = nxt && nxt.dynasty === i && !nxt.crown ? q(nxt.from - nxt.age) : born;
           heirNames.set(person, rulerName(K, namerOf(p, heirBorn), tag[p.id], k + 1, j + 1, surname, new Set(usedGiven), pool.slice(), R, false, undefined, person.name));
         }
