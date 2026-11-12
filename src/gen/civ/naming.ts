@@ -758,7 +758,9 @@ export function nameSettlements(seed: number, settlements: Settlement[], culture
     if (old && old.culture === s.culture && old.name) s.name = old.name;
     else {
       const cu = cultures[s.culture];
-      const official = s.capitalFrom !== undefined || !!(s.capitalSpans && s.capitalSpans.length);
+      // 建城那一刻就是国都的(立国的都城)算官称;后来才迁都过来的不算:城名只看建城以前的历史,推得再远也不变
+      const born = s.founded + 1e-6;
+      const official = (s.capitalFrom !== undefined && s.capitalFrom <= born) || !!s.capitalSpans?.some((x) => x.from <= born);
       s.name = firstFree(namer(cu?.style || 'kingdom', cultureDialect(cu, cultures), namingContact(cu, contacts, s.founded, official)).keyed('city', at[s.id].cell, at[s.id].n), taken).zh;
       taken.add(s.name);
     }

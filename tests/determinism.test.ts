@@ -161,7 +161,7 @@ const EXPECTED: Record<number, Record<string, string>> = {
     'civ.routes': '63de9da6eca3',
     'civ.sailFrom': '5bd9534e2395',
     'civ.seed': '6b5deaaf6a3b',
-    'civ.settlements': '44a46c412463',
+    'civ.settlements': '95b382f118ae',
     'civ.spreadYears': 'fbd57f466ab4',
     'civ.trade': 'fff7b7b0c110',
     'civ.viable': '139cfad50334',
