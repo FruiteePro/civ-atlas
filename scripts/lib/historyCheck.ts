@@ -14,6 +14,7 @@ import { capitalAt, populationAt } from '../../src/gen/civ/growth';
 import { faithAt, faithFromScratch } from '../../src/gen/civ/religion';
 import { warSpans } from '../../src/render/civ/warfare';
 import type { Civ } from '../../src/gen/civ';
+import { REGENCY_KINDS } from '../../src/gen/civ/regents';
 
 /** 一个字段的"样子":路径里的数组下标都换成 [](同一个字段在哪一项里都算一样) */
 const shape = (path: string) => path.replace(/\[\d+\]/g, '[]');
@@ -75,9 +76,15 @@ export function historyProblems(civ: Civ, endYear: number, allow: { nan: Readonl
   for (let i = 0; i < A.length; i++) {
     const e = A[i];
     if (!Number.isFinite(e.year) || (i && e.year < A[i - 1].year)) bad(`史事 ${i}(${e.kind})年份 ${e.year}`);
-    // 同化与迁徙、民族分化的 a、b 是民族;大迁徙的 a 是民族、b 是国家;别的 a、b 是国家
+    // 同化与迁徙、民族分化的 a、b 是民族;大迁徙的 a 是民族、b 是国家;摄政的 a 是国家、b 是摄政的种类(REGENCY_KINDS 的下标);别的 a、b 是国家
     const folk = e.kind === 'migrate' || e.kind === 'assimilate' || e.kind === 'vanish' || e.kind === 'diverge';
-    const ok = folk ? e.a >= 0 && e.a < C && e.b < C : e.kind === 'trek' ? e.a >= 0 && e.a < C && e.b < P : e.a < P && e.b < P;
+    const ok = folk
+      ? e.a >= 0 && e.a < C && e.b < C
+      : e.kind === 'trek'
+        ? e.a >= 0 && e.a < C && e.b < P
+        : e.kind === 'regent'
+          ? e.a >= 0 && e.a < P && Number.isInteger(e.b) && e.b >= 0 && e.b < REGENCY_KINDS.length
+          : e.a < P && e.b < P;
     if (!ok) bad(`史事 ${i}(${e.kind})编号 ${e.a}/${e.b}`);
   }
   for (const po of civ.polities) {
