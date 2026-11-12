@@ -1540,7 +1540,10 @@ export function authorName(civ: Civ, char: number): string {
 
 /** 国家的事记在作者人物名下(干预带 author):"(林小满之议)";没带 = '' */
 function authorBy(civ: Civ, v: Intervention | undefined): string {
-  return v?.author !== undefined ? `(${authorName(civ, v.author)}之议)` : '';
+  const who = v?.author !== undefined ? `(${authorName(civ, v.author)}之议)` : '';
+  // AI 导演下的命令带一句缘由:"(AI 导演:两强久峙,促其决战)";作者自己写了缘由的照写
+  const note = v?.note ? `(${v.ai ? 'AI 导演:' : ''}${v.note})` : '';
+  return who + note;
 }
 
 /** 作者的人物是男是女:套过人物卡的历史里记着(Civ.authorFemale);没套过 = 男 */

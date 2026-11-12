@@ -280,7 +280,9 @@ export function civIndexes(civ: Civ, list: readonly unknown[]): number[] {
 export function interventionText(civ: Civ, v: Intervention, i = -1, a?: string): string {
   const t = ivText(civ, v, i, a);
   // 记在作者人物名下的国家的事:"大昌与索拉特结盟（林小满之议）"
-  return v.author !== undefined ? `${t}（${authorName(civ, v.author)}之议）` : t;
+  const by = v.author !== undefined ? `${t}（${authorName(civ, v.author)}之议）` : t;
+  // AI 导演下的命令:后面接一句缘由
+  return v.note ? `${by}（${v.ai ? 'AI 导演：' : ''}${v.note}）` : by;
 }
 
 function ivText(civ: Civ, v: Intervention, i: number, a: string | undefined): string {

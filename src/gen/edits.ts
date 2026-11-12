@@ -943,7 +943,15 @@ export type Intervention = (
       unrest?: number;
       look?: GuideLook;
     }
-) & { plot?: number; guide?: true; fromTick?: number; author?: number; plugin?: string };
+) & { plot?: number; guide?: true; fromTick?: number; author?: number; plugin?: string; ai?: true; note?: string };
+
+/** 干预带的一句缘由(Intervention.note)最多几个字;AI 导演下的命令(ai = true)每条带一句,编年史照写 */
+export const IV_NOTE_MAX = 40;
+/** 缘由清理:去掉换行和首尾空白,截到 IV_NOTE_MAX 个字;空 = '' */
+export function cleanIvNote(x: unknown): string {
+  if (typeof x !== 'string') return '';
+  return [...x.replace(/[\r\n\t]+/g, ' ').trim()].slice(0, IV_NOTE_MAX).join('').trim();
+}
 
 /** 能记在作者人物名下的几种(国家的事;Intervention.author,见文件头) */
 export const AUTHOR_IV_KINDS: readonly InterventionKind[] = ['ally', 'treaty', 'neutral', 'move', 'cede', 'destroy', 'collapse', 'found', 'policy', 'disaster', 'trek', 'stay'];
@@ -2441,6 +2449,10 @@ export function tidyIntervention(x: unknown): Intervention | null {
   // 记在作者人物名下(国家的事;推演不看它)
   if (isCharId(o.author) && AUTHOR_IV_KINDS.includes(v.kind)) v = { ...v, author: o.author };
   if (isPluginId(o.plugin)) v = { ...v, plugin: o.plugin };
+  // AI 导演下的(推演不看它;编年史写缘由、「每百年最多几条」照它数,见 ai/director.ts)
+  if (o.ai === true) v = { ...v, ai: true };
+  const note = cleanIvNote(o.note);
+  if (note) v = { ...v, note };
   return v;
 }
 
