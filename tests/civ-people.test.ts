@@ -86,7 +86,15 @@ describe.each([7, 2024])('人物 · seed=%i', (seed) => {
       }
       if (x.role !== 'ruler') continue;
       expect(x.from! - x.born).toBeGreaterThanOrEqual(10 - 1e-6);
-      expect(x.from! - x.born).toBeLessThanOrEqual(62 + 1e-6);
+      // 复辟时自立为君的执政(people.ts 的 self:同名、同生年,接着上一段卸任的那一刻)还是同一个人:按他头一回上台的年纪算
+      let first = x;
+      for (;;) {
+        const f = first;
+        const y = civ.people!.find((z) => z.role === 'ruler' && z.polity === f.polity && z.name === f.name && z.born === f.born && z.until === f.from);
+        if (!y) break;
+        first = y;
+      }
+      expect(first.from! - first.born).toBeLessThanOrEqual(62 + 1e-6);
       if (x.until !== undefined) expect(x.until).toBeGreaterThan(x.from!);
       if (x.fate === 'died' || x.fate === 'murdered' || x.fate === 'overthrown' || x.fate === 'fell') expect(x.died).toBe(x.until);
       if (x.died !== undefined && x.until !== undefined) expect(x.died).toBeGreaterThanOrEqual(x.until);
