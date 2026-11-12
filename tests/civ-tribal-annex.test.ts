@@ -1,15 +1,18 @@
 /**
  * 中古以后并吞部落地带(GENERATOR_VERSION 69):扩张门槛按国都时代、政体、贫富、民族、信仰加权;
  * 战争也可能顺手收服接壤的无主部落州。早年战争仍不占无主部落地,并不把部落地带一口吃光。
+ * 时代、信仰只看那一刻以前存下来的快照、算过的那一步(GENERATOR_VERSION 71):接着推时重放的预约和一口气推完一样。
  */
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_PARAMS, generateWorld, type World } from '../src/gen/world';
-import { generateCiv, type Civ } from '../src/gen/civ';
+import { continueCiv, generateCiv, type Civ } from '../src/gen/civ';
 import { OFFICIAL_KNOBS } from '../src/gen/civ/engine/knobs';
 import { POLITIES_KNOBS, tribalAnnexMul, type PolityModel } from '../src/gen/civ/polities';
 import { WARS_KNOBS } from '../src/gen/civ/wars';
 import { capitalAt } from '../src/gen/civ/growth';
-import { developmentAt, eraLevel, eraOf } from '../src/gen/civ/development';
+import { developmentAt, eraLevel, eraOf, snapEraBefore } from '../src/gen/civ/development';
+import { faithAt } from '../src/gen/civ/religion';
+import { tribalReplay } from '../src/gen/civ/tribalReplay';
 import type { Polity, Year } from '../src/gen/civ/types';
 
 const K = OFFICIAL_KNOBS.get(POLITIES_KNOBS);
@@ -54,14 +57,14 @@ function mock(opts: {
   } as Polity;
   const m = {
     k: K,
-    settlements: [{ region: 0 }],
+    // 国都在第 1 州,要收的是第 0 州(同教 = 两州信的一样)
+    settlements: [{ region: 1 }],
     tier: new Int8Array([opts.tier ?? 0]),
     terrain: { meanSuit: Float32Array.from([opts.suit ?? K.TRIBAL_SUIT_REF * 0.5]) },
   } as unknown as PolityModel;
   if (!opts.noHooks) {
-    m.eraAt = () => opts.era ?? 5;
-    m.faithAt = () => opts.rf ?? -1;
-    m.stateFaith = () => opts.sf ?? -1;
+    m.tribalEra = () => opts.era ?? 5;
+    m.tribalFaith = (r) => (r === 1 ? (opts.sf ?? -1) : (opts.rf ?? -1));
   }
   return tribalAnnexMul(m, p, 0, opts.cb ?? 2, 1000);
 }
@@ -141,5 +144,30 @@ describe('中古以后并吞部落地带', () => {
       }
     }
     expect(warTribal).toBeGreaterThan(0);
+  }, 120_000);
+
+  it('接着推:重放预约照存下来的时代、信仰,和推演里一样;推到 3000 再推 300 和一口气推到 3300 的归属、日志一样', () => {
+    const civ = civOf(7);
+    const era = tribalReplay.era!(civ);
+    const faith = tribalReplay.faith!(civ);
+    const dev = civ.development!;
+    // 时代:第 y 年以前最近的一份快照(整百年那一份到下一刻才算)
+    const r = civ.settlements[capitalAt(civ.polities[0], 1000)].region;
+    expect(era(r, 1000)).toBe(snapEraBefore(dev.snaps, dev.snapYears, 1000, r));
+    expect(era(r, 1000)).toBe(eraLevel(developmentAt(dev, 900), r));
+    expect(era(r, 1000.5)).toBeCloseTo(eraLevel(developmentAt(dev, 1000), r), 5);
+    // 信仰:第 y 年以前最近算过的那一步(整 5 年那一步在那一刻的事件之后)
+    expect(faith(r, 1000)).toBe(faithAt(civ, 995)[r]);
+    expect(faith(r, 1001)).toBe(faithAt(civ, 1000)[r]);
+    expect(era(r, 0)).toBe(-1);
+    expect(faith(r, 0)).toBe(-1);
+
+    const w = world(7);
+    const whole = generateCiv(w, { endYear: 3300 });
+    const once = continueCiv(w, civ, { endYear: 3300 });
+    expect(Array.from(once.polity)).toEqual(Array.from(whole.polity));
+    expect(once.log.size).toBe(whole.log.size);
+    expect(Array.from(once.log.region.subarray(0, once.log.size))).toEqual(Array.from(whole.log.region.subarray(0, whole.log.size)));
+    expect(once.settlements).toEqual(whole.settlements);
   }, 120_000);
 });

@@ -19,7 +19,7 @@ export type V1Seed = (typeof V1_SEEDS)[number];
 
 export const V1_PINS: Record<V1Seed, { weariness: { digest: string } & Record<string, unknown>; faith: { digest: string } & Record<string, unknown> }> = {
   1: {
-    weariness: { before: { wars: 50, meanYears: 4.71, long: 7 }, after: { wars: 40, meanYears: 3.26, long: 1 }, treaties: 15, digest: '0bbe51c5475efff2' },
+    weariness: { before: { wars: 50, meanYears: 4.71, long: 7 }, after: { wars: 40, meanYears: 3.26, long: 1 }, treaties: 15, digest: '00e163be30eb1bcd' },
     faith: { before: { wars: 232, farWars: 11, pacts: 23, samePacts: 16 }, after: { wars: 270, farWars: 38, pacts: 29, samePacts: 25 }, declare: 0, ally: 0, digest: '706119bd91ac24b3' },
   },
   2024: {

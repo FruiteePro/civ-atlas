@@ -12,7 +12,7 @@ export const SIM_PROBE_SEED = 7;
 /** 推几年:宗教生效每 5 年出手一次,取 200 回合左右 */
 export const SIM_PROBE_YEARS = 1000;
 /** 电脑上推出来的散列。改了推演或示例插件,单测会报,照它打出来的换掉 */
-export const SIM_PROBE_SUM = '93821bb70b78defc';
+export const SIM_PROBE_SUM = '4aa36bab19249d9b';
 /** 推 3000 年要在这么多秒以内(电脑上每秒至少推 80 年):超过算慢 */
 export const SIM_SLOW_SEC = 37.5;
 

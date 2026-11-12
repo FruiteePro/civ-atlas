@@ -4,7 +4,7 @@
     "commands": {},
     "chronicle": 0,
     "first": [],
-    "digest": "04cb9e496c8cb6ff"
+    "digest": "daee2b991dd2a738"
   },
   "comet": {
     "acts": 21,
@@ -15,25 +15,26 @@
       "486 彗星见于天,人心惶惶",
       "702 彗星见于天,人心惶惶"
     ],
-    "digest": "90599d01a6249942"
+    "digest": "0ad6d919f8537c16"
   },
   "fallen": {
     "acts": 301,
     "commands": {},
-    "chronicle": 2,
+    "chronicle": 3,
     "first": [
-      "2010 {国:64}亡,自开辟以来亡国已50",
-      "2470 {国:116}亡,自开辟以来亡国已100"
+      "1950 {国:65}亡,自开辟以来亡国已50",
+      "2350 {国:111}亡,自开辟以来亡国已100",
+      "2740 {国:69}亡,自开辟以来亡国已150"
     ],
-    "digest": "ad066cdec46b2687"
+    "digest": "66cdf3865886b64a"
   },
   "conquest": {
     "acts": 31,
     "commands": {
-      "declare": 14
+      "declare": 16
     },
     "chronicle": 0,
     "first": [],
-    "digest": "c65a840c25294465"
+    "digest": "aef103d012a303e4"
   }
 }

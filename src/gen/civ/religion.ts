@@ -31,6 +31,7 @@ import type { World } from '../world';
 import type { CivSim } from './engine/sim';
 import { cultureModelOf, type CultureModel } from './cultures';
 import { polityModelOf, type PolityModel } from './polities';
+import { tribalReplay, type TribalLookup } from './tribalReplay';
 import { AdjKind, Layer } from './types';
 import { ownersAt, type Owners } from './engine/timeline';
 import { capitalAt, populationAt } from './growth';
@@ -623,11 +624,33 @@ function simSource(sim: CivSim, cm: CultureModel, pm: PolityModel): FaithSource 
   return { log: () => sim.logView, settlements: () => pm.settlements, polities: () => pm.polities, cultures: () => cm.cultures };
 }
 
+/**
+ * 州 r 在第 y 年以前最近算过的那一步信什么(第 y 年那一刻的事件看到的那一步:y 整 STEP 年时是 y − STEP)。
+ * at(s) = 第 s 年那一步算完时各州的信仰;同一步只翻一次日志。收服部落地带用(polities.ts 的 tribalFaith)
+ */
+function faithBefore(at: (s: Year, out?: Int16Array) => Int16Array): TribalLookup {
+  let step = NaN;
+  let cur: Int16Array | undefined;
+  return (r, y) => {
+    const s = Math.ceil(y / STEP) * STEP - STEP;
+    if (s < 0) return -1;
+    if (s !== step) {
+      cur = at(s, cur);
+      step = s;
+    }
+    return r >= 0 && r < cur!.length ? cur![r] : -1;
+  };
+}
+
+// 接着推:resumePolities 重放预约时照存下来的信仰(检查点 + 日志,和推演里 FaithSim.faithAt 同一个口径)
+tribalReplay.faith = (civ) => (civ.religion ? faithBefore((s, out) => faithAt(civ, s, out)) : () => -1);
+
 function hook(sim: CivSim, fs: FaithSim, first: Year, pm?: PolityModel): void {
   sims.set(sim, fs);
   if (pm) {
     pm.faithAt = (r) => (r >= 0 && r < fs.faith.length ? fs.faith[r] : -1);
     pm.stateFaith = (p) => fs.stateFaith(p);
+    pm.tribalFaith = faithBefore((s, out) => fs.faithAt(s, out));
     pm.faithGap = (f, g) => {
       if (f < 0 || g < 0 || f >= fs.faithCount || g >= fs.faithCount) return -1;
       if (f === g) return 0;

@@ -18,6 +18,7 @@
  *   - 只有海洋国家能跨海(海峡、航线),别的国家不会有跨海领土
  *   - 离国都越远越慢(× e^(离国都的路程 / REACH)):国家不会无限铺开,边远处留下有人住、没有国家的"部落地带";
  *     中古以后扩张算账按国都时代、政体、州的贫富、民族和信仰再放一截(tribalAnnexMul),富庶、同族、同教的更容易收服,并不把部落地带一口吃光
+ *     (时代、信仰只看那一刻以前存下来的发展度快照、算过的那一步信仰:接着推时重放预约和一口气推完一样)
  *   - 阶段 3 有了战争(wars.ts):国家会丢州、迁都、灭亡。"国家到达"触发时要求这个国家和国都连成一片的国土
  *     还挨着那一州(丢了出发的那一州、或者只剩被切出去的飞地挨着,就不去了:不长出飞地);灭亡的国家撤掉国都间距标记;
  *     迁都后"离国都的路程"按新国都算(迁都那一刻之后预约的才按新的);迁都的下一刻从现有国土往外重新预约一遍
@@ -49,6 +50,7 @@ import type { InterventionModel } from './interventions';
 import type { Intervention } from '../edits';
 import { actsFrom, leaningsAt, reignAt, reignBook, reignStart, rulerBase, type LeaningEffect, type Reign, type RulerAct } from './rulers';
 import { regimeAt } from './regime';
+import { tribalReplay } from './tribalReplay';
 import { POLICY_KNOBS, policiesFrom, policySeg, powerScale, segAt, segEffect, unrestShift, type PolicyIv, type PolicySeg } from './policy';
 import { regencyBase, regentAt, regentsFrom, type Regency, type RegencyCtx } from './regents';
 import type { CivModule } from './modules';
@@ -235,6 +237,13 @@ export interface PolityModel {
   faithAt?: (r: number) => number;
   /** 国家此刻的国教(−1 / 不给 = 没有) */
   stateFaith?: (p: number) => number;
+  /**
+   * 收服部落地带(tribalAnnexMul)看的州的时代、信仰:只看第 y 年以前已经定下来的历史 —— 时代看 y 以前最近的一份发展度快照,
+   * 信仰看 y 以前最近算过的那一步。推演里由 development.ts、religion.ts 挂上;接着推时 resumePolities 重放预约以前先照 Civ 里存的挂上
+   * (tribalReplay),所以重放出来的预约和一口气推完一样。−1 / 不给 = 不明
+   */
+  tribalEra?: (r: number, y: Year) => number;
+  tribalFaith?: (r: number, y: Year) => number;
   /** 两种信仰的差距(religion.ts 挂上;0 = 同一信仰,0.5 = 同一大教的不同派,1 = 异教,−1 / 不给 = 不明) */
   faithGap?: (f: number, g: number) => number;
   /** 推演插件接了影响口 war.power 时挂上(国力加减再乘它) */
@@ -685,7 +694,7 @@ function clamp(x: number, lo: number, hi: number): number {
 export function tribalAnnexMul(m: PolityModel, p: Polity, b: number, cb: number, t: Year): number {
   const { TRIBAL_ERA0, TRIBAL_ERA1, TRIBAL_LATE, TRIBAL_EMPIRE, TRIBAL_JUNTA, TRIBAL_THEOCRACY, TRIBAL_REPUBLIC, TRIBAL_WEALTH, TRIBAL_SUIT_REF, TRIBAL_KIN, TRIBAL_FAITH, TRIBAL_FAITH_D } = m.k;
   const cap = m.settlements[capitalAt(p, t)]?.region;
-  const era = cap !== undefined ? (m.eraAt?.(cap) ?? -1) : -1;
+  const era = cap !== undefined ? (m.tribalEra?.(cap, t) ?? -1) : -1;
   if (era < TRIBAL_ERA0) return 1;
   const span = Math.max(1e-6, TRIBAL_ERA1 - TRIBAL_ERA0);
   const fill = clamp((era - TRIBAL_ERA0) / span, 0, 1);
@@ -698,11 +707,13 @@ export function tribalAnnexMul(m: PolityModel, p: Polity, b: number, cb: number,
   const rich = clamp((m.terrain.meanSuit[b] - TRIBAL_SUIT_REF * 0.5) / Math.max(1e-6, TRIBAL_SUIT_REF), 0, 1);
   mul *= 1 - TRIBAL_WEALTH * fill * rich;
   if (cb === p.culture) mul *= 1 - TRIBAL_KIN * fill;
-  const sf = m.stateFaith?.(p.id) ?? -1;
-  const rf = m.faithAt?.(b) ?? -1;
+  // 同教 = 那一州和国都那一州信的一样(国都的信仰当这国的信仰:国教的州表不存,接着推时重放不出来)
+  const sf = cap !== undefined ? (m.tribalFaith?.(cap, t) ?? -1) : -1;
+  const rf = m.tribalFaith?.(b, t) ?? -1;
   if (sf >= 0 && rf >= 0) mul *= sf === rf ? 1 - TRIBAL_FAITH * fill : 1 + TRIBAL_FAITH_D * fill;
   return clamp(mul, 0.45, 1.25);
 }
+
 
 /**
  * 国家 p 经邻接边 k 进州 b 要几年(现在预约);不值得去(扩张算账)或走不了 = Infinity。
@@ -1510,6 +1521,9 @@ export function resumePolities(sim: CivSim, world: World, civ: Civ, iv?: Interve
     m.lands[civ.polity[r]].push(r);
   }
   installPolities(sim, m);
+  // 下面重放预约时扩张算账要看的时代、信仰:照存下来的历史(development、religion 接着推时再换成推演里的)
+  m.tribalEra = tribalReplay.era?.(civ);
+  m.tribalFaith = tribalReplay.faith?.(civ);
 
   const now = sim.now;
   const culture = sim.owners[Layer.Culture];

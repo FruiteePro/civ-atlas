@@ -66,6 +66,7 @@ import { BookWriter } from './fiscalBook';
 import { keyed, subSeed } from './engine/rand';
 import { type CivSim } from './engine/sim';
 import { grantSail, polityModelOf, type PolityModel } from './polities';
+import { tribalReplay } from './tribalReplay';
 import { POLICY_KNOBS, focusIndex, segAt, type PolicySeg } from './policy';
 import { cultureModelOf } from './cultures';
 import { TableEngine, type TableCard } from './engine/tables';
@@ -201,6 +202,36 @@ export function eraLevel(lv: ArrayLike<number>, r: number): number {
   for (let c = 0; c < 4; c++) s += ERA_WEIGHT[c] / (lv[o + c] + 1);
   return 1 / s - 1;
 }
+
+const snapLv = new Float32Array(CAP_COUNT);
+/**
+ * 州 r 在第 y 年以前最近的一份快照里的时代数值(没有快照、州号超出 = −1)。快照一份份往后加、加了不改,
+ * 推演里第 y 年问的和接着推时照存下来的快照问的一样(收服部落地带用,见 polities.ts 的 tribalEra)
+ */
+export function snapEraBefore(snaps: readonly Uint8Array[], years: readonly Year[], y: Year, r: number): number {
+  let lo = 0;
+  let hi = years.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (years[mid] < y) lo = mid + 1;
+    else hi = mid;
+  }
+  const s = lo > 0 ? snaps[lo - 1] : undefined;
+  const o = r * CAP_COUNT;
+  if (!s || r < 0 || o + CAP_COUNT > s.length) return -1;
+  for (let c = 0; c < CAP_COUNT; c++) snapLv[c] = s[o + c] / LEVEL_SCALE;
+  return eraLevel(snapLv, 0);
+}
+
+// 接着推:resumePolities 重放预约时照存下来的快照(推完时补的那一份不算,和 resumeDevelopment 接上的一样)
+tribalReplay.era = (civ) => {
+  const dev = civ.development;
+  if (!dev) return () => -1;
+  const keep = dev.snapYears.length - (dev.state?.tail ? 1 : 0);
+  const snaps = dev.snaps.slice(0, keep);
+  const years = dev.snapYears.slice(0, keep);
+  return (r, y) => snapEraBefore(snaps, years, y, r);
+};
 
 /** 时代数值 → 第几个时代和走了几成(0–1) */
 export function eraOf(level: number): { era: number; progress: number } {
@@ -513,6 +544,7 @@ function hook(sim: CivSim, d: DevModel): void {
   sim.tables.add(TABLE_GROUP.dev, d.eng);
   d.pm.capFactor = d.capF;
   d.pm.eraAt = (r) => (r >= 0 && r < d.R ? d.era[r] : -1);
+  d.pm.tribalEra = (r, y) => snapEraBefore(d.snaps, d.snapYears, y, r);
   if (sim.influence?.has('city.capacity')) d.pm.cityCapOf = (r) => cityCap(d.capF[r], sim.influence!.get('city.capacity')![r]);
   d.pm.military ??= [];
   // 打仗看物产(wars.ts):州里有哪几样;国家缺哪几样
