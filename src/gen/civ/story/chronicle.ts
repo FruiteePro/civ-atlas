@@ -2020,7 +2020,8 @@ function simpleEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
         }
         const seat = cityName(civ, e.settlement);
         if (seat) t += `,都于${seat}`;
-        return withPeople(base(e, id, t, isGreat(P) || isGreat(polityOf(civ, e.b)) ? 3 : 2, [e.a, e.b], [e.region], '教'), lead2);
+        // 和别的自立一样:分出来以后长成大国的才是大事(母国是大国的不算)
+        return withPeople(base(e, id, t, isGreat(P) ? 3 : 2, [e.a, e.b], [e.region], '教'), lead2);
       } else {
         // "瑞州守将李昭叛大渭自立,号瑞国";割据多年以后自立的(control.ts):"割据瑞州的守将李昭叛大渭自立"
         const title = P?.eastern ? '守将' : '领主';
