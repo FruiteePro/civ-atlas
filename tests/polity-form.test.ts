@@ -42,8 +42,11 @@ describe('政体名', () => {
       ['城邦', f({ lineage: 'republic', tier: 0, regions: 2 })],
       ['商人共和国', f({ lineage: 'republic', tier: 1 })],
       ['海上帝国', f({ lineage: 'republic', tier: 3, regions: 80 })],
+      ['酋邦', f({ tier: 1, regions: 6, confed: 'chiefdom' })],
       ['部落', f({ tier: 0, regions: 3 })],
       ['部落联盟', f({ tier: 0, regions: 4 })],
+      // 部落联盟立国的(Polity.confed),第 1 档也还叫部落联盟;游牧的叫汗国
+      ['部落联盟', f({ tier: 1, regions: 6, confed: 'league' })],
       ['立宪王国', f({ charter: 2 })],
       ['立宪帝国', f({ tier: 3, charter: 2, tax: 2, army: 1 })],
       ['集权王国', f({ tax: 2, army: 1 })],
@@ -55,8 +58,9 @@ describe('政体名', () => {
       ['王国', f({})],
       ['帝国', f({ tier: 3 })],
     ];
-    // 表里 20 行(GENERATOR_VERSION 68 加了神权国),一行不漏
-    expect(cases.map((c) => c[0])).toEqual(FORMS.map((r) => r.name));
+    // 表里 21 行(GENERATOR_VERSION 68 加了神权国,75 加了酋邦),一行不漏
+    expect([...new Set(cases.map((c) => c[0]))]).toEqual(FORMS.map((r) => r.name));
+    expect(formName(f({ lineage: 'khanate', tier: 1, regions: 6, confed: 'league' }))).toBe('汗国');
     for (const [name, facts] of cases) expect(formName(facts), name).toBe(name);
   });
 

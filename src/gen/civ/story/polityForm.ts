@@ -234,6 +234,7 @@ export function formFactsAt(civ: Civ, p: number, year: Year): FormFacts | null {
     reformed: reformedSeg(P, seg),
     charter: rules.charter,
     franchise: rules.franchise,
+    ...(P.confed !== undefined ? { confed: P.kind === 'sea' ? ('chiefdom' as const) : ('league' as const) } : {}),
   };
 }
 
