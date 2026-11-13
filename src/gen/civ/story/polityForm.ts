@@ -70,6 +70,8 @@ export interface FormFacts {
   reformed: boolean;
   charter: number;
   franchise: number;
+  /** 部落联盟立国的(Polity.confed);海洋民族的联盟叫酋邦 */
+  confed?: 'league' | 'chiefdom';
 }
 
 /** 继任、议政、参与三条(各 0–3,少数人 → 众人;见文件头) */
@@ -121,8 +123,9 @@ export const FORMS = [
   { name: '城邦', test: (f: FormFacts) => republic(f) && f.tier <= 0 },
   { name: '商人共和国', test: (f: FormFacts) => republic(f) && !empire(f) },
   { name: '海上帝国', test: (f: FormFacts) => republic(f) },
-  { name: '部落', test: (f: FormFacts) => f.tier <= 0 && f.regions < LEAGUE_MIN },
-  { name: '部落联盟', test: (f: FormFacts) => f.tier <= 0 },
+  { name: '酋邦', test: (f: FormFacts) => f.confed === 'chiefdom' && f.tier <= 1 },
+  { name: '部落', test: (f: FormFacts) => !f.confed && f.tier <= 0 && f.regions < LEAGUE_MIN },
+  { name: '部落联盟', test: (f: FormFacts) => f.tier <= 0 || (f.confed === 'league' && f.tier <= 1 && f.lineage !== 'khanate') },
   { name: '立宪王国', test: (f: FormFacts) => f.regime === 'crown' && f.charter >= 2 && !empire(f) },
   { name: '立宪帝国', test: (f: FormFacts) => f.regime === 'crown' && f.charter >= 2 },
   { name: '集权王国', test: (f: FormFacts) => centralScore(f) >= CENTRAL_MIN && !empire(f) },
@@ -317,6 +320,7 @@ function formBook(civ: Civ, p: number): FormBook {
       reformed: reformedSeg(P, seg),
       charter: rules.charter,
       franchise: rules.franchise,
+      ...(P.confed !== undefined ? { confed: P.kind === 'sea' ? ('chiefdom' as const) : ('league' as const) } : {}),
     };
     const name = formName(facts);
     const last = book.looks[book.looks.length - 1];

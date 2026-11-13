@@ -276,7 +276,9 @@ export function formWhy(f: FormLook): string {
     case '部落':
       return '还没称国，各部各有头人';
     case '部落联盟':
-      return `还没称国，${x.regions} 个州各有头人，结成联盟`;
+      return x.confed ? `诸部合为一盟，${x.regions} 个州各有头人，共推盟主` : `还没称国，${x.regions} 个州各有头人，结成联盟`;
+    case '酋邦':
+      return `海上诸部共奉一位大酋长，${x.regions} 个州各有头人`;
     case '城邦':
       return '一城自治，没有君主，执政任满继任';
     case '商人共和国':

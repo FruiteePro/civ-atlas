@@ -197,6 +197,23 @@ export const POLITICS_KNOBS = defineKnobs('politics', {
   EDGE_AGE: 80,
   EDGE_SPACING: 0.6,
   EDGE_P: 0.12,
+  /**
+   * 部落联盟立国(看部落地带时一并看):从 CONF_FIRST 年起,连成片、同一民族、还没归国家的部落州(只走平地、跨河、翻山)
+   * 至少 CONF_MIN 州(整座岛都是这一片的 CONF_ISLE_MIN 州)、片里各城人口上限合计 CONF_CAP(千人)以上;
+   * 都城 = 片里人口上限最大的城(人口过 CONF_POP、建城满 CONF_AGE 年),离各国国都至少 CONF_SPACING × 国都间距;
+   * 每次看的机会 CONF_P(游牧 CONF_NOMAD_P)。立国时从都城起沿着这一片取最近的 CONF_CORE 州(含都城)。
+   * 史事 found 的 cause = confed;编年史写"诸部合为某某"
+   */
+  CONF_FIRST: 1200,
+  CONF_MIN: 4,
+  CONF_ISLE_MIN: 2,
+  CONF_CAP: 40,
+  CONF_POP: 3,
+  CONF_AGE: 80,
+  CONF_SPACING: 0.7,
+  CONF_P: 0.08,
+  CONF_NOMAD_P: 0.15,
+  CONF_CORE: 8,
 });
 
 
@@ -246,6 +263,7 @@ const U_RESTORE = 7;
 const U_TRIBAL_T = 8;
 const U_EDGE = 9;
 const U_REBEL_THEO = 10;
+const U_CONF = 11;
 
 // ---------------------------------------------------------------------------
 // 模型
@@ -338,7 +356,7 @@ export function installPolitics(sim: CivSim, pm: PolityModel, world: World): Pol
 }
 
 function hook(sim: CivSim, pol: PoliticsModel): void {
-  const { CRISIS_YEARS, SETTLE, SIZE_D, SPLIT_MIN_SIZE, CRISIS_CAPITAL, CRISIS_WAR, CRISIS_LOSS, SPLIT_AGE, SPLIT_REST, DYNASTY_YEARS, CRISIS_DYNASTY, SPLIT_REACH, LORD_D, RECENT, RECENT_D, RISE_JITTER, SPLIT_ODDS, SPLIT_K, SPLIT_D0, SPLIT_MAX_GROUP, SPLIT_MIN_GROUP, SPLIT_FRAC, GROUP_MIN_D, GROUP_DROP, GROUP_KIN, GROUP_COMPACT, MERGE_SMALL, MERGE_AGE, MERGE_RATIO, MERGE_ODDS, CAPMOVE_MIN, CAPMOVE_AGE, CAPMOVE_REST, ECC_PRE, CENTER_L, CAPMOVE_POP, CAPMOVE_TOP, ECC_RATIO, FRONT_RATIO, CAPMOVE_P, RESTORE_MIN_OWNER, W_WAR, RECENT_SPLIT, W_SPLIT, W_CAP, W_LOSS, RESTORE_FOREIGN, RESTORE_ODDS, RESTORE_MAX_GROUP, RESTORE_MIN_GROUP, RESTORE_FRAC, RESTORE_TRIES, EDGE_MENTOR_AGE, EDGE_MENTOR_SIZE, EDGE_CAP, EDGE_AGE, EDGE_POP, EDGE_P, EDGE_SPACING } = pol.k;
+  const { CRISIS_YEARS, SETTLE, SIZE_D, SPLIT_MIN_SIZE, CRISIS_CAPITAL, CRISIS_WAR, CRISIS_LOSS, SPLIT_AGE, SPLIT_REST, DYNASTY_YEARS, CRISIS_DYNASTY, SPLIT_REACH, LORD_D, RECENT, RECENT_D, RISE_JITTER, SPLIT_ODDS, SPLIT_K, SPLIT_D0, SPLIT_MAX_GROUP, SPLIT_MIN_GROUP, SPLIT_FRAC, GROUP_MIN_D, GROUP_DROP, GROUP_KIN, GROUP_COMPACT, MERGE_SMALL, MERGE_AGE, MERGE_RATIO, MERGE_ODDS, CAPMOVE_MIN, CAPMOVE_AGE, CAPMOVE_REST, ECC_PRE, CENTER_L, CAPMOVE_POP, CAPMOVE_TOP, ECC_RATIO, FRONT_RATIO, CAPMOVE_P, RESTORE_MIN_OWNER, W_WAR, RECENT_SPLIT, W_SPLIT, W_CAP, W_LOSS, RESTORE_FOREIGN, RESTORE_ODDS, RESTORE_MAX_GROUP, RESTORE_MIN_GROUP, RESTORE_FRAC, RESTORE_TRIES, EDGE_MENTOR_AGE, EDGE_MENTOR_SIZE, EDGE_CAP, EDGE_AGE, EDGE_POP, EDGE_P, EDGE_SPACING, CONF_FIRST, CONF_MIN, CONF_ISLE_MIN, CONF_CAP, CONF_POP, CONF_AGE, CONF_SPACING, CONF_P, CONF_NOMAD_P, CONF_CORE } = pol.k;
   const api = civApi(sim);
   models.set(sim, pol);
   const { pm, wm } = pol;
@@ -949,7 +967,77 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
       sim.record('found', { a: p.id, b: m, region: r, settlement: s.id });
       caps[r] = 1;
     }
+    if (t >= CONF_FIRST) {
+      if (!caps) {
+        caps = new Uint8Array(R);
+        for (const P of pm.polities) if (P.ended === undefined) caps[capRegion(P.id, t)] = 1;
+      }
+      confederate(k, t, caps);
+    }
   });
+
+  /**
+   * 部落联盟立国(见 CONF_*):按州号扫一遍连成片的同族部落地带,够格的抽签立国。caps = 在世国家的国都所在州(立了就补上)。
+   * 只看此刻的归属、城和人口,接着推时同一刻重算出来一样
+   */
+  const confederate = (k: number, t: Year, caps: Uint8Array) => {
+    const occ = new Map<number, number>();
+    for (let a = 0; a < R; a++) if (culture[a] >= 0) occ.set(reg.landmass[a], (occ.get(reg.landmass[a]) ?? 0) + 1);
+    const seen = new Uint8Array(R);
+    const open = (j: number) => owner[j] < 0 && culture[j] >= 0 && !api.polity.closed?.(j, -1, t);
+    for (let r0 = 0; r0 < R; r0++) {
+      if (seen[r0] || !open(r0)) continue;
+      const c = culture[r0];
+      const cl = [r0];
+      seen[r0] = 1;
+      for (let h = 0; h < cl.length; h++) {
+        const a = cl[h];
+        for (let q = reg.adjStart[a]; q < reg.adjStart[a + 1]; q++) {
+          if (reg.adjKind[q] >= AdjKind.Strait) continue;
+          const j = reg.adj[q];
+          if (seen[j] || culture[j] !== c || !open(j)) continue;
+          seen[j] = 1;
+          cl.push(j);
+        }
+      }
+      if (cl.length < (cl.length === occ.get(reg.landmass[r0]) ? CONF_ISLE_MIN : CONF_MIN)) continue;
+      let sum = 0;
+      let best = -1;
+      let bestCap = -1;
+      for (const a of cl) {
+        const sid = pm.cityOf[a];
+        if (sid < 0) continue;
+        const s = pm.settlements[sid];
+        if (s.ended !== undefined) continue;
+        const cap = capacityAt(s, t);
+        sum += cap;
+        if (populationAt(s, t) >= CONF_POP && t - s.founded >= CONF_AGE && (cap > bestCap || (cap === bestCap && sid < best))) [best, bestCap] = [sid, cap];
+      }
+      if (sum < CONF_CAP || best < 0) continue;
+      const capR = pm.settlements[best].region;
+      if (nearCapital(capR, CONF_SPACING * pm.spacing, caps)) continue;
+      const nomad = pm.cultures[c].kind === 'nomad';
+      if (keyed(pol.base, pm.stag[best], k, U_CONF) >= (nomad ? CONF_NOMAD_P : CONF_P)) continue;
+      const p = addPolity(pm, best, c, t, { confed: cl.length });
+      sim.setOwner(Layer.Polity, capR, p.id, Ev.PolityFound);
+      sim.record('found', { a: p.id, region: capR, settlement: best, cause: 'confed' });
+      caps[capR] = 1;
+      // 立国时的国土:从都城沿着这一片宽搜,最近的 CONF_CORE 州(含都城)
+      const inCl = new Set(cl);
+      const got = [capR];
+      const mark = new Set([capR]);
+      for (let h = 0; h < got.length && got.length < CONF_CORE; h++) {
+        const a = got[h];
+        for (let q = reg.adjStart[a]; q < reg.adjStart[a + 1] && got.length < CONF_CORE; q++) {
+          const j = reg.adj[q];
+          if (reg.adjKind[q] >= AdjKind.Strait || mark.has(j) || !inCl.has(j)) continue;
+          mark.add(j);
+          got.push(j);
+          sim.setOwner(Layer.Polity, j, p.id, Ev.PolityArrive);
+        }
+      }
+    }
+  };
 }
 
 /**

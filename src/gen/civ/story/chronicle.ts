@@ -1945,6 +1945,8 @@ function simpleEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
       // 边缘立国:受邻近强国影响提早立的国("受大昌影响,李昭建平国")
       const mentor = e.b >= 0 && polityOf(civ, e.a)?.mentor === e.b ? e.b : -1;
       if (mentor >= 0) head = `受${pn(civ, mentor, y)}影响,${head}`;
+      // 部落联盟立国:"诸部合为大昌"(有人物的写盟主:"李昭合诸部为大昌")
+      if (e.cause === 'confed') head = who?.rise === 'found' ? `${who.name}合诸部为${pn(civ, e.a, y)}` : `诸部合为${pn(civ, e.a, y)}`;
       return withPeople(base(e, id, `${head}${where ? `,都于${where}` : ''}`, imp, mentor >= 0 ? [e.a, mentor] : [e.a], [e.region]), who?.rise === 'found' ? who : null);
     }
     case 'rank':
