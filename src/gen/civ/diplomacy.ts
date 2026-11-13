@@ -148,7 +148,7 @@ export const DIPLOMACY_KNOBS = defineKnobs('diplomacy', {
    */
   FAITH_SAME: 0.22,
   FAITH_FAR: 0.2,
-  FAITH_THEO: 1.65,
+  FAITH_THEO: 1.4,
 });
 
 

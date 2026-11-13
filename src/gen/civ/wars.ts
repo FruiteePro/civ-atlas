@@ -287,7 +287,7 @@ export const WARS_KNOBS = defineKnobs('wars', {
    */
   FAITH_WAR_SAME: 0.16,
   FAITH_WAR_FAR: 0.22,
-  FAITH_THEO: 1.65,
+  FAITH_THEO: 1.4,
 });
 /** 这张表的值(一套数里取出来的) */
 export type WarsKnobs = typeof WARS_KNOBS.values;

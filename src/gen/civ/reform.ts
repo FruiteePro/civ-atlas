@@ -35,11 +35,14 @@
  *      再晚的旧王室没人了,此刻的执政 / 将军自立为君(当成换了一朝,记 reform n = 2,b = −1)。
  *   ⑤ 还政(军政府满 RETURN_AGE 年):议事,x = RET_0 + RET_PUSH × (共治 + 民权)− RET_WAR × (好战 − 50) / 50 + 随机;办成复行共和、搁置。
  *   ⑥ 扩大参与(共和那几段):同 ②。
- *   ⑦ 立神权(王室的一段、共和那几段;军政府不走这条):国教不是民间信仰、本国信国教的州到 THEO_FAITH,
- *      上回改制满 REFORM_GAP 年 —— 赔率 THEO_ODDS × (1 + 国教占比超过门槛的那一截,再乘天命)× (1 + THEO_CRISIS × 窘迫);
- *      掷中就废君号 / 废执政,立教宗、大祭司或国师主国(记 reform n = 3)。
- *   ⑧ 废神权(神权那一段):满 THEO_LEAVE 年、共治 + 民权盛或国教占比掉下去 —— 赔率 THEO_LEAVE_ODDS × (1 + 共治民权)× (1 − 国教占比);
- *      本国原来有君主的也可走上面的复辟;掷中废神权、复行共和(记 reform n = 4)。
+ *   ⑦ 立神权(王室的一段、共和那几段;军政府不走这条;王室的一段先看①②的世俗改制,这一回没有要议的才看这条):
+ *      国教不是民间信仰、本国信国教的州到 THEO_FAITH,上回改制满 REFORM_GAP 年 ——
+ *      赔率 THEO_ODDS × (1 + 国教占比超过门槛的那一截,再乘天命)× 世俗倍数(secularMul:集权、大国、设了议会抵得住;
+ *      割据、最低一档、新分出、动荡、窘迫、新朝初立容易)× 政体倍数(君主 1、改出来的共和 THEO_REPUBLIC、海洋城邦共和 THEO_SEA)
+ *      × 入世倍数(ENGAGE_0 + ENGAGE_K × 国教的入世程度);掷中就废君号 / 废执政,立教宗、大祭司或国师主国(记 reform n = 3)。
+ *      别的进路(教团夺权、教众起事、起事自立立神权国)在 theocracy.ts。
+ *   ⑧ 废神权(神权那一段):满 THEO_LEAVE 年 —— 赔率 THEO_LEAVE_ODDS × (1 + 共治民权)× (1 − max(0, 国教占比 − LEAVE_FAITH0))
+ *      × (1 + 窘迫)× (LEAVE_E0 − LEAVE_EK × 入世程度);本国原来有君主的也可走上面的复辟;掷中废神权、复行共和(记 reform n = 4)。
  *
  * **政体脾气**:改出来的共和国执政少开战、军政府的执政好战、神权少开战偏内治(rulers.ts 的 COMMONWEALTH_SHIFT、JUNTA_SHIFT、THEOCRACY_SHIFT,加在共和一系的倾向偏移上);
  *   改制开的一段不算"改朝换代之乱"(wars.ts、treaties.ts 的乘乱),但和改朝换代一样从头算"当朝几年"(动荡、国用宽限)。
@@ -132,14 +135,45 @@ export const REFORM_KNOBS = defineKnobs('reform', {
   RET_WAR: 0.3,
   /** 政变的将军、革命起兵的人:年纪(随机)、倾向偏移(将军好战) */
   LEADER_AGE: [36, 58] as [number, number],
-  /** 立神权:本国信国教的州至少多少;赔率;窘迫加几成;天命再乘多少 */
+  /** 立神权:本国信国教的州至少多少;赔率;天命再乘多少(窘迫并进了"世俗弱",见 secularMul) */
   THEO_FAITH: 0.45,
-  THEO_ODDS: 0.055,
-  THEO_CRISIS: 0.4,
+  THEO_ODDS: 0.03,
   THEO_SKY: 0.6,
-  /** 废神权:满多少年才看;赔率 */
+  /**
+   * 世俗强弱(神权设计稿第 2、5 节):强 = STRONG_CENTRAL × 收归朝廷几样 ÷ 3 + STRONG_SIZE × min(1, 州数 ÷ BIG_SIZE) + STRONG_CHARTER × 设了议事会 / 议会;
+   * 弱 = min(WEAK_MAX, WEAK_LORD × 割据的州占几成 + WEAK_TRIBE × 还在最低一档 + WEAK_YOUNG × 新分出的国(YOUNG_YEARS 年内)
+   *        + WEAK_UNREST × min(1, 动荡 ÷ 2) + WEAK_BROKE × 窘迫 + WEAK_NEW × 新朝初立(NEW_YEARS 年内));
+   * 倍数 = (1 − SEC_RESIST × 强)× (1 + SEC_SUSCEPT × 弱)
+   */
+  STRONG_CENTRAL: 0.5,
+  STRONG_SIZE: 0.3,
+  STRONG_CHARTER: 0.2,
+  WEAK_LORD: 2,
+  WEAK_TRIBE: 0.6,
+  WEAK_YOUNG: 0.6,
+  YOUNG_YEARS: 120,
+  WEAK_UNREST: 0.6,
+  WEAK_BROKE: 0.4,
+  WEAK_NEW: 0.3,
+  NEW_YEARS: 60,
+  WEAK_MAX: 1.5,
+  SEC_RESIST: 0.85,
+  SEC_SUSCEPT: 1,
+  /** 政体倍数:改出来的共和、海洋城邦共和一系(军政府不立神权) */
+  THEO_REPUBLIC: 0.3,
+  THEO_SEA: 0.15,
+  /** 入世倍数 = ENGAGE_0 + ENGAGE_K × 国教的入世程度(religion.ts 的 faithEngage) */
+  ENGAGE_0: 0.25,
+  ENGAGE_K: 1.5,
+  /**
+   * 废神权:满 THEO_LEAVE 年才看;赔率 THEO_LEAVE_ODDS × (1 + 共治 + 民权)× (1 − max(0, 国教占比 − LEAVE_FAITH0))× (1 + 窘迫)
+   * × (LEAVE_E0 − LEAVE_EK × 入世程度)
+   */
   THEO_LEAVE: 40,
-  THEO_LEAVE_ODDS: 0.08,
+  THEO_LEAVE_ODDS: 0.15,
+  LEAVE_FAITH0: 0.5,
+  LEAVE_E0: 1.3,
+  LEAVE_EK: 0.6,
 });
 const GENERAL_SHIFT = { war: 15, expand: 5 };
 const REBEL_SHIFT = { develop: 15, war: 5 };
@@ -221,15 +255,16 @@ export function reformCheck(cx: ReformCtx): boolean {
   const since = t - cx.rules.reformed;
 
   if (regime === 'crown') {
-    if (tryTheocracy(cx, crisis, sky, since, R)) return true;
-    if (push < PUSH_MIN) return false;
+    // 先看世俗改制(立宪、废君、扩大参与);这一回没有要议的,才看立神权 —— 世俗改革正盛的国家不会同时被教团接管
     const r = cx.rules;
     let issue: Issue | null = null;
-    if (r.charter === 0) issue = share > right && pm.size[p] < SMALL ? Issue.Abolish : Issue.Charter;
-    else if (share + right >= ABOLISH_MIN && crisis > 0) issue = Issue.Abolish;
-    else if (r.franchise < 3 && right + equal >= WIDEN_MIN) issue = Issue.Widen;
-    else if (r.charter < 2 && right >= RIGHT_MIN) issue = Issue.Charter;
-    if (issue === null || !cx.ready(issue)) return false;
+    if (push >= PUSH_MIN) {
+      if (r.charter === 0) issue = share > right && pm.size[p] < SMALL ? Issue.Abolish : Issue.Charter;
+      else if (share + right >= ABOLISH_MIN && crisis > 0) issue = Issue.Abolish;
+      else if (r.franchise < 3 && right + equal >= WIDEN_MIN) issue = Issue.Widen;
+      else if (r.charter < 2 && right >= RIGHT_MIN) issue = Issue.Charter;
+    }
+    if (issue === null || !cx.ready(issue)) return tryTheocracy(cx, regime, sky, since, R);
     let x = X_0 + X_PUSH * (push - PUSH_MIN) + X_CRISIS * crisis - X_SKY * (sky - SKY_REF) - X_ARMY * army + JITTER * (R(U_JIT) - 0.5);
     if (issue === Issue.Abolish) x -= ABOLISH_HARD + ABOLISH_BIG * Math.min(1, pm.size[p] / BIG_SIZE);
     if (issue !== Issue.Widen) x -= POLAR * Math.max(0, cx.u - POLAR_U);
@@ -272,9 +307,9 @@ export function reformCheck(cx: ReformCtx): boolean {
       return true;
     }
   }
-  if (regime === 'republic' && tryTheocracy(cx, crisis, sky, since, R)) return true;
+  if (regime === 'republic' && tryTheocracy(cx, regime, sky, since, R)) return true;
   if (regime === 'theocracy') {
-    if (tryLaicize(cx, share, right, since, R)) return true;
+    if (tryLaicize(cx, share, right, crisis, since, R)) return true;
     return false;
   }
   if (regime === 'junta') {
@@ -318,25 +353,81 @@ function stateFaithShare(cx: ReformCtx): number {
 }
 
 /** 立神权:国教既盛,废君号或废执政,立教宗 / 大祭司 / 国师主国 */
-function tryTheocracy(cx: ReformCtx, crisis: number, sky: number, since: number, R: (use: number) => number): boolean {
-  const { REFORM_GAP, THEO_FAITH, THEO_ODDS, THEO_CRISIS, THEO_SKY } = cx.pm.knobs.get(REFORM_KNOBS);
+function tryTheocracy(cx: ReformCtx, regime: 'crown' | 'republic', sky: number, since: number, R: (use: number) => number): boolean {
+  const K = cx.pm.knobs.get(REFORM_KNOBS);
+  const { REFORM_GAP, THEO_FAITH, THEO_ODDS, THEO_SKY } = K;
   if (since < REFORM_GAP) return false;
   const share = stateFaithShare(cx);
   if (share < THEO_FAITH) return false;
   const fill = THEO_FAITH >= 1 ? 1 : (share - THEO_FAITH) / (1 - THEO_FAITH);
-  const odds = THEO_ODDS * (1 + fill * (1 + THEO_SKY * sky)) * (1 + THEO_CRISIS * crisis);
+  const odds = THEO_ODDS * (1 + fill * (1 + THEO_SKY * sky)) * secularMul(cx) * regimeMul(K, cx.P, regime) * engageMul(K, stateEngage(cx));
   if (R(U_THEO) >= odds / (1 + odds)) return false;
   note(cx, { b: -1, region: cx.capR, settlement: capitalAt(cx.P, cx.t), n: REFORM_THEOCRACY });
   openSeg(cx, { regime: 'theocracy', usurper: leader(cx, R, CLERIC_SHIFT) });
   return true;
 }
 
+/** 立神权的政体倍数:君主 1、改出来的共和 THEO_REPUBLIC、海洋城邦共和一系 THEO_SEA(军政府不走这条) */
+export function regimeMul(K: ReformKnobs, P: Polity, regime: 'crown' | 'republic' | 'junta' | 'theocracy'): number {
+  if (regime === 'crown') return 1;
+  if (regime === 'republic') return P.lineage === 'republic' ? K.THEO_SEA : K.THEO_REPUBLIC;
+  return 0;
+}
+
+/** 入世倍数:ENGAGE_0 + ENGAGE_K × 入世程度(出世的教 ×0.3 左右、入世的 ×1.6 左右) */
+export function engageMul(K: ReformKnobs, engage: number): number {
+  return K.ENGAGE_0 + K.ENGAGE_K * engage;
+}
+
+/** 世俗夺权、废神权的倍数:LEAVE_E0 − LEAVE_EK × 入世程度(出世的教团掌权更容易交权) */
+export function leaveMul(K: ReformKnobs, engage: number): number {
+  return Math.max(0, K.LEAVE_E0 - K.LEAVE_EK * engage);
+}
+
+/** 本国国教的入世程度(没有国教、民间信仰 = 0) */
+export function stateEngage(cx: Pick<ReformCtx, 'pm' | 'P'>): number {
+  const f = cx.pm.stateFaith?.(cx.P.id) ?? -1;
+  return f >= 0 ? (cx.pm.faithEngage?.(f) ?? 0) : 0;
+}
+
+/**
+ * 世俗强弱的倍数(见 REFORM_KNOBS 的 STRONG_* / WEAK_*):集权、大国、设了议会的抵得住教团;
+ * 割据多、还是最低一档、新分出来、动荡、窘迫、新朝初立的容易被教团接管。强国 ×0.15 左右,弱国到 ×2.5
+ */
+export function secularMul(cx: Pick<ReformCtx, 'pm' | 'cm' | 'P' | 't' | 'rules' | 'u' | 'broke'>): number {
+  const K = cx.pm.knobs.get(REFORM_KNOBS);
+  const { pm, P, t, rules: r } = cx;
+  const p = P.id;
+  const n = pm.size[p];
+  const central = (r.tax >= 2 ? 1 : r.tax === 1 ? 0.5 : 0) + Math.max(0, r.army) + Math.max(0, r.office);
+  const strong = K.STRONG_CENTRAL * Math.min(1, central / 3) + K.STRONG_SIZE * Math.min(1, n / K.BIG_SIZE) + K.STRONG_CHARTER * (r.charter >= 1 ? 1 : 0);
+  let lord = 0;
+  if (n > 0 && cx.cm.mark(p, t)) {
+    let k = 0;
+    for (const q of pm.lands[p]) if (cx.cm.inLord(q)) k++;
+    lord = k / n;
+  }
+  const d = P.dynasties;
+  const seg = d && d.length ? d[d.length - 1].year : P.founded;
+  const weak = Math.min(
+    K.WEAK_MAX,
+    K.WEAK_LORD * lord +
+      K.WEAK_TRIBE * (pm.tier[p] <= 0 ? 1 : 0) +
+      K.WEAK_YOUNG * (P.parent !== undefined && P.parent >= 0 && t - P.founded < K.YOUNG_YEARS ? 1 : 0) +
+      K.WEAK_UNREST * Math.min(1, Math.max(0, cx.u) / 2) +
+      K.WEAK_BROKE * Math.min(1, cx.broke) +
+      K.WEAK_NEW * (d && d.length > 1 && t - seg < K.NEW_YEARS ? 1 : 0),
+  );
+  return (1 - K.SEC_RESIST * strong) * (1 + K.SEC_SUSCEPT * weak);
+}
+
 /** 废神权、复行共和(本国原来有君主的也可走复辟,这里只管回到共和) */
-function tryLaicize(cx: ReformCtx, share: number, right: number, since: number, R: (use: number) => number): boolean {
-  const { THEO_LEAVE, THEO_LEAVE_ODDS } = cx.pm.knobs.get(REFORM_KNOBS);
+function tryLaicize(cx: ReformCtx, share: number, right: number, crisis: number, since: number, R: (use: number) => number): boolean {
+  const K = cx.pm.knobs.get(REFORM_KNOBS);
+  const { THEO_LEAVE, THEO_LEAVE_ODDS, LEAVE_FAITH0 } = K;
   if (since < THEO_LEAVE) return false;
   const faith = stateFaithShare(cx);
-  const odds = THEO_LEAVE_ODDS * (1 + share + right) * (1 - faith);
+  const odds = THEO_LEAVE_ODDS * (1 + share + right) * (1 - Math.max(0, faith - LEAVE_FAITH0)) * (1 + crisis) * leaveMul(K, stateEngage(cx));
   if (R(U_THEO_LEAVE) >= odds / (1 + odds)) return false;
   note(cx, { b: -1, region: cx.capR, settlement: capitalAt(cx.P, cx.t), n: REFORM_LAICIZE });
   openSeg(cx, { regime: 'republic' });
