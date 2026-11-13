@@ -51,7 +51,7 @@ import { parsePersonKey, type Intervention } from '../edits';
 import { keyed4, subSeed } from './engine/rand';
 import { cultureDialect, namingContact, personNamers } from './naming';
 import { detectContacts, withHybridContacts } from './contact';
-import { annexedRemnants, capitalAt, polityTierAt } from './growth';
+import { annexedRemnants, capitalAt, cededBefore, polityTierAt } from './growth';
 import { buildLineage } from './lineage';
 import { ROYALS_KNOBS, buildSons, contest, march, murderedAt, type Son } from './royals';
 import { buildOfficials, courtDeeds, deedPosts, generalPosts, topAltAt, type ForcedRegent } from './officials';
@@ -1664,11 +1664,24 @@ class NameBook {
     const cands: string[] = [];
     const at = (a: number) => (cands[a] ??= nameAt(a));
     let name = '';
+    let pick = '';
     for (let a = 0; a < this.tries && !name; a++) if (!this.used.has(at(a)) && !royal(at(a))) name = at(a);
     for (let a = 0; a < this.tries && !name; a++) if (!near(at(a))) name = at(a);
     // 长寿大国君主用过的名字可能比前 NAME_TRIES 个候选还多:再往后找一个不 near 的,找不到才退回第一个
     for (let a = this.tries; !name && a < this.tries * 8; a++) if (!near(at(a))) name = at(a);
-    name ||= at(0);
+    // 还找不到(名字少的语感用满了):至少不和本国此前的君主同名(读起来像那位君主又出来做官),
+    // 里头挑和同名的人生年隔得最远的
+    let gap = -1;
+    for (let a = 0; !name && a < this.tries * 8; a++) {
+      const x = at(a);
+      if (royal(x)) continue;
+      const d = Math.min(Infinity, ...(this.used.get(x) ?? []).map((y) => Math.abs(y - born)));
+      if (d > gap) {
+        gap = d;
+        pick = x;
+      }
+    }
+    name ||= pick || at(0);
     this.use(name, born);
     return name;
   }
@@ -1877,7 +1890,7 @@ function warsOf(civ: PeopleInput): WarFacts[] {
   const skip = new Set<number>();
   A.forEach((e, i) => {
     if (e.kind === 'peace' && e.region > 0) {
-      for (let j = Math.max(0, i - e.region); j < i; j++) if (A[j].kind === 'conquer' && A[j].war === e.war) skip.add(j);
+      for (const j of cededBefore(A, i)) skip.add(j);
     } else if (e.kind === 'fall' && e.war >= 0) {
       for (const j of annexedRemnants(civ, i)) skip.add(j);
     }
