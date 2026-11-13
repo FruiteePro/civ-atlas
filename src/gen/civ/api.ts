@@ -174,6 +174,11 @@ export interface PoliticsApi {
    * apply = true 真改:记一条 reform(和推演里立、废神权的一样)、在位表加一段(调用方先记 intervene 再 apply)
    */
   authorTheocracy?: (p: number, t: Year, end: boolean, iv: number, apply: boolean) => number;
+  /**
+   * 看王朝没换代、这些年有危机(regency.ts 调;council.ts 提供,照 reform.ts 的 clericSeize):国教盛的王国会不会出一位专权的国师 / 大祭司、
+   * 他到期夺位立神权。出了 = true(这一回不再出大臣、大将专权)
+   */
+  clericSeize?: (p: number, t: Year) => boolean;
 }
 
 /** diplomacy那一组(原来挂在 DiplomacyModel 上) */

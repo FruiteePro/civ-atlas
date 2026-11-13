@@ -50,7 +50,7 @@
  * **不存内存状态**:政体在 Polity.dynasties,议政、参与、上回改制的年份由史事重建(resumeCouncil)。
  * 随机数:keyed4(subSeed(seed, 'civ-reform'), 国家锚, 第几次看内政, 用途),和处理顺序无关。纯计算,不碰 DOM。
  */
-import { Layer, type Annal, type Polity, type RulerLeanings, type Year } from './types';
+import { Layer, type Annal, type AnnalCause, type Polity, type RulerLeanings, type Year } from './types';
 import { keyed4 } from './engine/rand';
 import type { CivSim } from './engine/sim';
 import { dynastyReign, rulerOf, type PolityModel } from './polities';
@@ -177,6 +177,25 @@ export const REFORM_KNOBS = defineKnobs('reform', {
   REBEL_THEO: 0.08,
   REBEL_THEO_COLLAPSE: 1.5,
   REBEL_THEO_MAX: 0.35,
+  /**
+   * 教团专权、夺位(神权设计稿第 8 节;regency.ts 看王朝没换代时问 clericSeize):王国以上、国教占比到 THEO_FAITH、这些年有危机 ——
+   * 机会 CLERIC_P × 入世倍数 × 世俗倍数(最多 CLERIC_MAX)出一位国师 / 大祭司专权;他到期 CLERIC_USURP 的机会夺位立神权,
+   * 其余伏诛 / 卒于位(不改历史,只挡住这一回的大臣大将专权)
+   */
+  CLERIC_P: 0.15,
+  CLERIC_MAX: 0.4,
+  CLERIC_USURP: 0.3,
+  /**
+   * 政体一变就有一头不服(教团夺位、教众起事、神权里的政变 / 革命 / 交接之际夺权):机会 DISSENT × e^(DISSENT_K × (动荡 − DISSENT_U0))
+   * × (1 + 异教程度 / 入世程度);不服的那片州(DISSENT_MIN–DISSENT_MAX 州,最多国土 DISSENT_FRAC)据地自立:
+   * 教团上台 = 信别的教、离国都远的那头立世俗国;世俗派上台 = 国教最盛的那头(圣城优先)立残余的神权国
+   */
+  DISSENT: 0.15,
+  DISSENT_K: 1.2,
+  DISSENT_U0: 1,
+  DISSENT_MIN: 3,
+  DISSENT_MAX: 10,
+  DISSENT_FRAC: 0.25,
   THEO_LEAVE: 40,
   THEO_LEAVE_ODDS: 0.15,
   LEAVE_FAITH0: 0.5,
@@ -195,6 +214,12 @@ const U_RESTORE = 4;
 const U_AGE = 5;
 const U_THEO = 6;
 const U_THEO_LEAVE = 7;
+const U_CLERIC = 8;
+const U_CLERIC_END = 9;
+const U_DISSENT = 14;
+const U_DISSENT_R = 15;
+/** keyed4 最后一位:看内政 0、作者干预 1、看王朝(教团专权)2*/
+const R_DYNASTY = 2;
 /** 作者干预立神权:keyed4 第三位 = 这个数 + 第几条干预(和看内政的第几次错开) */
 const U_AUTHOR_IV = 1 << 24;
 /** 倾向的随机数从这里起(drawLeanings 的用途号加上去) */
@@ -480,7 +505,7 @@ function leader(cx: AuthorTheocracyCtx, R: (use: number) => number, shift: Parti
 }
 
 /** 记一条史事 reform,规矩跟着改(和接着推时由史事重建的一样,councilRules.ts 的 applyReform) */
-function note(cx: AuthorTheocracyCtx, f: Pick<Annal, 'b' | 'region' | 'settlement' | 'n'> & { opt?: number }): void {
+function note(cx: AuthorTheocracyCtx, f: Pick<Annal, 'b' | 'region' | 'settlement' | 'n'> & { opt?: number; cause?: AnnalCause }): void {
   cx.sim.record('reform', { a: cx.P.id, ...f });
   applyReform(cx.rules, { year: cx.t, n: f.n, opt: f.opt });
 }
@@ -503,7 +528,7 @@ function openSeg(cx: AuthorTheocracyCtx, seg: { regime?: 'republic' | 'junta' | 
 /**
  * 议立宪 / 废君谈崩、动荡大:有人起兵。打进国都 = 革命(整国改共和);打不进 = 据地自立为共和国;起不了兵 = false(那边记搁置)
  */
-function revolt(cx: ReformCtx, issue: Issue, push: number, R: (use: number) => number): boolean {
+function revolt(cx: ReformCtx, issue: Issue | null, push: number, R: (use: number) => number, mode?: 'zealot' | 'secular'): boolean {
   const { REVOLT_U, SETTLE, REV_0, REV_U, REV_PUSH, REV_ARMY, JITTER, REBEL_MIN, REV_SHARE } = cx.pm.knobs.get(REFORM_KNOBS);
   const { sim, pm, pol, wm, cm, P, t, capR } = cx;
   const api = civApi(sim);
@@ -526,9 +551,17 @@ function revolt(cx: ReformCtx, issue: Issue, push: number, R: (use: number) => n
   const y = REV_0 + REV_U * (cx.u - REVOLT_U) + REV_PUSH * push - REV_ARMY * army + JITTER * (R(U_REV) - 0.5);
   const opt = openness(cx.pm.knobs.get(REFORM_KNOBS), push, cx.rules.franchise, 1);
   if (y > 0) {
-    cx.record(issue, Outcome.Break, rise);
-    note(cx, { b: -1, region: rise, settlement: pm.cityOf[rise], n: REFORM_REVOLUTION, opt });
+    if (issue !== null) cx.record(issue, Outcome.Break, rise);
+    if (mode === 'zealot') {
+      // 教众起事打进国都:立神权(起兵的人做首任大祭司)
+      note(cx, { b: -1, region: rise, settlement: pm.cityOf[rise], n: REFORM_THEOCRACY, cause: 'zealot' });
+      openSeg(cx, { regime: 'theocracy', usurper: leader(cx, R, CLERIC_SHIFT) });
+      dissent(cx, 'cleric', R);
+      return true;
+    }
+    note(cx, { b: -1, region: rise, settlement: pm.cityOf[rise], n: REFORM_REVOLUTION, opt, ...(mode ? { cause: mode } : {}) });
     openSeg(cx, { regime: 'republic', usurper: leader(cx, R, REBEL_SHIFT) });
+    if (mode === 'secular') dissent(cx, 'secular', R);
     return true;
   }
   // 打不进国都:起事的州连同近处几州(同国、SETTLE 年没换过国家、不是国都)据地自立
@@ -552,7 +585,12 @@ function revolt(cx: ReformCtx, issue: Issue, push: number, R: (use: number) => n
   const sid = api.politics.biggestCity(group, t);
   const full = sid >= 0 ? api.politics.cutOff(p, group, t, group.length * 2 + 4) : null;
   if (!full || full.length < REBEL_MIN || full.includes(capR)) return false;
-  cx.record(issue, Outcome.Break, rise);
+  if (issue !== null) cx.record(issue, Outcome.Break, rise);
+  if (mode === 'zealot') {
+    // 教众打不进国都:据地立神权国
+    api.politics.secede(p, full, sid, rise, t, 'split', 'zealot', { dynasties: [{ year: t, name: '', seat: sid, regime: 'theocracy' }] });
+    return true;
+  }
   const q = api.politics.secede(p, full, sid, rise, t, 'split', 'revolution', { lineage: P.lineage, dynasties: [{ year: t, name: '', seat: sid, regime: 'republic' }] });
   // 新国家立国就设议会、有产者能议政(和接着推时由那条 split 重建的一样,councilRules.ts 的 replayRule)
   const nr = cx.rulesOf(q.id);
@@ -589,5 +627,110 @@ export function rebelTheocracy(pm: PolityModel, parent: number, group: readonly 
   if (!(diff > 0)) return false;
   const p = Math.min(K.REBEL_THEO_MAX, K.REBEL_THEO * diff * (1 + Math.max(0, u)) * (collapse ? K.REBEL_THEO_COLLAPSE : 1) * engageMul(K, e));
   return u01 < p;
+}
+
+/** 教团专权要的(council.ts 给):和看内政的一样,k = 第几次看王朝 */
+export type ClericCtx = Pick<ReformCtx, 'sim' | 'pm' | 'pol' | 'wm' | 'cm' | 'P' | 't' | 'rules' | 'base' | 'capR' | 'u' | 'broke'> & { k: number };
+
+/**
+ * 看王朝没换代、这些年有危机(regency.ts 的 strong):国教盛的王国有机会出一位国师 / 大祭司专权(见 REFORM_KNOBS 的 CLERIC_*)。
+ * 返回出没出(出了就不再出大臣、大将专权);他到期夺位的,此刻记一条 reform(n = 立神权,cause = cleric)、在位表加一段神权
+ */
+export function clericSeize(cx: ClericCtx): boolean {
+  const K = cx.pm.knobs.get(REFORM_KNOBS);
+  const { pm, P, t } = cx;
+  const rcx = { ...cx, ready: () => false, record: () => {}, rulesOf: () => cx.rules } as ReformCtx;
+  const share = stateFaithShare(rcx);
+  if (share < K.THEO_FAITH) return false;
+  const e = stateEngage(cx);
+  if (!(e > 0)) return false;
+  const R = (use: number) => keyed4(cx.base, pm.ptag[P.id], cx.k, use, R_DYNASTY);
+  const p = Math.min(K.CLERIC_MAX, K.CLERIC_P * engageMul(K, e) * secularMul(rcx));
+  if (R(U_CLERIC) >= p) return false;
+  // 到期伏诛 / 卒于位;作者"保住王室"的这一回也夺不了位
+  if (R(U_CLERIC_END) >= K.CLERIC_USURP || (pm.iv && pm.iv.keeps(P.id, t) >= 0)) return true;
+  note(rcx, { b: -1, region: cx.capR, settlement: capitalAt(P, t), n: REFORM_THEOCRACY, cause: 'cleric' });
+  openSeg(rcx, { regime: 'theocracy', usurper: leader(rcx, R, CLERIC_SHIFT) });
+  dissent(rcx, 'cleric', R);
+  return true;
+}
+
+/**
+ * 政体一变,不服的那一头据地自立(见 REFORM_KNOBS 的 DISSENT*;记 split,cause = dissent):
+ * up = cleric 教团上台(信别的教、离国都远的那头立世俗国)/ secular 世俗派上台(国教最盛的那头立残余的神权国,圣城所在的州优先)
+ */
+function dissent(cx: AuthorTheocracyCtx & Partial<Pick<ReformCtx, 'wm' | 'u'>>, up: 'cleric' | 'secular', R: (use: number) => number): void {
+  const K = cx.pm.knobs.get(REFORM_KNOBS);
+  const { sim, pm, P, t, capR } = cx;
+  const api = civApi(sim);
+  const wm = cx.wm;
+  const p = P.id;
+  if (!wm || !pm.faithAt || !pm.faithGap || !api.politics.secede || !api.politics.cutOff || !api.politics.biggestCity || wm.iv?.unites(p, t)) return;
+  const n = pm.size[p];
+  if (n < 2 * K.DISSENT_MIN) return;
+  // 国教:上台以前的(教团上台以前国教就是它;世俗派上台时国教还是那一教)
+  const fid = pm.stateFaith?.(p) ?? -1;
+  if (fid < 0) return;
+  const e = pm.faithEngage?.(fid) ?? 0;
+  const u = cx.u ?? api.politics.unrest?.(P, t) ?? 0;
+  const dist = pm.capDist[p];
+  const reg = pm.terrain.regions;
+  const owner = sim.owners[Layer.Polity];
+  const { SETTLE } = K;
+  const fits = (r: number): boolean => {
+    const f = pm.faithAt!(r);
+    if (up === 'cleric') return f >= 0 && pm.faithGap!(f, fid) !== 0;
+    return f === fid;
+  };
+  // 起事的州:教团上台 = 信别的教、离国都最远的;世俗派上台 = 圣城(本国还占着),不然信国教、离国都最远的
+  let rise = -1;
+  let best = -Infinity;
+  let gapSum = 0;
+  let hits = 0;
+  const holy = up === 'secular' ? holyRegion(cx, fid) : -1;
+  for (const q of pm.lands[p]) {
+    if (q === capR || pm.cityOf[q] < 0 || t - wm.since[q] < SETTLE || wm.iv?.locked(q, t) || !fits(q)) continue;
+    hits++;
+    if (up === 'cleric') gapSum += Math.max(0, pm.faithGap!(pm.faithAt!(q), fid));
+    const v = q === holy ? Infinity : (dist[q] < Infinity ? Math.min(4, dist[q] / 12) : 4) + keyed4(cx.base, pm.ptag[p], reg.seat[q], Math.floor(t), U_DISSENT_R);
+    if (v > best) {
+      best = v;
+      rise = q;
+    }
+  }
+  if (rise < 0 || hits < K.DISSENT_MIN) return;
+  const diff = up === 'cleric' ? gapSum / hits : e;
+  const odds = K.DISSENT * Math.exp(K.DISSENT_K * (u - K.DISSENT_U0)) * (1 + diff);
+  if (R(U_DISSENT) >= odds / (1 + odds)) return;
+  const cap = Math.min(K.DISSENT_MAX, Math.max(K.DISSENT_MIN, Math.floor(K.DISSENT_FRAC * n)));
+  const group = [rise];
+  const seen = new Set(group);
+  for (let h = 0; h < group.length && group.length < cap; h++) {
+    const q = group[h];
+    for (let k = reg.adjStart[q]; k < reg.adjStart[q + 1] && group.length < cap; k++) {
+      const j = reg.adj[k];
+      if (seen.has(j)) continue;
+      seen.add(j);
+      if (owner[j] !== p || j === capR || t - wm.since[j] < SETTLE || wm.iv?.locked(j, t) || !fits(j)) continue;
+      group.push(j);
+    }
+  }
+  if (group.length < K.DISSENT_MIN) return;
+  group.sort((a, b) => a - b);
+  const sid = api.politics.biggestCity(group, t);
+  const full = sid >= 0 ? api.politics.cutOff(p, group, t, group.length * 2 + 4) : null;
+  if (!full || full.length < K.DISSENT_MIN || full.includes(capR)) return;
+  api.politics.secede(p, full, sid, rise, t, 'split', 'dissent', up === 'secular' ? { dynasties: [{ year: t, name: '', seat: sid, regime: 'theocracy' }] } : {});
+}
+
+/** 国教(或它所属大教)的圣城所在的州,本国此刻占着、不是国都;没有 = −1 */
+function holyRegion(cx: AuthorTheocracyCtx, fid: number): number {
+  const fs = faithSimOf(cx.sim);
+  if (!fs) return -1;
+  const g = fs.list[fs.rootOf(fid)];
+  const sid = g?.holy;
+  if (sid === undefined) return -1;
+  const r = cx.pm.settlements[sid]?.region ?? -1;
+  return r >= 0 && cx.sim.owners[Layer.Polity][r] === cx.P.id && r !== cx.capR ? r : -1;
 }
 

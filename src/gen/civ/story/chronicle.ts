@@ -2001,13 +2001,22 @@ function simpleEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
         const back = host >= 0 && host !== e.b ? `自${pn(civ, host, y)}还,` : '';
         const head = `故${(fallen.name && polityRootAt(fallen, fallen.ended ?? y)) || '国'}${folk}${back}${r ? `据${r}` : ''}`;
         t = e.b >= 0 ? `${head}起兵,脱${pn(civ, e.b, y)}复国,号${A}` : `${head}复国,号${A}`;
+      } else if (e.cause === 'dissent' && P?.dynasties?.[0]?.regime !== 'theocracy') {
+        // 教团上台,信别的教的那头不服(reform.ts 的 dissent):"瑞州奉圣光教之民不服大渭立神权,据瑞州自立,号瑞国"
+        const fname = faithNameAt(civ, e.region, y);
+        t = `${r ? r : ''}${fname ? `奉${fname}之民` : '之民'}不服${e.b >= 0 ? pn(civ, e.b, y) : ''}立神权,${who ? `拥${who.name}` : ''}${r ? `据${r}` : ''}自立,号${A}`;
       } else if (P?.dynasties?.[0]?.regime === 'theocracy') {
         // 教众起事、立神权国(reform.ts 的 rebelTheocracy):"瑞州教众奉圣光教起事,叛大渭自立,立大祭司李昭主国事,号瑞国"
         const office = clericTitle(P.culture !== undefined ? civ.cultures[P.culture]?.style : undefined);
         const lead2 = founderOf(ctx.ix, e.a, 0);
         const fname = faithNameAt(civ, e.region, y);
-        const head = `${r ? `${r}` : ''}教众${fname ? `奉${fname}` : ''}起事`;
-        t = `${head},${e.b >= 0 ? `叛${pn(civ, e.b, y)}自立` : '自立'},立${office}${lead2 ? lead2.name : ''}主国事,号${A}`;
+        if (e.cause === 'dissent') {
+          // 世俗派夺了神权,国教最盛的那头(圣城)不服、立残余的神权国:"圣辉神国既罢神权,瑞州教众奉圣光教不服,立大祭司李昭,据瑞州,号瑞国"
+          t = `${e.b >= 0 ? `${pn(civ, e.b, y)}既罢神权,` : ''}${r}教众${fname ? `奉${fname}` : ''}不服,立${office}${lead2 ? lead2.name : ''}${r ? `,据${r}` : ''},号${A}`;
+        } else {
+          const head = `${r ? `${r}` : ''}教众${fname ? `奉${fname}` : ''}起事`;
+          t = `${head},${e.b >= 0 ? `叛${pn(civ, e.b, y)}自立` : '自立'},立${office}${lead2 ? lead2.name : ''}主国事,号${A}`;
+        }
         const seat = cityName(civ, e.settlement);
         if (seat) t += `,都于${seat}`;
         return withPeople(base(e, id, t, isGreat(P) || isGreat(polityOf(civ, e.b)) ? 3 : 2, [e.a, e.b], [e.region], '教'), lead2);
@@ -3516,14 +3525,23 @@ function reformEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
   const after = pn(civ, e.a, y);
   const nu = founderOf(ctx.ix, e.a, P ? dynastyIndexAt(P, y) : 0);
   const old = endedAt(ctx.ix, e.a, y);
-  const woe = woeOf(civ, e.a, id);
+  const prevOffice = P ? officeWord(civ, P, y - 1 / 512) : '君主';
+  // 大祭司交接之际夺权(reform.ts 的 pontiffSeize):开头先写"大祭司某某新立,人心未附"
+  const woe = [woeOf(civ, e.a, id), e.cause === 'pontiff' ? `${prevOffice}${old ? old.name : ''}新立,人心未附` : ''].filter(Boolean).join(',');
   const capital = P ? cityName(civ, capitalBefore(P, y)) : '';
   const imp = isGreat(P) ? 3 : 2;
+  const ousted = old ? `,逐${prevOffice}${old.name}` : '';
   const entry = (text: string, tag: string, kind: EntryKind, ...ps: (Person | null)[]) => {
     const x = base(e, id, text, imp, [e.a], [e.region], tag);
     x.kind = kind;
     return withPeople(x, ...ps.filter((z) => !!z && text.includes(z.name)));
   };
+  if (e.n === REFORM_REVOLUTION && e.cause === 'secular') {
+    // 神权里的世俗革命:"圣辉神国国用不足;田继徽起兵于玉舞之野,入桂陵,逐大祭司某某,罢神权,立共和,国号圣辉共和国,自为执政"
+    const r = regionName(civ, e.region);
+    const t = `${before}${woe ? `${woe};` : ','}${nu ? nu.name : east ? '义军' : '起义者'}起兵${r ? `于${r}` : ''}${capital ? `,入${capital}` : ''}${ousted},罢神权,立共和,国号${after}${nu ? ',自为执政' : ''}`;
+    return entry(t, '革', 'revolution', nu, old);
+  }
   if (e.n === REFORM_REVOLUTION) {
     // "大靖王朝兵败失地,议废帝制,不成;田继徽起兵于玉舞之野,入桂陵,废光宗,罢帝号,立共和,国号大靖共和国,自为执政"
     const r = regionName(civ, e.region);
@@ -3532,6 +3550,11 @@ function reformEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
     t += `${nu ? nu.name : east ? '义军' : '起义者'}起兵${r ? `于${r}` : ''}${capital ? `,入${capital}` : ''}${king ? `,废${king}` : ''}`;
     t += `${east ? `,罢${P && polityTierAt(P, y - 1 / 512) >= 3 ? '帝' : '王'}号` : ''},立共和,国号${after}${nu ? ',自为执政' : ''}`;
     return entry(t, '革', 'revolution', nu, old);
+  }
+  if (e.n === REFORM_COUP && (e.cause === 'secular' || e.cause === 'pontiff')) {
+    // 神权里的将军政变:"圣辉神国兵败失地;将军米列斯拉娃率兵入莫尔格勒,逐大祭司某某,自为执政,国事决于军中"
+    const t = `${before}${woe ? `${woe};` : ','}将军${nu ? nu.name : ''}率兵入${capital || '国都'}${ousted},自为执政,国事决于军中`;
+    return entry(t, '政', 'coup', nu, old);
   }
   if (e.n === REFORM_COUP) {
     // "博戈维纳共和国大疫之后国用不足,议事会久议不决;将军米列斯拉娃率兵入莫尔格勒,散议事会,自为执政,国事决于军中"
@@ -3544,13 +3567,26 @@ function reformEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
     const office = clericTitle(P?.culture !== undefined ? civ.cultures[P.culture]?.style : undefined);
     const king = old ? (east ? rulerBare(civ, old, y) : old.name) : '';
     const prev = P ? officeWord(civ, P, y - 1 / 512) : '君主';
+    const hao = east ? `,罢${P && polityTierAt(P, y - 1 / 512) >= 3 ? '帝' : '王'}号` : '';
+    if (e.cause === 'cleric') {
+      // 教团专权夺位:"大靖王朝兵败失地;国师田继徽专权有年,遂废光宗,罢帝号,自主国事"
+      const t = `${before}${woe ? `${woe};` : ','}${office}${nu ? nu.name : ''}专权有年,遂废${king || prev}${hao},以神权主国事`;
+      return entry(t, '教', 'reform', nu, old);
+    }
+    if (e.cause === 'zealot') {
+      // 教众起事打进国都:"大靖王朝议废帝制,不成;玉舞之野教众奉圣光教起事,入桂陵,废光宗,罢帝号,立国师田继徽主国事"
+      const r = regionName(civ, e.region);
+      const fname = faithNameAt(civ, e.region, y);
+      const t = `${before}${woe ? `${woe},` : ''}${failedAsk(civ, civ.annals, id, e.a)}${r}教众${fname ? `奉${fname}` : ''}起事${capital ? `,入${capital}` : ''}${king ? `,废${king}` : ''}${hao},立${office}${nu ? nu.name : ''}主国事`;
+      return entry(t, '教', 'reform', nu, old);
+    }
     let t = `${before}${woe ? `${woe},` : ''}国教既盛`;
     t += `${king ? `,废${king}` : prev === '执政' ? ',废执政' : ''}${east ? `,罢${P && polityTierAt(P, y - 1 / 512) >= 3 ? '帝' : '王'}号` : ''},立${office}${nu ? nu.name : ''}主国事`;
     return entry(t, '教', 'reform', nu, old);
   }
   if (e.n === REFORM_LAICIZE) {
     const office = old && P ? officeWord(civ, P, y - 1 / 512) : '国师';
-    const t = `${before}${woe ? `${woe},` : ''}废神权${old ? `,${office}${old.name}去位` : ''},国事复由${bodyOf(civ, e.a, y)}议定、推举执政`;
+    const t = `${before}${woe ? `${woe},` : ''}${e.cause === 'pontiff' ? '世俗大臣' : ''}废神权${old ? `,${office}${old.name}去位` : ''},国事复由${bodyOf(civ, e.a, y)}议定、推举执政`;
     return entry(t, '制', 'reform', nu, old);
   }
   // 复辟

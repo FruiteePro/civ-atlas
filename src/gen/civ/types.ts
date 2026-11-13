@@ -495,9 +495,12 @@ export type AnnalKind =
  *   trek:大迁徙(migration.ts)迁来的一支落脚立的国(史事 found 的 cause)和它到了以后当即开的那一仗(war 的 cause);
  *   spring:冬夏分明的地方闹的春荒(史事 famine 的 cause,unrest.ts);
  *   revolution:议立宪 / 废君谈崩、起兵的人打不进国都,据地自立为共和国(史事 split 的 cause,reform.ts;紧跟在那条 council 后面);
- *   surrender 强国打下国都,余下的州一并归降、亡国(破都纳降,wars.ts;fall 的 cause)
+ *   surrender 强国打下国都,余下的州一并归降、亡国(破都纳降,wars.ts;fall 的 cause);
+ *   神权的几条进出路(史事 reform 的 cause,reform.ts;和平改制的不带):cleric 教团专权夺位立神权、zealot 教众起事(打进国都;打不进 = split 的 cause)、
+ *   secular 神权里世俗的将军政变 / 起兵革命、pontiff 大祭司交接之际被复辟 / 政变 / 废神权;
+ *   dissent:政体一变(教团、世俗派夺权),不服的那一头据地自立(split 的 cause;新国第 0 段是神权 = 残余的神权国)
  */
-export type AnnalCause = 'expand' | 'claim' | 'chaos' | 'prey' | 'resource' | 'betray' | 'punish' | 'ally' | 'rescue' | 'lapse' | 'abandon' | 'vassal' | 'quell' | 'collapse' | 'great' | 'quake' | 'warlord' | 'broke' | 'heir' | 'slain' | 'captured' | 'withdrew' | 'pandemic' | 'breach' | 'peace' | 'renew' | 'deposed' | 'fled' | 'decree' | 'divert' | 'unrest' | 'plagued' | 'minor' | 'regent' | 'plunder' | 'trek' | 'spring' | 'revolution' | 'surrender';
+export type AnnalCause = 'expand' | 'claim' | 'chaos' | 'prey' | 'resource' | 'betray' | 'punish' | 'ally' | 'rescue' | 'lapse' | 'abandon' | 'vassal' | 'quell' | 'collapse' | 'great' | 'quake' | 'warlord' | 'broke' | 'heir' | 'slain' | 'captured' | 'withdrew' | 'pandemic' | 'breach' | 'peace' | 'renew' | 'deposed' | 'fled' | 'decree' | 'divert' | 'unrest' | 'plagued' | 'minor' | 'regent' | 'plunder' | 'trek' | 'spring' | 'revolution' | 'surrender' | 'cleric' | 'zealot' | 'secular' | 'pontiff' | 'dissent';
 
 /**
  * 一条史事(阶段 3):推演里各事件处理函数用 CivSim.record 往 Civ.annals 里记,编年史(界面上的事件列表)只读它。

@@ -73,7 +73,7 @@ import { capitalAt, populationAt } from './growth';
 import { Cap, CAP_COUNT, devModelOf, type DevModel } from './development';
 import type { ControlModel, Warlord } from './control';
 import { COUNCIL_RULES_KNOBS, ISSUES, Issue, Outcome, applyRule, newRules, replayRule, rulesAnnal, type Rules } from './councilRules';
-import { authorTheocracy, reformCheck } from './reform';
+import { authorTheocracy, clericSeize, reformCheck } from './reform';
 import { CENSUS_COST, CENSUS_LIFT, EXAM_STAKE, FIEF_LESS_EASE, FIEF_LESS_ODDS, Practice, hasPractice } from './practices';
 import type { CivModule } from './modules';
 import { Ev } from './events';
@@ -424,6 +424,13 @@ function hook(sim: CivSim, seed: number, book: Map<number, Rules>): CouncilModel
     const P = pm.polities[p];
     const capR = pm.settlements[capitalAt(P, t)].region;
     return authorTheocracy({ sim, pm, P, t, rules: rulesOf(book, p), base: rbase, capR }, end, iv, apply);
+  };
+  api.politics.clericSeize = (p, t) => {
+    const P = pm.polities[p];
+    const capR = pm.settlements[capitalAt(P, t)].region;
+    const u = api.politics.unrest ? api.politics.unrest(P, t) : 0;
+    const broke = api.war.broke ? api.war.broke(p, t) : 0;
+    return clericSeize({ sim, pm, pol, wm, cm, P, t, rules: rulesOf(book, p), base: rbase, capR, u, broke, k: Math.floor(t) });
   };
   return model;
 }

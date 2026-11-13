@@ -239,6 +239,8 @@ function hook(sim: CivSim, pm: PolityModel): RegencyModel {
       const crisis = lost >= STRONG_LOSS || (t - moved < STRONG_YEARS && moved !== seat);
       const glory = gained >= STRONG_GAIN;
       if (!crisis && !glory) return;
+      // 国教盛、教团入世:这些年有危机时先看会不会出一位专权的国师 / 大祭司(reform.ts 的 clericSeize;出了就不再出大臣、大将)
+      if (crisis && api.politics.clericSeize?.(p, t)) return;
       const u = strongRolls(cx, p, t);
       if (u.u >= STRONG_P) return;
       start(P, glory && (!crisis || u.kind < 0.5) ? 'general' : 'chancellor', r.k, t);
