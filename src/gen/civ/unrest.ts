@@ -1074,6 +1074,26 @@ function hook(sim: CivSim, um: UnrestModel, world: World, calamity: Calamity | u
     return { successors: ready.length, mode, kind: ready.length ? 0 : 2 };
   };
 
+  // 大汗国退保草原以后汗位之争、分裂(wars.ts):照大崩解切,王庭那块留下,至多 pieces 块
+  api.politics.khanSplit = (pid, t, pieces) => {
+    const P = pm.polities[pid];
+    const unlocked = pm.lands[pid].filter((r) => !wm.iv?.locked(r, t));
+    if (unlocked.length < PIECE_MIN || wm.iv?.unites(pid, t)) return 0;
+    const assessed = assessPolityFragment(pid, t);
+    const resolved = resolveFragmentMode('auto', assessed, pieces);
+    const capSid = capitalAt(P, t);
+    const capR = pm.settlements[capSid].region;
+    const { ready, mode } = partitionLand(pid, unlocked, t, assessed, resolved, true, capR);
+    const got = ready.slice(0, Math.max(1, pieces - 1));
+    if (!got.length) return 0;
+    sim.record('collapse', { a: pid, b: 0, region: capR, settlement: capSid, war: got.length, opt: FRAGMENT_MODE_OPT[mode], cause: 'khan' });
+    noteCollapseFamily(wm, pid, t, unlocked);
+    for (const [g, sid, r0] of got) api.politics.secede!(pid, g, sid, r0, t, 'split', 'collapse');
+    um.collapsed.set(pid, t);
+    pol.lastSplit.set(pid, t);
+    return got.length;
+  };
+
   const collapse = (P: Polity, k: number, t: number): boolean => {
     const pid = P.id;
     const tag = pm.ptag[pid];

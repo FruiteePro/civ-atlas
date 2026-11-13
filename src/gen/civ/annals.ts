@@ -401,6 +401,14 @@ export const ANNAL_KINDS: Readonly<Record<AnnalKind, AnnalKindInfo>> = {
     settlement: '−1',
     war: '战争编号',
   },
+  strife: {
+    desc: '汗位之争,强汗力克诸王、汗国复归一统(wars.ts:大汗国丢了王庭退保草原以后;分裂的记 collapse、称臣的记 submit,cause 都是 khan)',
+    a: '汗国',
+    b: '−1',
+    region: '王庭所在州',
+    settlement: '王庭',
+    war: '−1',
+  },
   reform: {
     desc: '改制(reform.ts):**哪一种在 Annal.n**:0 革命(议立宪 / 废君谈崩、动荡大,有人起兵打进国都,整国改共和;紧跟在那条 council 后面)、1 政变(统兵的将军夺权,改军政府)、2 复辟(迎回旧王室,或执政 / 将军自立为君);同一刻往 Polity.dynasties 加一段。**之后能议政的有几档(参与)在 Annal.opt**(革命)',
     a: '国家',

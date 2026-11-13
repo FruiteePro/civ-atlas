@@ -47,7 +47,7 @@
  */
 import type { World } from '../world';
 import { YEAR_TICKS, resolveKey } from '../edits';
-import { Layer, type Annal, type Civ, type Year } from './types';
+import { Layer, type Annal, type AnnalCause, type Civ, type Year } from './types';
 import { fpow, keyed, keyed4, subSeed } from './engine/rand';
 import { bookChain, quantize, type CivSim } from './engine/sim';
 import { befriends, canCross, effOf, endPolity, hates, picks, policyAt, polityModelOf, landWorth, powerScaleOf, type PolityModel } from './polities';
@@ -435,11 +435,13 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
   };
 
   /** 一国称臣:记 submit;它结着的盟随之作废(各记一条 unally,cause = vassal) */
-  const swear = (v: number, L: number, t: number, war = -1) => {
+  const swear = (v: number, L: number, t: number, war = -1, cause?: AnnalCause) => {
     const sid = capitalAt(pm.polities[v], t);
-    record('submit', { a: v, b: L, region: pm.settlements[sid].region, settlement: sid, war });
+    record('submit', { a: v, b: L, region: pm.settlements[sid].region, settlement: sid, war, ...(cause ? { cause } : {}) });
     for (const x of dm.pactsOf(v)) record('unally', { a: v, b: x.a === v ? x.b : x.a, cause: 'vassal' });
   };
+
+  api.diplomacy.swear = (v, L, t, cause) => swear(v, L, t, -1, cause);
 
   // ---- ① 藩属自立 ----
   const tryDefect = (v: number, L: number, k: number, t: number): boolean => {

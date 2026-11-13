@@ -152,6 +152,11 @@ export interface PoliticsApi {
    * k = 取随机数用的"第几次"(和看内政的错开);禁止分裂的干预护着、散不成几块 = false
    */
   shatter?: (P: Polity, k: number, t: Year) => boolean;
+  /**
+   * 大汗国退保草原以后汗位之争、分裂(unrest.ts 提供;wars.ts 用):照大崩解切成至多 pieces 块(王庭那块留下),
+   * 先记 collapse(cause = khan)再记各块自立。返回自立了几块(0 = 切不开,什么也没记)
+   */
+  khanSplit?: (pid: number, t: Year, pieces: number) => number;
   /** 照大纲顺着引时替国家 p 多看一眼内政(installPolitics 填):只看大崩解、分裂(k ≥ LOOK_K,随机数按它取,不接着预约) */
   look?: (p: number, k: number, t: Year) => void;
   /**
@@ -203,6 +208,8 @@ export interface DiplomacyApi {
   limits?: (q: number, L: number) => boolean;
   /** 立约(treaties.ts 提供):看邦交时称臣、结盟都没成,接着看要不要和邻国立约(threat = 最怕的强邻,−1 = 没有) */
   onCheck?: (p: number, k: number, t: Year, threat: number) => void;
+  /** v 向 L 称臣(installDiplomacy 提供;记 submit 并作废 v 的盟约;wars.ts 的汗位之争用,cause = khan) */
+  swear?: (v: number, L: number, t: Year, cause?: AnnalCause) => void;
 }
 
 /** dev那一组(原来挂在 DevModel 上) */

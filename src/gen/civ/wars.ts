@@ -102,6 +102,7 @@ import { POLICY_KNOBS } from './policy';
 import { capitalAt, polityTierAt, populationAt } from './growth';
 import { regionPasses } from './passes';
 import { geometryOf } from '../geometry';
+import { biomeTagged } from '../biomes';
 import { trekDir } from './migration';
 import type { InterventionModel } from './interventions';
 import type { DiplomacyModel } from './diplomacy';
@@ -148,6 +149,16 @@ export const WARS_KNOBS = defineKnobs('wars', {
    * 迁都或称臣,只剩 0 州 / 没有城才亡;部落联盟和第 0–1 档的游牧丢了王庭,有 SCATTER_P 的机会诸部离散(散回无主部落)
    */
   SCATTER_P: 0.3,
+  /**
+   * 大汗国(第 2 档以上的游牧)丢了王庭、手里还有草原的州:不因州少、破都纳降亡国,退保草原(北退);
+   * KHAN_STRIFE 年里(区间内确定性抽)起汗位之争:征服者国力 KHAN_SUB_POW 倍以上、接壤的,KHAN_SUBMIT 的机会诸王不能相下、称臣;
+   * 否则 KHAN_SPLIT 的机会分裂(其中 KHAN_THREE 一分为三,余下一分为二),不然强汗力克诸王、复归一统。退保期间再丢王庭照旧亡国
+   */
+  KHAN_STRIFE: [20, 60] as [number, number],
+  KHAN_SUBMIT: 0.3,
+  KHAN_SUB_POW: 2,
+  KHAN_SPLIT: 0.55,
+  KHAN_THREE: 0.35,
   /** 大崩解 / 灭国切出的继承国:母国收复休战年数范围(每次崩解在此区间内确定性抽一年数,不计收复失地) */
   COLLAPSE_TRUCE: [5, 50] as [number, number],
   /** 大崩解当年母国国力倍数;之后 COLLAPSE_WEAK_YEARS 年内线性回到 1(有心无力) */
@@ -354,6 +365,12 @@ const U_CHAIN = 17;
 const U_COLLAPSE_TRUCE = 18;
 const U_TRIBAL = 19;
 const U_SCATTER = 20;
+const U_KHAN_T = 21;
+const U_KHAN = 22;
+const U_KHAN3 = 23;
+
+/** 草原、荒漠(游牧的地方):大汗国丢了王庭能不能退保,看手里还有没有这样的州 */
+const STEPPE = biomeTagged('nomad');
 
 /**
  * 丢了国都按哪套规矩(见 SCATTER_P):
@@ -435,6 +452,8 @@ export interface WarModel {
   families: CollapseFamily[];
   /** 国家 → families 下标 */
   familyOf: Map<number, number>;
+  /** 丢了王庭、退保草原的大汗国:退保那一年、打下王庭的那一国(汗位之争了结就删;接着推时由史事重建) */
+  rump: Map<number, { since: Year; by: number }>;
   // 别的子系统挂给战争、战争提供给别人的回调(攻城、立约、钱粮、动荡……)不在这里,在具名接口表 civ/api.ts 的 war 那一组
 }
 
@@ -685,6 +704,7 @@ function newModel(pm: PolityModel): WarModel {
     collapsedAt: new Map(),
     families: [],
     familyOf: new Map(),
+    rump: new Map(),
   };
 }
 
@@ -734,7 +754,7 @@ export function warModelOf(sim: CivSim): WarModel | undefined {
 
 /** 登记战争的事件处理和监听(installPolities 之后调用) */
 export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarModel = newModel(pm)): WarModel {
-  const { PROJECT, SCATTER_P, KIN_ATTACK, HOME_DEF, CAPITAL_DEF, PROTECT_DEF, P_MAX, P_MIN, CAPITAL_GRACE, PROTECT_KEEP, HOLD, DEFENSE, REGAIN, RES_TARGET, MAX_CUT, MIN_STATE, CEDE_I, SURRENDER_SHARE, SURRENDER_POWER, ALLY_JOIN, TWO_FRONTS, REST, BROKE_CUT, PURSE_0, PLUNDER_FLOOR, TRUCE, NEWBORN, CONF_NEWBORN, COLLAPSE_TRUCE, COLLAPSE_WEAK, COLLAPSE_WEAK_YEARS, COLLAPSE_VIGOR, COLLAPSE_VIGOR_YEARS, COLLAPSE_CLAIM_POWER, COLLAPSE_CLAIM_FULL, COLLAPSE_CLAIM_FADE, COLLAPSE_REUNIFY, MAX_WARS, CRUSH, WAR_ODDS, LOCAL_EXP, BORDER_FULL, FOREIGN, REVANCHE, PIANAN_K, PREY, PREY_ODDS, GRUDGE_YEARS, GRUDGE, RES_WANT, RES_MAX, RICH, DIVERT, DIVERT_U, DIVERT_STEP, CHAOS_YEARS, PREY_UNREST, PREY_CALM, PREY_HIGH, WEAK_PREY, BLIGHT_MIN, BLIGHT_PREY, BLIGHT_FULL, LORD_PREY, LORD_PREY_MAX, STAND, STAND_DAYS, STAND_SLAIN, STAND_TAKEN, WINTER_T, WINTER_ALWAYS, WINTER_JITTER, BREAK_MAX, BREAK, COUNTER, STALL, BROKE_LENGTH, BROKE_PEACE, REVOLT_LENGTH, CRUSH_GOAL, CEDE, FAITH_WAR_SAME, FAITH_WAR_FAR, FAITH_THEO, MOTIVE_FLOOR, MOTIVE_LAND_EXP, MOTIVE_RES, MOTIVE_CLAIM, MOTIVE_CLAIM_STEP, MOTIVE_REVENGE, MOTIVE_DIVERT, MOTIVE_UNREST, MOTIVE_RULER, MOTIVE_NEW_REIGN, MOTIVE_NEW_WAR, MOTIVE_NEW_RULER, MOTIVE_FAITH, MOTIVE_FAITH_K, MOTIVE_KIN_RATIO, MOTIVE_KIN, MOTIVE_CHAOS } = wm.k;
+  const { PROJECT, SCATTER_P, KHAN_STRIFE, KHAN_SUBMIT, KHAN_SUB_POW, KHAN_SPLIT, KHAN_THREE, KIN_ATTACK, HOME_DEF, CAPITAL_DEF, PROTECT_DEF, P_MAX, P_MIN, CAPITAL_GRACE, PROTECT_KEEP, HOLD, DEFENSE, REGAIN, RES_TARGET, MAX_CUT, MIN_STATE, CEDE_I, SURRENDER_SHARE, SURRENDER_POWER, ALLY_JOIN, TWO_FRONTS, REST, BROKE_CUT, PURSE_0, PLUNDER_FLOOR, TRUCE, NEWBORN, CONF_NEWBORN, COLLAPSE_TRUCE, COLLAPSE_WEAK, COLLAPSE_WEAK_YEARS, COLLAPSE_VIGOR, COLLAPSE_VIGOR_YEARS, COLLAPSE_CLAIM_POWER, COLLAPSE_CLAIM_FULL, COLLAPSE_CLAIM_FADE, COLLAPSE_REUNIFY, MAX_WARS, CRUSH, WAR_ODDS, LOCAL_EXP, BORDER_FULL, FOREIGN, REVANCHE, PIANAN_K, PREY, PREY_ODDS, GRUDGE_YEARS, GRUDGE, RES_WANT, RES_MAX, RICH, DIVERT, DIVERT_U, DIVERT_STEP, CHAOS_YEARS, PREY_UNREST, PREY_CALM, PREY_HIGH, WEAK_PREY, BLIGHT_MIN, BLIGHT_PREY, BLIGHT_FULL, LORD_PREY, LORD_PREY_MAX, STAND, STAND_DAYS, STAND_SLAIN, STAND_TAKEN, WINTER_T, WINTER_ALWAYS, WINTER_JITTER, BREAK_MAX, BREAK, COUNTER, STALL, BROKE_LENGTH, BROKE_PEACE, REVOLT_LENGTH, CRUSH_GOAL, CEDE, FAITH_WAR_SAME, FAITH_WAR_FAR, FAITH_THEO, MOTIVE_FLOOR, MOTIVE_LAND_EXP, MOTIVE_RES, MOTIVE_CLAIM, MOTIVE_CLAIM_STEP, MOTIVE_REVENGE, MOTIVE_DIVERT, MOTIVE_UNREST, MOTIVE_RULER, MOTIVE_NEW_REIGN, MOTIVE_NEW_WAR, MOTIVE_NEW_RULER, MOTIVE_FAITH, MOTIVE_FAITH_K, MOTIVE_KIN_RATIO, MOTIVE_KIN, MOTIVE_CHAOS } = wm.k;
   const { FOE_ODDS, FRIEND_JOIN } = pm.knobs.get(POLICY_KNOBS);
   const { ADULT } = pm.knobs.get(REGENTS_KNOBS);
   const api = civApi(sim);
@@ -1113,8 +1133,17 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     // 阶段 4 干预:手里有永久划给它的州的,不被并掉残部(迁都到剩下的城,那一块里没城就到别的块里挑)
     const keep = !!wm.iv?.holdsLock(y, t);
     // 亡国规则分政体(deathRule):小国、部落联盟、游牧丢了国都不因州少、破都纳降亡国
-    const rule = deathRule(Y, t);
-    const loose = rule === 'loose' || rule === 'scatter';
+    const rule0 = deathRule(Y, t);
+    let rule = rule0;
+    // 大汗国:手里还有草原的州就退保草原(北退;退保期间再丢王庭照旧)
+    let north = false;
+    if (rule === 'khan') {
+      let steppe = 0;
+      if (!wm.rump.has(y)) for (const q of pm.lands[y]) if (STEPPE[reg.biome[q]]) steppe++;
+      if (steppe > 0) north = true;
+      else rule = 'old';
+    }
+    const loose = rule === 'loose' || rule === 'scatter' || north;
     // 诸部离散:部落联盟 / 小游牧丢了王庭,诸部各自散去(余下的州都成无主部落),国号就此不存
     if (rule === 'scatter' && !keep && left >= 2 && !wm.iv?.protects(y, t) && keyed4(wm.base, pm.ptag[y], w.id, Math.round(t * 256), U_SCATTER) < SCATTER_P) {
       for (let q = 0; q < R; q++) if (owner[q] === y) sim.setOwner(Layer.Polity, q, -1, Ev.Collapse);
@@ -1132,9 +1161,11 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     if (sid >= 0) {
       // 部落联盟、游牧丢了王庭:记 cause = retreat 和迁往的方位("王庭北迁")
       const to = pm.settlements[sid].region;
-      const tent = rule === 'scatter' || rule === 'khan';
+      const tent = rule0 === 'scatter' || rule0 === 'khan';
       moveCapital(pm, y, sid, t);
-      sim.record('capital', { a: y, region: to, settlement: sid, war: w.id, ...(tent ? { cause: 'retreat' as const, dir: trekDir(geo, [reg.seat[r], reg.seat[to]]) } : {}) });
+      // 退保草原的大汗国:b 列 = 打下王庭的那一国(汗位之争里称臣称给它)
+      if (north) wm.rump.set(y, { since: t, by: x });
+      sim.record('capital', { a: y, ...(north ? { b: x } : {}), region: to, settlement: sid, war: w.id, ...(tent ? { cause: north ? ('north' as const) : ('retreat' as const), dir: trekDir(geo, [reg.seat[r], reg.seat[to]]) } : {}) });
       return true;
     }
     // 剩下的州里一座城都还没建起来(极少见):同样亡国
@@ -1251,10 +1282,54 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     return [best, m];
   };
 
+  /**
+   * 退保草原的大汗国 p(wm.rump)到了汗位之争的时候(KHAN_STRIFE;还在打仗的等仗打完):称臣于打下王庭的那一国、分裂、或强汗复归一统。
+   * 了结了 = true
+   */
+  const strife = (p: number, t: number): boolean => {
+    const R0 = wm.rump.get(p);
+    if (!R0) return false;
+    const tag = Math.round(R0.since * 256);
+    const [lo, hi] = KHAN_STRIFE;
+    if (t < R0.since + lo + (hi - lo) * keyed(wm.base, pm.ptag[p], tag, U_KHAN_T) || warsOf(p).length) return false;
+    wm.rump.delete(p);
+    const u = keyed(wm.base, pm.ptag[p], tag, U_KHAN);
+    const c = R0.by;
+    const dm = wm.dm;
+    if (
+      u < KHAN_SUBMIT &&
+      c >= 0 &&
+      pm.polities[c].ended === undefined &&
+      api.diplomacy.swear &&
+      dm &&
+      dm.liegeOf(p) < 0 &&
+      dm.liegeOf(c) < 0 &&
+      !dm.vassalsOf(p).length &&
+      !wm.iv?.halted(c, t) &&
+      !wm.iv?.protects(p, t) &&
+      polityBorders(pm, owner, c, p, t)
+    ) {
+      const pw = powers(t, [c, p]);
+      if (pw[c] >= KHAN_SUB_POW * pw[p]) {
+        api.diplomacy.swear(p, c, t, 'khan');
+        return true;
+      }
+    }
+    if (u >= 1 - KHAN_SPLIT && api.politics.khanSplit) {
+      const n = keyed(wm.base, pm.ptag[p], tag, U_KHAN3) < KHAN_THREE ? 3 : 2;
+      if (api.politics.khanSplit(p, t, n) > 0) return true;
+    }
+    const sid = capitalAt(pm.polities[p], t);
+    sim.record('strife', { a: p, region: pm.settlements[sid].region, settlement: sid });
+    return true;
+  };
+
   const warCheck = (k: number, p: number, t: number): void => {
     const P = pm.polities[p];
     if (!P || P.ended !== undefined) return;
     if (k < LOOK_K) sim.schedule(checkTime(wm, p, k + 1), Ev.WarCheck, k + 1, p);
+    // 退保草原的大汗国到了汗位之争的时候:这一次看邻国就看它
+    if (strife(p, t)) return;
     // 阶段 4 干预"不许扩张":不主动宣战
     if (wm.iv?.halted(p, t)) return;
     // 正在打仗的不再开新仗(帝国级的大国可以两线作战,一国同时打的仗不超过 MAX_WARS);刚议和的歇几年
@@ -1703,6 +1778,10 @@ export function resumeWars(sim: CivSim, world: World, civ: Civ): void {
   /** 议和后替输的一方(复仇)、大胜的一方(连续吞并)多看一眼邻国:[战争, 哪一国, 议和的年份, 是连续吞并],按议和时预约的先后 */
   const looks: [War, number, Year, boolean][] = [];
   for (const e of civ.annals) {
+    // 退保草原的大汗国:北退那一刻起,到汗位之争了结(分裂 / 称臣 / 复归一统)
+    if (e.kind === 'capital' && e.cause === 'north') wm.rump.set(e.a, { since: e.year, by: e.b });
+    else if ((e.kind === 'collapse' || e.kind === 'submit') && e.cause === 'khan') wm.rump.delete(e.a);
+    else if (e.kind === 'strife') wm.rump.delete(e.a);
     if (e.kind === 'war') {
       wm.wars[e.war] = { id: e.war, a: e.a, b: e.b, start: e.year, takes: [], ...(e.motive ? { motive: e.motive } : {}) };
       if (e.cause === 'quell' || e.cause === 'heir' || e.cause === 'trek') civil.add(e.war);

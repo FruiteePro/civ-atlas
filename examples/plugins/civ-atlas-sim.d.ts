@@ -141,7 +141,8 @@ export type AnnalKind =
   | 'keep'
   | 'trek'
   | 'winter'
-  | 'reform';
+  | 'reform'
+  | 'strife';
 
 // ---- 读口(sim.read@1) ----
 

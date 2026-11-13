@@ -732,6 +732,7 @@ const TAG: Record<AnnalKind, string> = {
   trek: '徙',
   winter: '冬',
   reform: '制',
+  strife: '争',
 };
 
 function base(
@@ -2007,6 +2008,9 @@ function simpleEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
     }
     case 'reform':
       return reformEntry(ctx, e, id);
+    case 'strife':
+      // 大汗国退保草原以后汗位之争,强汗复归一统(wars.ts)
+      return base(e, id, `${pn(civ, e.a, y)}汗位之争,强汗力克诸王,复归一统`, 2, [e.a], [e.region]);
     case 'split': {
       // 革命据地自立
       if (e.cause === 'revolution') return revolutionSplitEntry(ctx, e, id);
@@ -2539,7 +2543,8 @@ function diplomacyEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
       return base(e, id, t, 1, [e.a, e.b], [], '绝');
     }
     case 'submit': {
-      const t = `${A}畏${B}之强,遣使称臣,岁岁纳贡`;
+      // 大汗国退保草原以后汗位之争(wars.ts):诸王不能相下,称臣于打下王庭的那一国
+      const t = e.cause === 'khan' ? `${A}汗位之争,诸王不能相下,遂奉表称臣于${B},岁岁纳贡` : `${A}畏${B}之强,遣使称臣,岁岁纳贡`;
       const P = polityOf(civ, e.a);
       return base(e, id, t, P && polityTierAt(P, y) >= GREAT_TIER ? 3 : 2, [e.a, e.b], [e.region]);
     }
@@ -3152,6 +3157,13 @@ function warEntry(ctx: Ctx, ids: number[]): ChronicleEntry {
     if (isGreat(p) && ms.some((e) => capitalHeld(p!, e.year) >= OLD_CAPITAL)) oldCapital = true;
     const who = pn(civ, pid, start);
     // 部落联盟 / 游牧丢了王庭(wars.ts 的 deathRule):"北狄王庭北迁"
+    // 大汗国退保草原(wars.ts 的 deathRule = khan):"北狄弃王庭,北走某城"
+    if (ms[ms.length - 1].cause === 'north') {
+      const m = ms[ms.length - 1];
+      const to = cityName(civ, m.settlement) || regionName(civ, m.region);
+      parts.push(`${who}弃王庭,${m.dir === '北' ? '北走' : '退保'}${to || '草原'}`);
+      continue;
+    }
     if (ms[ms.length - 1].cause === 'retreat') {
       const d = ms[ms.length - 1].dir;
       parts.push(`${who}王庭${d ? RETREAT[d] : '远徙'}`);
@@ -3858,7 +3870,12 @@ function collapseEntry(ctx: Ctx, ids: number[]): ChronicleEntry {
   const civM = storm ? civ.migrations?.[storm.war]?.polity : undefined;
   const lead = storm && civM !== undefined ? `${pn(civ, civM, y)}破${cityName(civ, storm.settlement) || regionName(civ, storm.region) || '其都'},` : '';
   let text: string;
-  if (e.b === 2) {
+  if (e.cause === 'khan') {
+    // 大汗国退保草原以后汗位之争、分裂(wars.ts):"北狄汗位之争,诸王各据一方,瑞州、雪西自立为汗,北狄一分为三"
+    const names = uniq(pieces.map((s) => s.region)).map((r) => regionName(civ, r)).filter(Boolean);
+    const n = pieces.length + 1;
+    text = `${P}汗位之争,诸王各据一方,${names.length ? `${names.join('、')}自立为汗,` : ''}${P}${n === 2 ? '分为两部' : `一分为${cnNumber(n)}`}`;
+  } else if (e.b === 2) {
     const nOut = e.foe ?? e.war; // foe=散回州数;旧档仍可能把州数写在 war
     text = lead ? `${lead}${P}土崩瓦解,${nOut > 0 ? `${cnNumber(nOut)}州` : '诸州'}散为部落${keep}` : `${P}土崩瓦解,${nOut > 0 ? `${cnNumber(nOut)}州` : '诸州'}散为部落${keep}`;
   }
