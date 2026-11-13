@@ -78,8 +78,10 @@ describe('动荡、饥荒、民变、大崩解', () => {
       const L = civ.log;
       // 日志里散回部落地带的归属变化:年份 → 州
       const tribal = new Map<number, number[]>();
+      // 部落联盟 / 小游牧丢了王庭、诸部离散(wars.ts,fall 的 cause = scatter)也散回部落地带,不是大崩解
+      const scatter = new Set(A.filter((e) => e.kind === 'fall' && e.cause === 'scatter').map((e) => e.year));
       for (let i = 0; i < L.size; i++) {
-        if (L.layer[i] !== Layer.Polity || L.cause[i] !== Ev.Collapse) continue;
+        if (L.layer[i] !== Layer.Polity || L.cause[i] !== Ev.Collapse || scatter.has(L.year[i])) continue;
         expect(L.value[i]).toBe(-1);
         let l = tribal.get(L.year[i]);
         if (!l) tribal.set(L.year[i], (l = []));
@@ -193,7 +195,8 @@ describe('动荡、饥荒、民变、大崩解', () => {
       expect(collapses.length).toBe(A.filter((e) => e.kind === 'collapse').length);
       for (const e of collapses) {
         // 大迁徙迁来的一支打进国都引起的写"某某破某城,某国大崩解"
-        expect(e.text).toMatch(/大乱|土崩瓦解|大崩解/);
+        // 大汗国退保草原以后汗位之争、分裂(collapse 的 cause = khan):"某汗国汗位之争,诸王各据一方,…"
+        expect(e.text).toMatch(/大乱|土崩瓦解|大崩解|汗位之争/);
         expect(e.tag).toBe('崩');
         expect(e.importance).toBe(3);
       }

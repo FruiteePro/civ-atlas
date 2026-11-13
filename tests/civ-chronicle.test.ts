@@ -940,11 +940,17 @@ describe('编年史 · 真实世界(立国、升格)', () => {
       const rebels = new Set(civ.annals.filter((e) => e.kind === 'revolt').map((e) => e.a));
       for (const p of civ.polities) {
         const kind = p.parent === undefined ? 'found' : rebels.has(p.id) ? 'revolt' : 'split';
-        expect(flat(list).some((e) => e.kind === kind && e.polities[0] === p.id), `${p.name}`).toBe(true);
+        // 起兵革命据地自立(split 的 cause = revolution)写成一条"革命"
+        expect(flat(list).some((e) => (e.kind === kind || (kind === 'split' && e.kind === 'revolution')) && e.polities[0] === p.id), `${p.name}`).toBe(true);
       }
       // 立国写开国之君和当年的国号(第 0 档:"X部" / "X城邦"):"李昭建昌部,都于汾城"
       // 边缘立国前面加"受某国影响,":"受大昌影响,李昭建平部,都于瑞城"
       for (const e of list.filter((x) => x.kind === 'found')) {
+        // 部落联盟立国(v75):"诸部合为某某" / "某人合诸部为某某"
+        if (civ.annals[e.id].cause === 'confed') {
+          expect(e.text).toMatch(/^(.+合诸部|诸部合)为.+,都于.+$/);
+          continue;
+        }
         expect(e.text).toMatch(/^(受.+影响,)?.+建.+(部|城邦),都于.+$/);
         const founder = civ.people!.find((x) => x.role === 'ruler' && x.polity === e.polities[0])!;
         const mentor = civ.polities[e.polities[0]].mentor;
@@ -962,7 +968,8 @@ describe('编年史 · 真实世界(立国、升格)', () => {
           expect(e.text).toMatch(/^(.+教众.*起事,(叛.+)?自立,立.+主国事|.*教众.*不服,立.+,据.+),号.+,都于.+$/);
           continue;
         }
-        if (civ.annals[e.id].cause === 'dissent') {
+        // 不服的那头正好据着故国的旧都(复国)的,照复国写(下面那条)
+        if (civ.annals[e.id].cause === 'dissent' && civ.polities[e.polities[0]].restores === undefined) {
           expect(e.text).toMatch(/^.*之民不服.*立神权,.*据.+自立,号.+,都于.+$/);
           continue;
         }
@@ -1034,7 +1041,8 @@ describe('编年史 · 真实世界(默认参数):被迫迁都折进战争,"大�
       for (const w of list.filter((x) => x.kind === 'war')) {
         const movers = new Set(w.children!.filter((k) => k.kind === 'capital').map((k) => k.polities[0]));
         const fallen = new Set(w.children!.filter((k) => k.kind === 'fall').map((k) => k.polities[0]));
-        if ([...movers].some((p) => !fallen.has(p))) expect(w.text).toMatch(/国都.+陷落|连迁.都/);
+        // 部落联盟、游牧丢了王庭(v75):"王庭北迁" / "弃王庭,北走某城"
+        if ([...movers].some((p) => !fallen.has(p))) expect(w.text).toMatch(/国都.+陷落|连迁.都|王庭(北迁|南迁|西迁|东徙|远徙)|弃王庭/);
         // 人名里可能带"失"(失苾可汗),先去掉"某某亲征""遣某某伐"
         expect(w.text.replace(/[^,;]+亲征|遣[^,;]+?[伐讨]/g, '')).not.toMatch(/失国都|失.*失/);
         clean(w);

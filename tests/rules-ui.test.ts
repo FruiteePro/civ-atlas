@@ -149,10 +149,10 @@ describe('改过的、搜规则、改了几项', () => {
     const g = groupItems('war');
     expect(g.common.map((x) => x.id)).toEqual(['war.odds', 'war.truce', 'war.length', 'war.crush', 'war.project']);
     expect(g.more.map((x) => x.id)).toEqual(['war.capital', 'war.prey', 'war.winter', 'war.sack', 'war.ruin', 'war.rebuild']);
-    // 页面上一共 56 项:常用 28,「更多」28
+    // 页面上一共 60 项:常用 28,「更多」32(v75 分与合加了部落联盟、诸部离散、汗国分裂、小国归附)
     const all = TUNING_GROUPS.map((x) => groupItems(x.id));
     expect(all.reduce((a, x) => a + x.common.length, 0)).toBe(28);
-    expect(all.reduce((a, x) => a + x.more.length, 0)).toBe(28);
+    expect(all.reduce((a, x) => a + x.more.length, 0)).toBe(32);
   });
 
   it('页面上拿掉的项:不进分组、搜不到;调过的在「只看改过的」另列(列过的改回了也接着列),算在改了几项里', () => {

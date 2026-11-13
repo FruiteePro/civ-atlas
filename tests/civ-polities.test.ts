@@ -258,8 +258,8 @@ describe('城市成长 + 国家', () => {
           const split = A.filter((e) => (e.kind === 'split' || e.kind === 'revolt') && e.a === p.id);
           expect(split).toHaveLength(1);
           expect(split[0]).toMatchObject({ year: p.founded, b: p.parent, settlement: cap.id, war: -1 });
-          // 大迁徙迁来立的国:"立国"带 cause = trek
-        } else expect(found).toEqual([{ year: p.founded, kind: 'found', a: p.id, b: p.mentor ?? -1, region: cap.region, settlement: cap.id, war: -1, ...(p.trek !== undefined ? { cause: 'trek' } : {}) }]);
+          // 大迁徙迁来立的国:"立国"带 cause = trek;部落联盟(诸部合为一国)带 cause = confed
+        } else expect(found).toEqual([{ year: p.founded, kind: 'found', a: p.id, b: p.mentor ?? -1, region: cap.region, settlement: cap.id, war: -1, ...(p.trek !== undefined ? { cause: 'trek' } : p.confed !== undefined ? { cause: 'confed' } : {}) }]);
         const ranks = A.filter((e) => e.kind === 'rank' && e.a === p.id).map((e) => e.year);
         expect(ranks).toEqual(p.titles!.slice(1).map((t) => t.year));
         // 国都变迁:第一条是立国时的国都,之后每条对应一条"迁都"史事,或一条新朝定都根据地的"改朝换代"(阶段 3 王朝更替)
@@ -316,6 +316,7 @@ describe('城市成长 + 国家', () => {
           'trek',
           'winter',
           'reform',
+          'strife',
         ]).toContain(e.kind);
       }
     }
@@ -349,7 +350,7 @@ describe('城市成长 + 国家', () => {
     let empires = 0;
     for (const p of civ.polities) {
       const t = p.titles!;
-      if (p.parent === undefined && p.trek === undefined) expect(t[0]).toEqual({ year: p.founded, tier: 0 });
+      if (p.parent === undefined && p.trek === undefined && p.confed === undefined) expect(t[0]).toEqual({ year: p.founded, tier: 0 });
       else {
         const own = ownersAt(civ, p.founded);
         let n = 0;
