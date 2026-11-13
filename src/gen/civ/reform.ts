@@ -54,7 +54,7 @@ import { Layer, type Annal, type AnnalCause, type Polity, type RulerLeanings, ty
 import { keyed4 } from './engine/rand';
 import type { CivSim } from './engine/sim';
 import { dynastyReign, rulerOf, type PolityModel } from './polities';
-import type { PoliticsModel } from './politics';
+import { politicsCheckTime, type PoliticsModel } from './politics';
 import type { WarModel } from './wars';
 import type { ControlModel } from './control';
 import { capitalAt, populationAt } from './growth';
@@ -186,6 +186,22 @@ export const REFORM_KNOBS = defineKnobs('reform', {
   CLERIC_MAX: 0.4,
   CLERIC_USURP: 0.3,
   /**
+   * 教众革命:议立宪 / 废君谈崩起兵时,国教入世到 ZEALOT_E、天命之说盛过共治 + 民权 —— 有
+   * min(ZEALOT_MAX, ZEALOT_K × 入世程度 × 2 × max(0, 国教占比 − ZEALOT_SHARE0))的机会是教众起事:打进国都立神权,打不进据地立神权国
+   */
+  ZEALOT_E: 0.5,
+  ZEALOT_K: 0.5,
+  ZEALOT_SHARE0: 0.3,
+  ZEALOT_MAX: 0.6,
+  /** 神权里的世俗革命:共治 + 民权到 SECULAR_PUSH、动荡到 REVOLT_U 才有人起兵(打分照 revolt,天命那一项换成国教占比) */
+  SECULAR_PUSH: 0.4,
+  /**
+   * 大祭司交接之际(新的大祭司接任不到 PONTIFF_WINDOW 年、看内政时):机会 PONTIFF × (1 + 动荡)× (1.3 − 0.6 × 入世程度);
+   * 掷中:旧王室还有人(废君 HOUSE_YEARS 年内)迎回复辟,不然有兵权的将军政变,再不然世俗大臣废神权
+   */
+  PONTIFF: 0.1,
+  PONTIFF_WINDOW: 40,
+  /**
    * 政体一变就有一头不服(教团夺位、教众起事、神权里的政变 / 革命 / 交接之际夺权):机会 DISSENT × e^(DISSENT_K × (动荡 − DISSENT_U0))
    * × (1 + 异教程度 / 入世程度);不服的那片州(DISSENT_MIN–DISSENT_MAX 州,最多国土 DISSENT_FRAC)据地自立:
    * 教团上台 = 信别的教、离国都远的那头立世俗国;世俗派上台 = 国教最盛的那头(圣城优先)立残余的神权国
@@ -216,10 +232,14 @@ const U_THEO = 6;
 const U_THEO_LEAVE = 7;
 const U_CLERIC = 8;
 const U_CLERIC_END = 9;
+const U_ZEALOT = 10;
+const U_THEO_COUP = 11;
+const U_PONTIFF = 13;
 const U_DISSENT = 14;
 const U_DISSENT_R = 15;
-/** keyed4 最后一位:看内政 0、作者干预 1、看王朝(教团专权)2*/
+/** keyed4 最后一位:看内政 0、作者干预 1、看王朝(教团专权)2、大祭司交接 3 */
 const R_DYNASTY = 2;
+const R_PONTIFF = 3;
 /** 作者干预立神权:keyed4 第三位 = 这个数 + 第几条干预(和看内政的第几次错开) */
 const U_AUTHOR_IV = 1 << 24;
 /** 倾向的随机数从这里起(drawLeanings 的用途号加上去) */
@@ -306,7 +326,10 @@ export function reformCheck(cx: ReformCtx): boolean {
     if (issue === Issue.Charter && out === Outcome.Done && right < RIGHT_MIN) out = Outcome.Half;
     if (out === Outcome.Half && r.charter >= 1) out = Outcome.Shelve;
     if (issue === Issue.Widen && out === Outcome.Half) out = Outcome.Shelve;
-    if (out === Outcome.Break) return (issue !== Issue.Widen && revolt(cx, issue, push, R)) || (cx.record(issue, Outcome.Shelve, cx.capR), true);
+    if (out === Outcome.Break) {
+      const zealot = issue !== Issue.Widen && sky > share + right && zealotOdds(cx) > R(U_ZEALOT);
+      return (issue !== Issue.Widen && revolt(cx, issue, push, R, zealot ? 'zealot' : undefined)) || (cx.record(issue, Outcome.Shelve, cx.capR), true);
+    }
     const opt = issue === Issue.Abolish && out === Outcome.Done ? openness(K, push, r.franchise, 0) : undefined;
     cx.record(issue, out, cx.capR, opt);
     if (issue === Issue.Abolish && out === Outcome.Done) openSeg(cx, { regime: 'republic' });
@@ -342,6 +365,21 @@ export function reformCheck(cx: ReformCtx): boolean {
   }
   if (regime === 'republic' && tryTheocracy(cx, regime, sky, since, R)) return true;
   if (regime === 'theocracy') {
+    const e = stateEngage(cx);
+    // 世俗将军政变(照共和国的政变,× 出世的教团更容易交权)
+    if (since >= REFORM_GAP && crisis > 0 && (army > 0 || lost > 0)) {
+      const odds = COUP_ODDS * (1 + COUP_ARMY * army) * (1 + crisis) * leaveMul(K, e);
+      if (R(U_THEO_COUP) < odds / (1 + odds)) {
+        note(cx, { b: -1, region: cx.capR, settlement: capitalAt(P, t), n: REFORM_COUP, cause: 'secular' });
+        openSeg(cx, { regime: 'junta', usurper: leader(cx, R, GENERAL_SHIFT) });
+        dissent(cx, 'secular', R);
+        return true;
+      }
+    }
+    // 世俗革命:共治、民权盛,动荡大,有人起兵
+    if (since >= REFORM_GAP && share + right >= K.SECULAR_PUSH && revolt(cx, null, share + right - K.PUSH_SKY * stateFaithShare(cx), R, 'secular')) return true;
+    // 大祭司交接之际
+    if (since >= REFORM_GAP && pontiffSeize(cx)) return true;
     if (tryLaicize(cx, share, right, crisis, since, R)) return true;
     return false;
   }
@@ -629,6 +667,14 @@ export function rebelTheocracy(pm: PolityModel, parent: number, group: readonly 
   return u01 < p;
 }
 
+/** 教众革命的机会(见 REFORM_KNOBS 的 ZEALOT_*):国教不够入世 = 0 */
+function zealotOdds(cx: ReformCtx): number {
+  const K = cx.pm.knobs.get(REFORM_KNOBS);
+  const e = stateEngage(cx);
+  if (e < K.ZEALOT_E) return 0;
+  return Math.min(K.ZEALOT_MAX, K.ZEALOT_K * e * 2 * Math.max(0, stateFaithShare(cx) - K.ZEALOT_SHARE0));
+}
+
 /** 教团专权要的(council.ts 给):和看内政的一样,k = 第几次看王朝 */
 export type ClericCtx = Pick<ReformCtx, 'sim' | 'pm' | 'pol' | 'wm' | 'cm' | 'P' | 't' | 'rules' | 'base' | 'capR' | 'u' | 'broke'> & { k: number };
 
@@ -652,6 +698,36 @@ export function clericSeize(cx: ClericCtx): boolean {
   note(rcx, { b: -1, region: cx.capR, settlement: capitalAt(P, t), n: REFORM_THEOCRACY, cause: 'cleric' });
   openSeg(rcx, { regime: 'theocracy', usurper: leader(rcx, R, CLERIC_SHIFT) });
   dissent(rcx, 'cleric', R);
+  return true;
+}
+
+/** 大祭司交接之际(见 REFORM_KNOBS 的 PONTIFF*):此刻在任的大祭司是这一段第二位以后、接任不到 PONTIFF_WINDOW 年;每一位只掷一次 */
+function pontiffSeize(cx: ReformCtx): boolean {
+  const K = cx.pm.knobs.get(REFORM_KNOBS);
+  const { pm, P, t } = cx;
+  const now = rulerOf(pm, P.id, t);
+  if (now.j === 0 || now.crown || !(t - now.from < K.PONTIFF_WINDOW)) return false;
+  const R = (use: number) => keyed4(cx.base, pm.ptag[P.id], now.k, use, R_PONTIFF);
+  // 同一位大祭司在任时看过几回内政也只掷一次:他接任以后头一回看内政(上一回看内政在他接任以前)才掷
+  if (politicsCheckTime(cx.pol, P.id, cx.k - 1) >= now.from) return false;
+  const odds = K.PONTIFF * (1 + Math.max(0, cx.u)) * leaveMul(K, stateEngage(cx));
+  if (R(U_PONTIFF) >= odds / (1 + odds)) return false;
+  const seg = (P.dynasties?.length ?? 1) - 1;
+  const crown = lastCrown(P, seg);
+  const abolished = crown >= 0 ? P.dynasties![crown + 1].year : -Infinity;
+  const at = { region: cx.capR, settlement: capitalAt(P, t) };
+  if (crown >= 0 && P.lineage !== 'republic' && t - abolished < K.HOUSE_YEARS) {
+    const house = P.dynasties![crown].house ?? crown;
+    note(cx, { b: house, ...at, n: REFORM_RESTORE, cause: 'pontiff' });
+    openSeg(cx, { house });
+  } else if (cx.rules.army > 0) {
+    note(cx, { b: -1, ...at, n: REFORM_COUP, cause: 'pontiff' });
+    openSeg(cx, { regime: 'junta', usurper: leader(cx, R, GENERAL_SHIFT) });
+  } else {
+    note(cx, { b: -1, ...at, n: REFORM_LAICIZE, cause: 'pontiff' });
+    openSeg(cx, { regime: 'republic' });
+  }
+  dissent(cx, 'secular', R);
   return true;
 }
 

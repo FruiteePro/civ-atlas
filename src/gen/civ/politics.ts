@@ -289,6 +289,11 @@ function newModel(pm: PolityModel, wm: WarModel, world: World): PoliticsModel {
   };
 }
 
+/** 国家 p 第 k 次看内政的时刻(k < 0 = 立国那一刻) */
+export function politicsCheckTime(pol: PoliticsModel, p: number, k: number): number {
+  return k < 0 ? pol.pm.polities[p].founded : checkTime(pol, p, k);
+}
+
 /** 国家 p 第 k 次看内政的时刻 */
 function checkTime(pol: PoliticsModel, p: number, k: number): number {
   const { POL_FIRST, POL_EVERY } = pol.k;
