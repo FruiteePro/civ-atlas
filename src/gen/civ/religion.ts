@@ -566,7 +566,7 @@ export class FaithSim {
               kind: 'sect',
               name: '',
               form: f.form,
-              engage: engageRound(faithEngage(f) + ENGAGE_DRIFT * (keyed(seed, 8, cap.cell, f.id) - 0.5)),
+              engage: engageRound(faithEngage(f) + ENGAGE_DRIFT * (keyed(seed, 8, cap.cell, this.roots + this.ordinal.get(f.id)!) - 0.5)),
               parent: f.id,
               founded: y,
               polity: s.polity,
