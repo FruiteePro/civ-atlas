@@ -85,7 +85,7 @@ import { addPolity, bookOf, endPolity, foundCity, moveCapital, polityModelOf, re
 import { IV_NOT_HIM, IV_PEOPLE, IV_PROTECTED, IV_WAIT, crownOf, reignBorn } from './rulers';
 import { strikeDisaster } from './disaster';
 import { segAt } from './policy';
-import { bestCapital, polityBorders, warModelOf, type War } from './wars';
+import { bestCapital, dropLocked, polityBorders, warModelOf, type War } from './wars';
 import { politicsModelOf } from './politics';
 import { dynastyModelOf } from './dynasty';
 import { capitalAt } from './growth';
@@ -370,6 +370,13 @@ export class InterventionModel {
     return false;
   }
 
+  /** 州 r 在 t 那一刻是永久划给国家 o 的(o 是那时的主人;接着推时重建当年的事用,见 wars.ts 的 dropLocked) */
+  lockedTo(r: number, t: number, o: number): boolean {
+    if (!this.lockRegions.has(r) || o < 0) return false;
+    for (const v of this.lockRules) if (v.region === r && t >= v.from && this.resolve(v.a) === o) return true;
+    return false;
+  }
+
   /** 国家 p 此刻手里有永久划给它的州 */
   holdsLock(p: number, t: number): boolean {
     if (!this.lockRules.length || !this.owner) return false;
@@ -499,6 +506,7 @@ export function installInterventions(sim: CivSim, iv: InterventionModel): void {
   iv.bindRegions();
   wm.iv = iv;
   pm.iv = iv;
+  dropLocked(wm);
   const owner = sim.owners[Layer.Polity];
   const culture = sim.owners[Layer.Culture];
   const R = pm.terrain.R;

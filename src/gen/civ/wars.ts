@@ -387,6 +387,8 @@ export interface CollapseFamily {
   /** 母国 + 各继承国 */
   members: Set<number>;
   noReclaim: boolean;
+  /** 接着推时由史事重建、还没去掉那一刻永久划走的州(干预模型装上时去掉,见 interventions.ts 的 installInterventions) */
+  unlocked?: true;
 }
 
 /** 邻国的内忧(看邻国时算,见 installWars 里的 weakness):赔率倍数、够得上写由头的那一样、割据的那州(没有 = −1) */
@@ -515,10 +517,11 @@ export function rebuildCollapseFamilies(wm: WarModel, civ: Pick<Civ, 'annals' | 
       }
     }
   }
-  const events: { parent: number; year: number }[] = [];
+  // unlocked:推演里登记的不含那一刻永久划走的州(unrest.ts 的 collapse / authorCollapse 传 unlocked;灭国切块 fragmentOnDestroy 传整国)
+  const events: { parent: number; year: number; unlocked: boolean }[] = [];
   for (const e of annals) {
-    if (e.kind === 'collapse' && e.b !== 2) events.push({ parent: e.a, year: e.year });
-    else if (isAuthorCollapseAnnal(e)) events.push({ parent: e.a, year: e.year });
+    if (e.kind === 'collapse' && e.b !== 2) events.push({ parent: e.a, year: e.year, unlocked: true });
+    else if (isAuthorCollapseAnnal(e)) events.push({ parent: e.a, year: e.year, unlocked: e.b === -8 });
   }
   for (const ev of events) {
     let fi = collapseFamilyIndex(wm, ev.parent, ev.year);
@@ -558,6 +561,19 @@ export function rebuildCollapseFamilies(wm: WarModel, civ: Pick<Civ, 'annals' | 
       for (let r = 0; r < cur.length; r++) if (cur[r] === ev.parent) terr.add(r);
     }
     fam.regions = [...terr];
+    if (ev.unlocked) fam.unlocked = true;
+  }
+  if (wm.iv) dropLocked(wm);
+}
+
+/** 重建的崩解家族去掉那一刻永久划给母国的州(推演里登记时 locked 把它们剔掉了;干预模型装上以后调) */
+export function dropLocked(wm: WarModel): void {
+  const iv = wm.iv;
+  if (!iv) return;
+  for (const f of wm.families) {
+    if (!f.unlocked) continue;
+    f.regions = f.regions.filter((r) => !iv.lockedTo(r, f.year, f.parent));
+    delete f.unlocked;
   }
 }
 
