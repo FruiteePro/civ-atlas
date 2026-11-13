@@ -663,6 +663,8 @@
  *  74:神权重做(logs/theocracy-design.md):各教有入世程度;和平立神权看世俗强弱、政体,君主国先议世俗改制;起事自立可立神权国;
  *      教团夺权、教众起事立神权,神权里的世俗政变、革命、大祭司交接时夺权;政体一变不服的一方据地自立;废神权的赔率重做;
  *      国号、朝代名用完时不再加数字。历史变了
+ *  75:部落联盟立国;开战看动机、纳贡式议和;亡国规则分政体(小国、部落联盟、游牧迁都或称臣,诸部离散);大汗国退保草原、汗位之争;
+ *      势孤的小国归附 / 称臣(logs/war-motive-design.md)。历史变了
  */
 import type { Civ, Culture, Faith, MigrationDir, Person, Place, Polity, Regions, RulerLeanings, Settlement } from './civ/types';
 import { FRAGMENT_MODE_CHOICES, type FragmentModeChoice } from './civ/fragmentMode';
@@ -679,7 +681,7 @@ import { SLUMP_CHOICES, SLUMP_DEFAULT, type Calamity } from './civ/calamity';
 import { stampCalc, type RuleSet } from './civ/ruleSet';
 
 /** 生成器版本:生成算法有改动、同种子会得到不同世界时加一(存档读档时核对);加一时在 GENERATOR_CHANGES 里补一条 */
-export const GENERATOR_VERSION = 74;
+export const GENERATOR_VERSION = 75;
 
 /**
  * 一版生成器的改动有多大(从小到大):打开旧存档、旧链接时,按跨过的几版里最大的那一种说清变了什么(savefile.ts 的 versionNote)
@@ -774,6 +776,7 @@ export const GENERATOR_CHANGES: Readonly<Record<number, { change: GeneratorChang
   72: { change: 'names' },
   73: { change: 'history' },
   74: { change: 'history' },
+  75: { change: 'history' },
 };
 
 /** 干预的种类(见文件头的表) */
