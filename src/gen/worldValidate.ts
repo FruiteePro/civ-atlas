@@ -1071,6 +1071,7 @@ function checkReligion(raw: unknown, c: Counts): void {
     oneOf(f.kind, FAITH_KINDS, `${at}.kind`);
     str(f.name, `${at}.name`, NAME_TEXT_MAX);
     optStr(f.form, `${at}.form`, NAME_TEXT_MAX);
+    if (f.engage !== undefined && !(typeof f.engage === 'number' && f.engage >= 0 && f.engage <= 1)) broken(`${at}.engage 不对`);
     optYearOk(f.founded, `${at}.founded`);
     if (f.founder !== undefined) {
       const o = obj(f.founder, `${at}.founder`);

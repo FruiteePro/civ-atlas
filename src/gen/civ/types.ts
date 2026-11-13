@@ -760,6 +760,8 @@ export interface Faith {
   name: string;
   /** 大教 / 教派 */
   form?: FaithForm;
+  /** 大教 / 教派:入世程度(0 出世 – 1 入世,到 0.05;religion.ts 的 faithEngage;旧存档没有 = 按类别的先验) */
+  engage?: number;
   /** 民间信仰:哪个民族的 */
   culture?: number;
   /** 教派:从哪个大教分出来 */

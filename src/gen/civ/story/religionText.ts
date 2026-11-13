@@ -10,7 +10,7 @@ import { polityName } from '../growth';
 import { ownersAt, type Owners } from '../engine/timeline';
 import { rulerRef } from './peopleText';
 import { chronicleCached, chronicleSteps, mergeChronicle, runSteps, type ChronicleEntry, type Importance } from './chronicle';
-import { faithCounts, faithRoot, FOLK_COLOR } from '../religion';
+import { faithCounts, faithEngage, faithRoot, FOLK_COLOR } from '../religion';
 import { developmentEntries } from './developmentText';
 import { tradeEntries } from './tradeText';
 import { ideologyEntries } from './ideologyText';
@@ -201,16 +201,24 @@ export function faithRows(civ: Civ, year: Year, era?: Era): FaithRow[] {
   const rows: FaithRow[] = [];
   for (const g of greats) {
     rows.push({ id: g.id, name: g.name, color: g.color, sub: greatSub(civ, g, era), n: n[g.id], sect: false });
-    for (const s of sectsOf(g.id)) rows.push({ id: s.id, name: s.name, color: s.color, sub: `${yearAt(s.founded ?? 0, era)}从${g.name}分出`, n: n[s.id], sect: true });
+    for (const s of sectsOf(g.id)) rows.push({ id: s.id, name: s.name, color: s.color, sub: `${yearAt(s.founded ?? 0, era)}从${g.name}分出，${engageWord(s)}`, n: n[s.id], sect: true });
   }
   if (folk > 0) rows.push({ id: -1, name: FOLK_ROW_NAME, color: FOLK_COLOR, sub: FOLK_ROW_SUB, n: folk, sect: false });
   return rows;
 }
 
-/** 大教的一行小字:"哲理，1140 年创于揽霞城"(纪年:"哲理，公元前 1360 年创于揽霞城") */
+/** 入世程度的三档说法(religion.ts 的 faithEngage):到 ENGAGE_HIGH 好议国事,不到 ENGAGE_LOW 不问政事,其余时议国事 */
+export const ENGAGE_HIGH = 0.6;
+export const ENGAGE_LOW = 0.35;
+export function engageWord(f: Faith): string {
+  const e = faithEngage(f);
+  return e >= ENGAGE_HIGH ? '好议国事' : e < ENGAGE_LOW ? '不问政事' : '时议国事';
+}
+
+/** 大教的一行小字:"哲理，1140 年创于揽霞城，不问政事"(纪年:"哲理，公元前 1360 年创于揽霞城，不问政事") */
 export function greatSub(civ: Civ, g: Faith, era?: Era): string {
   const city = g.holy !== undefined ? cityName(civ, g.holy) : '';
-  return `${g.form ?? ''}，${yearAt(g.founded ?? 0, era)}${city ? `创于${city}` : '创立'}`;
+  return `${g.form ?? ''}，${yearAt(g.founded ?? 0, era)}${city ? `创于${city}` : '创立'}，${engageWord(g)}`;
 }
 
 /** 这件宗教大事属于哪个大教(卡片按本教列大事:大教连同它的教派) */

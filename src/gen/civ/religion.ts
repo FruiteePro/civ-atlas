@@ -94,6 +94,23 @@ const FORM_BY_KIND: Record<string, FaithForm[]> = {
   forest: ['多神', '修行'],
 };
 
+/**
+ * 入世程度(Faith.engage,0 = 出世、1 = 入世;神权设计稿第 3 节):大教按教的类别给个先验,再按圣城取一个偏移;
+ * 教派分出时照母教、按分出那座城再漂一点(可能比母教更入世,也可能更出世)。民间信仰不立神权,没有这个数(= 0)。
+ * 立神权(和平改制、教团夺权、教众起事)的赔率乘 0.25 + 1.5 × engage;废神权、世俗夺权乘 1.3 − 0.6 × engage(reform.ts、theocracy.ts)
+ */
+export const ENGAGE_PRIOR: Readonly<Record<FaithForm, number>> = { 一神: 0.65, 二元: 0.6, 多神: 0.45, 哲理: 0.3, 修行: 0.2 };
+/** 大教的偏移幅度(± 一半)、教派的漂移幅度(± 一半) */
+const ENGAGE_SPREAD = 0.5;
+const ENGAGE_DRIFT = 0.4;
+const engageRound = (x: number) => Math.round(Math.min(0.95, Math.max(0.05, x)) * 20) / 20;
+
+/** 信仰的入世程度:民间信仰 0;旧存档没有这个数的大教 / 教派按类别的先验 */
+export function faithEngage(f: Faith | undefined): number {
+  if (!f || f.kind === 'folk') return 0;
+  return f.engage ?? ENGAGE_PRIOR[f.form ?? '多神'] ?? 0.45;
+}
+
 /** 颜色变浅(t > 0,往白里调)/ 变深(t < 0) */
 export function shade([r, g, b]: readonly number[], t: number): [number, number, number] {
   const m = (c: number) => Math.round(t >= 0 ? c + (255 - c) * t : c * (1 + t));
@@ -246,6 +263,11 @@ export class FaithSim {
   /** 到眼下有过的信仰(下标 = 信仰编号;只读) */
   get list(): readonly Faith[] {
     return this.faiths;
+  }
+
+  /** 信仰 f 的入世程度(民间信仰 = 0;见 faithEngage) */
+  engage(f: number): number {
+    return f >= 0 && f < this.faiths.length ? faithEngage(this.faiths[f]) : 0;
   }
 
   /** 国家 p 眼下的国教(−1 = 没有) */
@@ -444,6 +466,7 @@ export class FaithSim {
             kind: 'great',
             name: '',
             form,
+            engage: engageRound(ENGAGE_PRIOR[form] + ENGAGE_SPREAD * (keyed(seed, 7, s.cell) - 0.5)),
             founded: y,
             holy: best,
             founder: { name: '', born: y - age, died: y - age + 55 + Math.floor(keyed(seed, 6, s.cell) * 25) },
@@ -538,7 +561,18 @@ export class FaithSim {
           const k = faiths.length;
           const nth = this.sects.get(f.id) ?? 0;
           this.addFaith(
-            { id: k, kind: 'sect', name: '', form: f.form, parent: f.id, founded: y, polity: s.polity, seat: cap.id, color: shade(f.color, nth === 0 ? 0.32 : -0.28) },
+            {
+              id: k,
+              kind: 'sect',
+              name: '',
+              form: f.form,
+              engage: engageRound(faithEngage(f) + ENGAGE_DRIFT * (keyed(seed, 8, cap.cell, f.id) - 0.5)),
+              parent: f.id,
+              founded: y,
+              polity: s.polity,
+              seat: cap.id,
+              color: shade(f.color, nth === 0 ? 0.32 : -0.28),
+            },
             { kind: 'sect', cap: cap.id, holySeat: reg.seat[hr], capSeat: reg.seat[cap.region] },
           );
           this.sects.set(f.id, nth + 1);
@@ -664,6 +698,7 @@ function hook(sim: CivSim, fs: FaithSim, first: Year, pm?: PolityModel): void {
   if (pm) {
     pm.faithAt = (r) => (r >= 0 && r < fs.faith.length ? fs.faith[r] : -1);
     pm.stateFaith = (p) => fs.stateFaith(p);
+    pm.faithEngage = (f) => fs.engage(f);
     pm.tribalFaith = faithBefore((s, out) => fs.faithAt(s, out));
     pm.faithGap = (f, g) => {
       if (f < 0 || g < 0 || f >= fs.faithCount || g >= fs.faithCount) return -1;
