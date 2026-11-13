@@ -54,6 +54,9 @@ function mock(opts: {
     culture: opts.culture ?? 1,
     lineage: regime === 'republic' ? 'republic' : 'realm',
     dynasties: regime === 'junta' || regime === 'theocracy' ? [{ year: 0, regime }] : undefined,
+    // 档位按那一刻的升格记录算(polities.ts 的 tribalAnnexMul 读 Polity.titles,不读 m.tier)
+    founded: 0,
+    titles: [{ year: 0, tier: opts.tier ?? 0 }],
   } as Polity;
   const m = {
     k: K,
