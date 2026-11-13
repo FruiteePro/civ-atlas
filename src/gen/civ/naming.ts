@@ -550,7 +550,11 @@ export function namePolities(seed: number, polities: Polity[], cultures: Culture
         break;
       }
     }
-    return pick || `无名${p.id + 1}`;
+    if (pick) return pick;
+    // 候选全被占了(极少):族名前面加"后""北""南"……;再不行叫"无名"(不带数字)
+    const cu = cultures[p.culture]?.name ?? '';
+    const pre = p.eastern ? RESTORE_PREFIX_EAST : RESTORE_PREFIX_WEST;
+    return (cu && pre.map((x) => x + cu).find((n) => !taken.has(n) && !AWKWARD.has(n) && !(p.eastern && takenBare.has(bare(n))))) || '无名';
   };
   /** 复国:故国国名加前缀(故国更早立,国名、历朝都已经起好;改朝换代过的用它亡国时那一朝的国号);前缀都被占了才另起 */
   const restored = (p: Polity): string => {
@@ -678,7 +682,8 @@ function dynastyNamer(seed: number, { settlements, regionNames }: DynastyPlaces,
         const next = namer(style, dialectOf(p), contactOf(p, d.year, true)).keyed('city', cell, n, i);
         for (let t = 0; t < 6 && (!name || used.has(name)); t++) name = houseName(next().zh);
       }
-      d.name = name || `第${i + 1}`;
+      // 都撞了(极少):沿用上一朝的名字(不带数字)
+      d.name = name || ds[i - 1]?.name || p.name;
       return;
     }
     if (i === 0) {
@@ -734,7 +739,16 @@ function dynastyNamer(seed: number, { settlements, regionNames }: DynastyPlaces,
         if (free(root, taken, takenBare) && [...root].length <= 3) name = root;
       }
     }
-    d.name = name || `${p.name}${i + 1}`;
+    // 还不行(上万年的推演才会碰到):本国国名、本国以前的国号前面加"后""北""南"……;都占了就沿用上一朝的国号
+    // (不带数字:复国的国家会借亡国时那一朝的国号,"南云原2"会变成"后南云原2")
+    if (!name) {
+      const roots = [bare(p.name), ...ds.slice(0, i).map((x) => bare(x.name))].filter((x) => !!x && !/\d/.test(x));
+      for (const pre of RESTORE_PREFIX_EAST) {
+        for (const r of roots) if (!name && !r.startsWith(pre) && free(pre + r, taken, takenBare)) name = pre + r;
+        if (name) break;
+      }
+    }
+    d.name = name || ds[i - 1].name || p.name;
     taken.add(d.name);
     takenBare.add(bare(d.name));
   };
