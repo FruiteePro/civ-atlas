@@ -69,6 +69,11 @@ describe('改制', () => {
             expect(after, tag).toMatch(/共和国$/);
             expect(after, tag).not.toBe(before);
           } else expect([was, after], tag).toEqual(['junta', before]);
+        } else if (e.n === REFORM_REVOLUTION && e.cause === 'secular') {
+          // 神权国里的世俗革命(v74):没有议事在前
+          expect([was, now], tag).toEqual(['theocracy', 'republic']);
+          // 海洋城邦共和一系的国号本来就不带"共和国"
+          if (P.lineage !== 'republic') expect(after, tag).toMatch(/共和国$/);
         } else if (e.n === REFORM_REVOLUTION) {
           expect([was, now], tag).toEqual(['crown', 'republic']);
           expect(after, tag).toMatch(/共和国$/);
@@ -76,8 +81,8 @@ describe('改制', () => {
           const c = civ.annals[civ.annals.indexOf(e) - 1];
           expect([c.kind, c.n, c.a], tag).toEqual(['council', Outcome.Break, e.a]);
         } else if (e.n === REFORM_COUP) {
-          // 政变:国号不变
-          expect([was, now, after], tag).toEqual(['republic', 'junta', before]);
+          // 政变:国号不变(神权国里的将军政变、大祭司交接之际的政变,v74)
+          expect([was, now, after], tag).toEqual([e.cause === 'secular' || e.cause === 'pontiff' ? 'theocracy' : 'republic', 'junta', before]);
         } else if (e.n === 3) {
           // 立神权:国号不变
           expect(now, tag).toBe('theocracy');
@@ -147,14 +152,15 @@ describe('改制', () => {
         n++;
         expect(evType(x), x.text).toBe(label === '革命' || label === '政变' ? 'war' : 'dynasty');
         expect(x.text.length, x.text).toBeGreaterThan(10);
-        if (label === '革命') expect(x.text, x.text).toMatch(/不成;/);
+        // 神权国里的世俗革命没有议事在前,写罢神权 / 不奉神权
+        if (label === '革命') expect(x.text, x.text).toMatch(/不成;|神权/);
         if (label === '改制' && x.text.includes('议废')) expect(x.text).toMatch(/国号改称.+共和国$/);
         if (label === '复辟') expect(x.text).toMatch(/(复称|改称)/);
       }
       // 并进革命的那条议事不再单列
       const ids = new Set(es.map((x) => x.id));
       civ.annals.forEach((e, i) => {
-        if (e.kind === 'reform' && e.n === REFORM_REVOLUTION) expect(ids.has(i - 1), `seed ${seed} 第 ${e.year} 年`).toBe(false);
+        if (e.kind === 'reform' && e.n === REFORM_REVOLUTION && e.cause !== 'secular') expect(ids.has(i - 1), `seed ${seed} 第 ${e.year} 年`).toBe(false);
       });
     }
     expect(n).toBeGreaterThan(3);
