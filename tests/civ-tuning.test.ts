@@ -18,12 +18,12 @@ const table = (k: string) => {
 };
 
 describe('规则项表', () => {
-  it('70 项、7 组、常用 28 项;编号不重复、写法固定;每组都有常用的', () => {
-    expect(TUNING_ITEMS.length).toBe(70);
+  it('74 项、7 组、常用 28 项;编号不重复、写法固定;每组都有常用的', () => {
+    expect(TUNING_ITEMS.length).toBe(74);
     expect(TUNING_ITEMS.filter((x) => x.common).length).toBe(28);
     expect(TUNING_GROUPS.length).toBe(7);
     const ids = TUNING_ITEMS.map((x) => x.id);
-    expect(new Set(ids).size).toBe(70);
+    expect(new Set(ids).size).toBe(74);
     for (const x of TUNING_ITEMS) {
       expect(x.id).toMatch(/^[a-z]+\.[a-z][a-zA-Z]*$/);
       expect(x.id.split('.')[0]).toBe(x.group);
@@ -74,7 +74,7 @@ describe('规则项表', () => {
     expect(TUNING_KNOB_IDS).toEqual(TUNING_ITEMS.map((x) => x.id));
   });
 
-  it('数值、区间:官方值就是旋钮的官方值,落在档上;范围、步长合理;倍数档能关的 35 样(连「最多 0 次」的大迁徙、关掉的避冬)', () => {
+  it('数值、区间:官方值就是旋钮的官方值,落在档上;范围、步长合理;倍数档能关的 39 样(连「最多 0 次」的大迁徙、关掉的避冬)', () => {
     for (const x of TUNING_ITEMS) {
       if (x.kind === 'mult') continue;
       const onGrid = (v: number) => Math.abs((v - x.min) / x.step - Math.round((v - x.min) / x.step)) < 1e-9 && v >= x.min && v <= x.max;
@@ -91,7 +91,7 @@ describe('规则项表', () => {
       }
     }
     const offs = TUNING_ITEMS.filter((x) => (x.kind === 'mult' && x.off) || (x.kind === 'num' && x.offable) || (x.kind === 'num' && x.min === 0 && x.id === 'folk.treks'));
-    expect(offs.length).toBe(35);
+    expect(offs.length).toBe(39);
   });
 });
 
@@ -182,13 +182,13 @@ describe('第 3 版换算', () => {
 });
 
 describe('页面上拿掉的项、第 4 版换算', () => {
-  it('拿掉 14 项(都在「更多」里,并进去的那一项在同一组、页面上列着),页面上剩 56 项', () => {
+  it('拿掉 14 项(都在「更多」里,并进去的那一项在同一组、页面上列着),页面上剩 60 项', () => {
     const gone = TUNING_ITEMS.filter((x) => x.retired);
     expect(gone.map((x) => x.id)).toEqual([
       'war.rest', 'war.goal', 'war.break', 'war.fronts', 'war.revanche', 'war.grudge', 'split.share', 'split.age',
       'diplo.maxPacts', 'diplo.zone', 'folk.trekAbsorb', 'disaster.wear', 'court.maxAge', 'court.restore',
     ]);
-    expect(SHOWN_ITEMS.length).toBe(56);
+    expect(SHOWN_ITEMS.length).toBe(60);
     for (const x of gone) {
       expect(x.common, x.id).toBe(false);
       if (!x.into) continue;

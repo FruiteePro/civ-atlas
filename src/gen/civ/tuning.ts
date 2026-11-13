@@ -188,6 +188,10 @@ add(
   num({ id: 'split.newborn', name: '新立的国站稳几年' }, { official: 30, min: 0, max: 150, step: 5, unit: '年' }),
   mult({ id: 'split.capMove', name: '主动迁都' }, { off: true }),
   mult({ id: 'split.edge', name: '边地自己立国' }, { off: true }),
+  mult({ id: 'split.confed', name: '诸部合为部落联盟' }, { off: true }),
+  mult({ id: 'split.scatter', name: '丢了王庭诸部离散' }, { off: true }),
+  mult({ id: 'split.khan', name: '大汗国退保后分裂' }, { off: true }),
+  mult({ id: 'split.lone', name: '势孤的小国归附' }, { off: true }),
   num({ id: 'split.age', name: '王朝老了人心渐散' }, { official: 0.6, min: 0, max: 2, step: 0.1, unit: '' }),
 );
 
