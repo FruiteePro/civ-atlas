@@ -60,8 +60,9 @@ describe('时代做法', () => {
 
   it('推演里:数表的"做法"和事件层现算的一样;直征、禁军和监军、铨选和参半都是有了前提才办成的', () => {
     // 第 68 版有了神权以后收兵权办成的少了:第 72 版种子 7 第 1500 年以后一次也没有(种子 30 有两次、11 有一次),两个种子合起来看
+    // (第 74 版种子 30、11 都没有了,换成种子 2:1500 年以后议收兵权办成两回)
     const checked = [0, 0, 0];
-    for (const seed of [7, 30]) {
+    for (const seed of [7, 2]) {
     const half = generateCiv(world(seed), { endYear: 1500 });
     const sim = resumeCiv(world(seed), half);
     const cm = controlModelOf(sim)!;
