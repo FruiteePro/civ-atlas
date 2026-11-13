@@ -3620,7 +3620,11 @@ function revolutionSplitEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
   const lead = founderOf(ctx.ix, e.a, 0);
   const r = regionName(civ, e.region);
   const city = cityName(civ, e.settlement);
-  let t = `${pn(civ, e.b, y)}${woe ? `${woe},` : ''}${failedAsk(civ, civ.annals, id, e.b)}${lead ? lead.name : '起事的人'}${r ? `据${r}` : ''}自立,号${pn(civ, e.a, y)}`;
+  // 神权国里的世俗派起兵、打不进国都(reform.ts 的 revolt,secular):"圣辉神国国用不足;田继徽不奉神权,据玉舞之野自立,号玉舞共和国"
+  const B = polityOf(civ, e.b);
+  const theo = !!B && segRegime(B, dynastyIndexAt(B, y - 1 / 512)) === 'theocracy';
+  const ask = theo ? '' : failedAsk(civ, civ.annals, id, e.b);
+  let t = `${pn(civ, e.b, y)}${woe ? `${woe}${theo ? ';' : ','}` : theo ? ',' : ''}${ask}${lead ? lead.name : '起事的人'}${theo ? '不奉神权,' : ''}${r ? `据${r}` : ''}自立,号${pn(civ, e.a, y)}`;
   if (city) t += `,都于${city}`;
   const x = base(e, id, t, isGreat(polityOf(civ, e.a)) || isGreat(polityOf(civ, e.b)) ? 3 : 2, [e.a, e.b], [e.region], '革');
   x.kind = 'revolution';
