@@ -498,11 +498,12 @@ export type AnnalKind =
  *   spring:冬夏分明的地方闹的春荒(史事 famine 的 cause,unrest.ts);
  *   revolution:议立宪 / 废君谈崩、起兵的人打不进国都,据地自立为共和国(史事 split 的 cause,reform.ts;紧跟在那条 council 后面);
  *   surrender 强国打下国都,余下的州一并归降、亡国(破都纳降,wars.ts;fall 的 cause);
+ *   scatter 部落联盟 / 小游牧丢了王庭、诸部离散(fall 的 cause,wars.ts 的 deathRule);retreat 部落联盟 / 游牧丢了王庭迁走(capital 的 cause,方位在 dir);
  *   神权的几条进出路(史事 reform 的 cause,reform.ts;和平改制的不带):cleric 教团专权夺位立神权、zealot 教众起事(打进国都;打不进 = split 的 cause)、
  *   secular 神权里世俗的将军政变 / 起兵革命、pontiff 大祭司交接之际被复辟 / 政变 / 废神权;
  *   dissent:政体一变(教团、世俗派夺权),不服的那一头据地自立(split 的 cause;新国第 0 段是神权 = 残余的神权国)
  */
-export type AnnalCause = 'expand' | 'claim' | 'chaos' | 'prey' | 'resource' | 'betray' | 'punish' | 'ally' | 'rescue' | 'lapse' | 'abandon' | 'vassal' | 'quell' | 'collapse' | 'great' | 'quake' | 'warlord' | 'broke' | 'heir' | 'slain' | 'captured' | 'withdrew' | 'pandemic' | 'breach' | 'peace' | 'renew' | 'deposed' | 'fled' | 'decree' | 'divert' | 'unrest' | 'plagued' | 'minor' | 'regent' | 'plunder' | 'trek' | 'spring' | 'revolution' | 'surrender' | 'cleric' | 'zealot' | 'secular' | 'pontiff' | 'dissent' | 'confed' | 'revenge' | 'glory' | 'prestige' | 'heresy' | 'unify';
+export type AnnalCause = 'expand' | 'claim' | 'chaos' | 'prey' | 'resource' | 'betray' | 'punish' | 'ally' | 'rescue' | 'lapse' | 'abandon' | 'vassal' | 'quell' | 'collapse' | 'great' | 'quake' | 'warlord' | 'broke' | 'heir' | 'slain' | 'captured' | 'withdrew' | 'pandemic' | 'breach' | 'peace' | 'renew' | 'deposed' | 'fled' | 'decree' | 'divert' | 'unrest' | 'plagued' | 'minor' | 'regent' | 'plunder' | 'trek' | 'spring' | 'revolution' | 'surrender' | 'cleric' | 'zealot' | 'secular' | 'pontiff' | 'dissent' | 'confed' | 'revenge' | 'glory' | 'prestige' | 'heresy' | 'unify' | 'scatter' | 'retreat';
 
 /**
  * 一条史事(阶段 3):推演里各事件处理函数用 CivSim.record 往 Civ.annals 里记,编年史(界面上的事件列表)只读它。
@@ -528,6 +529,8 @@ export interface Annal {
   cause?: AnnalCause;
   /** 宣战(war)才有:看邻国时开的仗的动机(见 WarMotive;援盟、讨伐、干预开的仗不给) */
   motive?: WarMotive;
+  /** 王庭迁走(capital 的 cause = retreat)才有:往哪个方位迁 */
+  dir?: MigrationDir;
   /**
    * 结盟(alliance)才有:共御的强邻(−1 = 没有);据险断后(stand)借用:大军退保的那一州;
    * 掌实权(regent,n = 0 掌权那一条)借用:作者下令"让他掌权"的第几条干预(推演里自己出的不给);
@@ -556,7 +559,7 @@ export interface Annal {
 }
 
 /** Annal 里可有可无的几列:官方推演登记给引擎(events.ts 的 CIV_ANNALS),记史事时照这个次序抄进去;Annal 加了新的可选列,这里跟着加 */
-export const ANNAL_EXTRAS = ['via', 'cause', 'foe', 'n', 'ps', 'by', 'opt', 'until', 'motive'] as const satisfies readonly (keyof Annal)[];
+export const ANNAL_EXTRAS = ['via', 'cause', 'foe', 'n', 'ps', 'by', 'opt', 'until', 'motive', 'dir'] as const satisfies readonly (keyof Annal)[];
 /** 编译期核对:Annal 的可选列都在 ANNAL_EXTRAS 里(漏了这里报错) */
 type AnnalOptional = { [K in keyof Annal]-?: undefined extends Annal[K] ? K : never }[keyof Annal];
 const ANNAL_EXTRAS_COMPLETE: [Exclude<AnnalOptional, (typeof ANNAL_EXTRAS)[number]>] extends [never] ? true : false = true;

@@ -3151,6 +3151,12 @@ function warEntry(ctx: Ctx, ids: number[]): ChronicleEntry {
     const p = polityOf(civ, pid);
     if (isGreat(p) && ms.some((e) => capitalHeld(p!, e.year) >= OLD_CAPITAL)) oldCapital = true;
     const who = pn(civ, pid, start);
+    // 部落联盟 / 游牧丢了王庭(wars.ts 的 deathRule):"北狄王庭北迁"
+    if (ms[ms.length - 1].cause === 'retreat') {
+      const d = ms[ms.length - 1].dir;
+      parts.push(`${who}王庭${d ? RETREAT[d] : '远徙'}`);
+      continue;
+    }
     if (ms.length >= 2) parts.push(`${who}连迁${ms.length === 2 ? '两' : cnNumber(ms.length)}都`);
     else {
       const lost = p ? cityName(civ, capitalBefore(p, ms[0].year)) : '';
@@ -3158,6 +3164,11 @@ function warEntry(ctx: Ctx, ids: number[]): ChronicleEntry {
     }
   }
   for (const f of falls) {
+    // 诸部离散(wars.ts 的 deathRule):"北狄诸部离散"
+    if (f.cause === 'scatter') {
+      parts.push(`${pn(civ, f.a, f.year)}诸部离散`);
+      continue;
+    }
     if (f.cause !== 'surrender') {
       parts.push(`${pn(civ, f.a, f.year)}亡`);
       continue;
@@ -4085,6 +4096,9 @@ function migrationDir(civ: Civ, e: Annal, used: Map<number, number>): MigrationD
   }
   return null;
 }
+
+/** 王庭迁走(capital 的 cause = retreat)的方位 */
+const RETREAT: Record<MigrationDir, string> = { 东: '东徙', 西: '西迁', 南: '南迁', 北: '北迁' };
 
 /** 随征服南下 / 北上 / 东进 / 西进 */
 const ADVANCE: Record<MigrationDir, string> = { 东: '东进', 西: '西进', 南: '南下', 北: '北上' };

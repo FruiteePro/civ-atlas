@@ -54,7 +54,7 @@ import { befriends, canCross, effOf, endPolity, hates, picks, policyAt, polityMo
 import { faithAlignMul, faithOpposeMul, faithScale, polityFaithGap } from './faithRules';
 import { POLICY_KNOBS } from './policy';
 import { MARRIAGES_KNOBS } from './marriages';
-import { polityBorders, warModelOf, type War, type WarModel } from './wars';
+import { deathRule, polityBorders, warModelOf, type War, type WarModel } from './wars';
 import { capitalAt, polityAlive, populationAt } from './growth';
 import { politicsModelOf } from './politics';
 import type { CivModule } from './modules';
@@ -656,7 +656,9 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     const won = new Set<number>();
     for (const e of w.takes) if (e.by === a && owner[e.region] === a) won.add(e.region);
     const held = won.size;
-    const trib = tributary(w, won, t);
+    // 小国、部落联盟、小游牧丢了国都、只剩不多几州的(见 wars.ts 的 deathRule):不亡国,奉表称臣
+    const rule = deathRule(pm.polities[b], t);
+    const trib = tributary(w, won, t) || (capitalFell && pm.size[b] <= SUE_LEFT && (rule === 'loose' || rule === 'scatter'));
     if (trib) {
       if (!capitalFell && held < 1) return false;
     } else if (pm.size[b] <= SUE_LEFT || (!capitalFell && held < Math.max(SUE_MIN, SUE_FRAC * (pm.size[b] + held)))) return false;
