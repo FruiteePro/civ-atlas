@@ -223,7 +223,8 @@ describe('人物页 · 几处写法', () => {
     expect(found, '几个种子里要有这样一位末帝').toBeTruthy();
     const { civ, x, hits, famous } = found!;
     expect(personName(civ, x)).toBe(`末帝${x.name}`);
-    expect(rulerRole(civ, x)).toMatch(/皇帝$/);
+    // 女的末帝称女帝(gender.ts;v75 以后 seed 7 找到的末帝是女的)
+    expect(rulerRole(civ, x)).toMatch(x.female ? /女帝$/ : /皇帝$/);
     // 名人在前:头一个是名人;名人都排在不是名人的前面
     expect(hits[0].kind === 'person' && famous.has(hits[0].id)).toBe(true);
     const fame = hits.map((h) => h.kind === 'person' && famous.has(h.id));
