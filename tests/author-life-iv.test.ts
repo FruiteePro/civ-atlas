@@ -241,7 +241,8 @@ describe(`推演里(种子 ${seed})`, () => {
     // 苏晚的掌权在她名下;林小满的不算进她名下
     const su = lifeStatuses(civ, 2, '苏晚', [], [], characterPosts(civ, 2, [], ivs, false, undefined), false, undefined, () => '');
     expect([...su.keys()]).toEqual([T + 15]);
-    expect(su.get(T + 15)![0].text).toMatch(new RegExp(`^苏晚以大臣专权掌${A}国政，${T + 15}–\\d+ 年$`));
+    // 掌权那年的国号(v75 以后 T 到 T + 15 之间改了朝:大澜 → 大乾)
+    expect(su.get(T + 15)![0].text).toMatch(new RegExp(`^苏晚以大臣专权掌${polityName(civ.polities[P], T + 15)}国政，${T + 15}–\\d+ 年$`));
     // 他那年的国家:在任的那国;不在任时照人物卡上的(那年还在才算)
     expect(lifePolity(civ, crowns, posts, -1, T + 3)).toBe(P);
     expect(lifePolity(civ, crowns, posts, Q, T - 10)).toBe(civ.polities[Q].ended === undefined || civ.polities[Q].ended! > T - 10 ? Q : -1);
@@ -249,7 +250,7 @@ describe(`推演里(种子 ${seed})`, () => {
 
     // 同一时刻只有一个身份:她掌着权那几年,任她为别国将领 / 名臣拦下;同一国的不拦(大臣专权);他任着将领那几年,让他掌别国的权拦下
     const suPosts = characterPosts(civ, 2, [], ivs, false, undefined);
-    expect(overlapWhy(civ, suPosts, 'general', Q, T + 16, T + 16, '她', undefined)).toMatch(new RegExp(`^她 ${T + 15}–\\d+ 年掌${A}国政，同一时刻只有一个身份$`));
+    expect(overlapWhy(civ, suPosts, 'general', Q, T + 16, T + 16, '她', undefined)).toMatch(new RegExp(`^她 ${T + 15}–\\d+ 年掌${polityName(civ.polities[P], T + 15)}国政，同一时刻只有一个身份$`));
     expect(overlapWhy(civ, suPosts, 'minister', Q, T + 16, T + 16, '她', undefined)).not.toBeNull();
     expect(overlapWhy(civ, suPosts, 'general', P, T + 16, T + 16, '她', undefined)).toBeNull();
     expect(overlapWhy(civ, suPosts, 'general', Q, T + 40, T + 40, '她', undefined)).toBeNull();

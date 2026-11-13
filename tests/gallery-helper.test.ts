@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_PARAMS, generateWorld } from '../src/gen/world';
 import { generateCiv } from '../src/gen/civ';
 import { dynastyAt, polityAlive, polityName } from '../src/gen/civ/growth';
+import { polityRootAt } from '../src/gen/civ/polityRoot';
 import { EMPTY_EDITS, GENERATOR_VERSION, applyNames, cultureKey, dynastyKey, personKey, polityKey, regionKey, settlementKey } from '../src/gen/edits';
 import { makeSave, momentHash, parseSave } from '../src/gen/savefile';
 import { latestTuning } from '../src/gen/civ/ruleSet';
@@ -374,7 +375,8 @@ describe('帮手列的名字和几样数', () => {
   const raw = generateCiv(world);
   const year = 2400;
   const alive = raw.polities.filter((p) => polityAlive(p, year));
-  const p0 = alive[0];
+  // 那年还用着本名(不是后来改朝的朝名)的头一国:改国名词根看得出来(v75 以后头一国 2400 年已改朝,叫大澜王朝)
+  const p0 = alive.find((p) => polityRootAt(p, year) === p.name) ?? alive[0];
   const s0 = raw.settlements.find((s) => s.founded <= year)!;
 
   it('世界作品:照存档生成,不带作者改的名字;封面停在分享时那一年、中央经线照存档', () => {

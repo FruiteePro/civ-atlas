@@ -69,7 +69,9 @@ describe.each([7, 2024])('人物头像 · seed=%i', (seed) => {
       const clothes = layerOf(p, 'clothes');
       expect(clothes.length).toBe(1);
       const roles = P.find((q) => q.id === clothes[0])!.roles!;
-      const want = x.role === 'general' ? 'general' : x.role === 'minister' ? 'minister' : x.role === 'prince' ? 'royal' : !royalSeg(civ.polities[x.polity], x.dynasty ?? 0) ? 'consul' : 'ruler';
+      // 神权国的教主(v74 神权一段不是王室,但照君主穿戴:segment 的 regime = theocracy)
+      const theo = civ.polities[x.polity].dynasties?.[x.dynasty ?? 0]?.regime === 'theocracy';
+      const want = x.role === 'general' ? 'general' : x.role === 'minister' ? 'minister' : x.role === 'prince' ? 'royal' : !theo && !royalSeg(civ.polities[x.polity], x.dynasty ?? 0) ? 'consul' : 'ruler';
       expect(roles).toContain(want);
       const hat = layerOf(p, 'hat')[0];
       if (hat && part(p, hat).hides) expect(layerOf(p, 'hair')).toEqual([]);

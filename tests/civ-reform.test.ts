@@ -68,7 +68,12 @@ describe('改制', () => {
             expect(was, tag).toBe('crown');
             expect(after, tag).toMatch(/共和国$/);
             expect(after, tag).not.toBe(before);
-          } else expect([was, after], tag).toEqual(['junta', before]);
+          } else if (/共和国$/.test(before) || P.lineage === 'republic') expect([was, after], tag).toEqual(['junta', before]);
+          // 神权国里的将军政变(v74)开出的军政府还政:原来没有共和过,国号这时才改成共和国(seed 21 泽川 2117 年,v75 起出现)
+          else {
+            expect(was, tag).toBe('junta');
+            expect(after, tag).toMatch(/共和国$/);
+          }
         } else if (e.n === REFORM_REVOLUTION && e.cause === 'secular') {
           // 神权国里的世俗革命(v74):没有议事在前
           expect([was, now], tag).toEqual(['theocracy', 'republic']);
