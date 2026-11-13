@@ -15,7 +15,7 @@
  */
 import type { Civ, Person, Year } from '../types';
 import { Layer } from '../types';
-import { CAPITAL_BOOST, GROWTH_A, annexedRemnants, dynastyTitle, polityName, populationAt } from '../growth';
+import { CAPITAL_BOOST, GROWTH_A, annexedRemnants, cededBefore, dynastyTitle, polityName, populationAt } from '../growth';
 import { peopleIndex } from './peopleInfo';
 import { kidsOf } from './lineageInfo';
 import { personName } from './peopleText';
@@ -474,7 +474,7 @@ export function recordBook(civ: Civ): RecordBook {
   const ceded = new Set<number>();
   A.forEach((e, i) => {
     if (e.kind === 'peace' && e.region > 0) {
-      for (let j = Math.max(0, i - e.region); j < i; j++) if (A[j].kind === 'conquer' && A[j].war === e.war) ceded.add(j);
+      for (const j of cededBefore(A, i)) ceded.add(j);
     } else if (e.kind === 'fall' && e.war >= 0) for (const j of annexedRemnants(civ, i)) ceded.add(j);
   });
   const wars: (RecordRef & { kind: 'war' })[] = [];

@@ -40,7 +40,7 @@
  * 西幻国家王室更迭,国名不变。国名一律经由 polityName / polityTitles(p, 年份) / polityShortTitle(p, 档位, 年份) 取,
  * 界面、地图、编年史就都跟着年份变;不给年份 = 第一朝(立国时的国名)。
  */
-import type { Civ, Polity, PolityLineage, PopulationAt, Regions, Settlement, Year } from './types';
+import type { Annal, Civ, Polity, PolityLineage, PopulationAt, Regions, Settlement, Year } from './types';
 import { fexp, flog, fpow } from './engine/rand';
 import { KM_PER_UNIT, REF_CELLS } from './scale';
 import { dynastyIndexAt, polityRootAt } from './polityRoot';
@@ -732,6 +732,18 @@ export function capitalAt(p: Polity, year: Year): number {
   let s = c[0].settlement;
   for (let i = 1; i < c.length && c[i].year <= year; i++) s = c[i].settlement;
   return s;
+}
+
+/**
+ * 议和那条史事(下标 i,region 列 = 割让了几州)前面割让的那几条攻占(史事下标,按先后):同一场战争、同一刻的攻占里
+ * 最后那么多条;议和前顺手收的无主部落州(b = −1,wars.ts 的 scoopTribal 记在割让之后、议和之前)不算
+ */
+export function cededBefore(A: readonly Annal[], i: number): number[] {
+  const e = A[i];
+  const out: number[] = [];
+  if (!e || e.kind !== 'peace' || !(e.region > 0)) return out;
+  for (let j = i - 1; j >= 0 && out.length < e.region && A[j].year === e.year; j--) if (A[j].kind === 'conquer' && A[j].war === e.war && A[j].b >= 0) out.push(j);
+  return out.reverse();
 }
 
 /**

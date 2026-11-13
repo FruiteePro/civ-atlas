@@ -98,6 +98,7 @@ import { holderAt, kinAt, strongHeld } from './regentInfo';
 import {
   TIER_REGIONS,
   annexedRemnants,
+  cededBefore,
   dynastyIndexAt,
   dynastyTitle,
   polityAlive,
@@ -2859,7 +2860,7 @@ function warEntry(ctx: Ctx, ids: number[]): ChronicleEntry {
   for (const i of ids) {
     const e = A[i];
     if (e.kind === 'peace' && e.region > 0) {
-      for (let j = Math.max(0, i - e.region); j < i; j++) if (A[j].kind === 'conquer' && A[j].war === e.war) special.set(j, j < i - e.region + (e.n ?? 0) ? 'yield' : 'cede');
+      cededBefore(A, i).forEach((j, k) => special.set(j, k < (e.n ?? 0) ? 'yield' : 'cede'));
     } else if (e.kind === 'fall') {
       for (const j of annexedRemnants(civ, i)) special.set(j, e.cause === 'surrender' ? 'surrender' : 'annex');
     }

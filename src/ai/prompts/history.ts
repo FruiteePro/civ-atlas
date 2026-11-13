@@ -17,7 +17,7 @@
 import type { Civ, Person, Polity, Year } from '../../gen/civ/types';
 import { buildChronicle, cnNumber, entryInvolves, entryYearLabel, yearText, type ChronicleEntry } from '../../gen/civ/story/chronicle';
 import { capitalAt, polityName, polityTierAt, ownersAt } from '../../gen/readers/openQuery';
-import { dynastyTitle, polityShortTitle, polityTitleChain } from '../../gen/civ/growth';
+import { cededBefore, dynastyTitle, polityShortTitle, polityTitleChain } from '../../gen/civ/growth';
 import { KIND_INFO, cultureLabel, regionLabel, regionNamed } from '../../gen/civ/story/display';
 import { generalRole, ministerRole, personName, rulerShort, rulerTitle } from '../../gen/civ/story/peopleText';
 import { isFemale } from '../../gen/civ/story/gender';
@@ -1053,7 +1053,7 @@ export function battleLines(civ: Civ, x: Person, from: Year = -Infinity, to: Yea
     const ceded = new Set<number>();
     for (let i = Math.max(0, c.first); i <= Math.min(A.length - 1, c.last + 64); i++) {
       const e = A[i];
-      if (e.kind === 'peace' && e.war === c.war && e.region > 0) for (let j = Math.max(0, i - e.region); j < i; j++) ceded.add(j);
+      if (e.kind === 'peace' && e.war === c.war && e.region > 0) for (const j of cededBefore(A, i)) ceded.add(j);
     }
     for (let i = Math.max(0, c.first); i <= c.last && i < A.length; i++) {
       const e = A[i];

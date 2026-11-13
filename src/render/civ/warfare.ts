@@ -14,6 +14,7 @@
  */
 import type { Civ, Year } from '../../gen/civ/types';
 import { Layer } from '../../gen/civ/types';
+import { cededBefore } from '../../gen/civ/growth';
 import { borderLines, type SidedLine } from './borders';
 import { pixOf } from './highlight';
 import type { Polyline } from './lines';
@@ -59,7 +60,7 @@ export function warSpans(civ: Civ): WarSpan[] {
   for (let i = 0; i < A.length; i++) {
     const e = A[i];
     if (e.kind === 'peace' && e.region > 0) {
-      for (let j = Math.max(0, i - e.region); j < i; j++) if (A[j].kind === 'conquer' && A[j].war === e.war) notFought.add(j);
+      for (const j of cededBefore(A, i)) notFought.add(j);
     } else if (e.kind === 'fall' && e.war >= 0) {
       const run: number[] = [];
       for (let j = i - 1; j >= 0; j--) {
