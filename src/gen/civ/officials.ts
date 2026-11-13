@@ -34,7 +34,7 @@ import { keyed4, subSeed } from './engine/rand';
 import { capitalAt, polityTierAt, polityTitles } from './growth';
 import { HEIR, KIN_KNOBS, houseBase, pickHouses, withParentSurname, type HouseCand } from './kin';
 import { splitSurname } from './surname';
-import { royalAt, segLineage } from './regime';
+import { royalAt, segLineage, segRegime } from './regime';
 import { dynastyIndexAt } from './polityRoot';
 import { defineKnobs, type KnobSet } from './engine/knobs';
 
@@ -351,8 +351,9 @@ export function buildOfficials(input: OfficialsInput, ctx: OfficialsCtx, general
       const e = last ? end : segs[i + 1].year;
       if (e - s <= 0) continue;
       const R = (slot: number, use: number) => keyed4(base, ctx.tag[p.id], i, slot * 16 + use, K_MINISTER);
-      // 部落没有大臣(共和国从城邦起就有)
-      const staffed = (y: Year) => sys === 'republic' || polityTierAt(p, y) >= 1;
+      // 部落没有大臣(共和国从城邦起就有;起事立的神权国还是部落的时候也没有,v74 起神权国可以是小国)
+      const theo = segRegime(p, i) === 'theocracy';
+      const staffed = (y: Year) => (sys === 'republic' && !theo) || polityTierAt(p, y) >= 1;
       const anchors = anchorsOf(input, p, i, s, e, rs, sys);
       // 掌实权的名臣、大臣:当作最要紧的事,那一刻专门起一位(同一刻的事里排在最前)
       const forced = ctx.regents?.get(p.id)?.filter((f) => f.dyn === i && f.year >= s && f.year < e) ?? [];
