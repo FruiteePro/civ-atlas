@@ -623,7 +623,12 @@ function republicTitles(p: Polity, root: string): Titles {
 
 /** 那一年是不是改出来的共和国(军政府照它前面那一段:政变不改国号) */
 function reformedAt(p: Polity, year: Year): boolean {
-  return !!p.dynasties && reformedSeg(p, titleSeg(p, dynastyIndexAt(p, year)));
+  return !!p.dynasties && republicSeg(p, titleSeg(p, dynastyIndexAt(p, year)));
+}
+
+/** 第 i 段按共和国起国号:改出来的共和(军政府照前一段);起事立的神权国(第 0 段就是神权,reform.ts 的 rebelTheocracy)照本国一系的国号 */
+function republicSeg(p: Polity, i: number): boolean {
+  return reformedSeg(p, i) && p.dynasties?.[i]?.regime !== 'theocracy';
 }
 
 /**
@@ -631,7 +636,7 @@ function reformedAt(p: Polity, year: Year): boolean {
  * 不给 = 第一朝(立国时的国名)
  */
 export function polityTitles(p: Polity, year?: Year): Titles {
-  if (year === undefined) return reformedSeg(p, 0) ? republicTitles(p, p.name) : titlesOf(p, p.name);
+  if (year === undefined) return republicSeg(p, 0) ? republicTitles(p, p.name) : titlesOf(p, p.name);
   const root = polityRootAt(p, year);
   return reformedAt(p, year) ? republicTitles(p, root) : titlesOf(p, root);
 }

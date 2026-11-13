@@ -90,6 +90,7 @@ import { fragmentModeFromOpt, fragmentModeLabel } from '../fragmentMode';
  * buildChronicle 按 civ 缓存(同一个 civ 只算一次)。
  */
 import type { Annal, AnnalCause, AnnalKind, Civ, Culture, MigrationDir, Person, PersonRegency, PersonSpouse, Polity, Year } from '../types';
+import { faithAt } from '../religion';
 import { IV_GONE, IV_HELD, IV_NO_THRONE, REGENCY_KINDS, RG_DIED, RG_PURGE, RG_RETURN, RG_START, RG_USURP } from '../regents';
 import { MARRIAGES_KNOBS } from '../marriages';
 import { knobsOf } from '../knobs';
@@ -2000,6 +2001,16 @@ function simpleEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
         const back = host >= 0 && host !== e.b ? `自${pn(civ, host, y)}还,` : '';
         const head = `故${(fallen.name && polityRootAt(fallen, fallen.ended ?? y)) || '国'}${folk}${back}${r ? `据${r}` : ''}`;
         t = e.b >= 0 ? `${head}起兵,脱${pn(civ, e.b, y)}复国,号${A}` : `${head}复国,号${A}`;
+      } else if (P?.dynasties?.[0]?.regime === 'theocracy') {
+        // 教众起事、立神权国(reform.ts 的 rebelTheocracy):"瑞州教众奉圣光教起事,叛大渭自立,立大祭司李昭主国事,号瑞国"
+        const office = clericTitle(P.culture !== undefined ? civ.cultures[P.culture]?.style : undefined);
+        const lead2 = founderOf(ctx.ix, e.a, 0);
+        const fname = faithNameAt(civ, e.region, y);
+        const head = `${r ? `${r}` : ''}教众${fname ? `奉${fname}` : ''}起事`;
+        t = `${head},${e.b >= 0 ? `叛${pn(civ, e.b, y)}自立` : '自立'},立${office}${lead2 ? lead2.name : ''}主国事,号${A}`;
+        const seat = cityName(civ, e.settlement);
+        if (seat) t += `,都于${seat}`;
+        return withPeople(base(e, id, t, isGreat(P) || isGreat(polityOf(civ, e.b)) ? 3 : 2, [e.a, e.b], [e.region], '教'), lead2);
       } else {
         // "瑞州守将李昭叛大渭自立,号瑞国";割据多年以后自立的(control.ts):"割据瑞州的守将李昭叛大渭自立"
         const title = P?.eastern ? '守将' : '领主';
@@ -3484,6 +3495,15 @@ function failedAsk(civ: Civ, A: readonly Annal[], i: number, p: number): string 
   const c = A[i - 1];
   if (!c || c.kind !== 'council' || c.a !== p || c.year !== A[i].year) return '';
   return c.war === Issue.Charter ? '议立宪,不成;' : `议废${throneWord(polityOf(civ, p), c.year)},不成;`;
+}
+
+/** 州 r 在 y 年信的大教 / 教派的名字(民间信仰、不明 = 空串) */
+function faithNameAt(civ: Civ, r: number, y: Year): string {
+  const rel = civ.religion;
+  if (!rel || r < 0) return '';
+  const f = faithAt(civ, y)[r];
+  const F = f >= 0 ? rel.faiths[f] : undefined;
+  return F && F.kind !== 'folk' ? F.name : '';
 }
 
 /** 史事 reform:革命(红)、政变(红)、复辟、立神权、废神权(蓝) */

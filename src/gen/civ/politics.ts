@@ -70,6 +70,7 @@ import { Ev } from './events';
 import { civApi } from './api';
 import { defineKnobs } from './engine/knobs';
 import { mulOf } from './influence';
+import { rebelTheocracy } from './reform';
 
 // ---- 调参(以截图和统计数为准,见 scripts/gen-stats.ts) ----
 /** 这一段的旋钮(名字、官方的值;推演照这个世界的那套数算,见 engine/knobs.ts) */
@@ -244,6 +245,7 @@ const U_RESTORE_T = 6;
 const U_RESTORE = 7;
 const U_TRIBAL_T = 8;
 const U_EDGE = 9;
+const U_REBEL_THEO = 10;
 
 // ---------------------------------------------------------------------------
 // 模型
@@ -488,7 +490,19 @@ function hook(sim: CivSim, pol: PoliticsModel): void {
     // 从海洋国家分出去的普通国家也不带
     const P0 = pm.polities[parent];
     const sail = pm.cultures[culture[capR]].kind !== 'sea' && sailsOcean(pm, P0, t) && (P0.kind !== 'sea' || Number.isFinite(pm.k.SAIL_LEVEL)) ? { sail: t } : {};
-    const p = addPolity(pm, sid, culture[capR], t, { parent, ...sail, ...extra });
+    // 起事的这片州信的和母国国教不同:有机会是教众起事、立神权国(普通自立、割据自立、大崩解的继承国;reform.ts 的 rebelTheocracy)
+    let theo: Partial<Polity> = {};
+    if (
+      kind === 'split' &&
+      (cause === undefined || cause === 'warlord' || cause === 'collapse') &&
+      extra.restores === undefined &&
+      extra.dynasties === undefined &&
+      rebelTheocracy(pm, parent, group, cause === 'collapse', api.politics.unrest?.(P0, t) ?? 0, keyed4(pol.base, pm.ptag[parent], reg.seat[rising], Math.floor(t), U_REBEL_THEO))
+    )
+      theo = { dynasties: [{ year: t, name: '', seat: sid, regime: 'theocracy' }] };
+    const p = addPolity(pm, sid, culture[capR], t, { parent, ...sail, ...extra, ...theo });
+    // 海洋城邦共和一系的新国不立神权(执政、议事会照共和一系)
+    if (theo.dynasties && p.lineage === 'republic') delete p.dynasties;
     // 先登记崩解继承国,再交第一州:看邦交的第一次预约才能用上 SIB_DIP_FIRST,和 resume 一致
     if (kind === 'split' && cause === 'collapse') joinCollapseFamily(wm, parent, p.id, t);
     sim.setOwner(Layer.Polity, capR, p.id, Ev.Split);

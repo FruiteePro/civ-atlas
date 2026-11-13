@@ -169,6 +169,14 @@ export const REFORM_KNOBS = defineKnobs('reform', {
    * 废神权:满 THEO_LEAVE 年才看;赔率 THEO_LEAVE_ODDS × (1 + 共治 + 民权)× (1 − max(0, 国教占比 − LEAVE_FAITH0))× (1 + 窘迫)
    * × (LEAVE_E0 − LEAVE_EK × 入世程度)
    */
+  /**
+   * 起事自立立神权国(politics.ts 的 secede:普通自立、割据自立、大崩解的继承国;复国、宗室争位、革命据地的不算):
+   * 起事那片州的主流信仰和母国国教不同 —— 机会 REBEL_THEO × 异教程度(异教 1、同教异派 0.5)× (1 + 母国动荡)
+   * × (大崩解 REBEL_THEO_COLLAPSE)× 入世倍数,最多 REBEL_THEO_MAX
+   */
+  REBEL_THEO: 0.08,
+  REBEL_THEO_COLLAPSE: 1.5,
+  REBEL_THEO_MAX: 0.35,
   THEO_LEAVE: 40,
   THEO_LEAVE_ODDS: 0.15,
   LEAVE_FAITH0: 0.5,
@@ -553,3 +561,33 @@ function revolt(cx: ReformCtx, issue: Issue, push: number, R: (use: number) => n
   nr.reformed = t;
   return true;
 }
+
+/**
+ * 起事自立的那片州(group)要不要立神权国(见 REFORM_KNOBS 的 REBEL_THEO):u01 = 这一回的随机数(0–1),u = 母国此刻的动荡。
+ * 主流信仰是大教 / 教派、和母国国教不同才有机会
+ */
+export function rebelTheocracy(pm: PolityModel, parent: number, group: readonly number[], collapse: boolean, u: number, u01: number): boolean {
+  const K = pm.knobs.get(REFORM_KNOBS);
+  if (!pm.faithAt || !pm.stateFaith || !pm.faithGap || !pm.faithEngage || !(K.REBEL_THEO > 0)) return false;
+  const count = new Map<number, number>();
+  let top = -1;
+  let best = 0;
+  for (const r of group) {
+    const f = pm.faithAt(r);
+    if (f < 0) continue;
+    const n = (count.get(f) ?? 0) + 1;
+    count.set(f, n);
+    if (n > best || (n === best && f < top)) {
+      best = n;
+      top = f;
+    }
+  }
+  const e = top >= 0 ? pm.faithEngage(top) : 0;
+  if (!(e > 0)) return false;
+  const gap = pm.faithGap(top, pm.stateFaith(parent));
+  const diff = gap < 0 ? 1 : gap;
+  if (!(diff > 0)) return false;
+  const p = Math.min(K.REBEL_THEO_MAX, K.REBEL_THEO * diff * (1 + Math.max(0, u)) * (collapse ? K.REBEL_THEO_COLLAPSE : 1) * engageMul(K, e));
+  return u01 < p;
+}
+
