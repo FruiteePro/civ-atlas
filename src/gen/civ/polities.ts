@@ -638,11 +638,26 @@ function policyWidens(m: PolityModel, pid: number, t: Year): LeaningEffect | nul
  * 由当时在位的君主定:扩张高的不太计较,扩张低的只要富庶、离国都近的地方,重商高的看重沿海、大河、港口
  */
 function wants(m: PolityModel, owner: Int16Array, p: Polity, b: number, dist: Float32Array, cb: number, e: LeaningEffect, t: Year): boolean {
+  const v = worthParts(m, owner, p, b, dist, cb, e, t);
+  return v !== null && v[0] >= v[1];
+}
+
+/**
+ * 国家 pid 此刻看州 b 值不值得要:扩张算账的 值 ÷ 门槛(≥ 1 = 和平扩张肯去;走不到 = 0)。
+ * 打仗(wars.ts 的开战动机、diplomacy.ts 的纳贡式议和)用同一把尺子,owner = 此刻各州的国家
+ */
+export function landWorth(m: PolityModel, owner: Int16Array, pid: number, b: number, cb: number, t: Year): number {
+  const v = worthParts(m, owner, m.polities[pid], b, distFor(m, pid, t), cb, effOf(m, pid, t), t);
+  return v === null ? 0 : v[0] / v[1];
+}
+
+/** 扩张算账的 [值, 门槛](走不到 = null) */
+function worthParts(m: PolityModel, owner: Int16Array, p: Polity, b: number, dist: Float32Array, cb: number, e: LeaningEffect, t: Year): [number, number] | null {
   const { NOMAD_PREFER, AVOID, HIGH, PREFER, PORT_VALUE, RIVER_VALUE, WORTH_REACH, WORTH_FOREIGN, ENCLAVE, HIGH_COST, HIGH_SCALE, WORTH } = m.k;
   const T = m.terrain;
   const reg = T.regions;
   const d = dist[b];
-  if (!(d < Infinity)) return false;
+  if (!(d < Infinity)) return null;
   const bi = reg.biome[b];
   let value = T.meanSuit[b];
   switch (p.kind) {
@@ -682,7 +697,7 @@ function wants(m: PolityModel, owner: Int16Array, p: Polity, b: number, dist: Fl
   // 高山难治(山地民族不算)
   if (p.kind !== 'highland') cost *= 1 + Math.max(0, reg.elevation[b] - HIGH_COST) / HIGH_SCALE;
   const coast = T.coastal[b] === 1 || T.river[b] === 1 || m.port[b] === 1;
-  return value >= WORTH * cost * (coast ? e.coast : e.worth) * m.worthMul * tribalAnnexMul(m, p, b, cb, t);
+  return [value, WORTH * cost * (coast ? e.coast : e.worth) * m.worthMul * tribalAnnexMul(m, p, b, cb, t)];
 }
 
 /** 把 x 夹到 [lo, hi] */

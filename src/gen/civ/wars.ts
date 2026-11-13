@@ -91,12 +91,12 @@
  */
 import type { World } from '../world';
 import { coldShare, coldSpellEnd, yearClimate } from '../seasons';
-import { AdjKind, Layer, type Annal, type AnnalCause, type Civ, type Polity, type Year } from './types';
+import { AdjKind, Layer, type Annal, type AnnalCause, type Civ, type Polity, type WarMotive, type Year } from './types';
 import { fexp, flog, fpow, keyed, keyed4, round24, subSeed } from './engine/rand';
 import { bookChain, LOOK_K, quantize, type CivSim } from './engine/sim';
-import { befriends, canCross, coreOf, effOf, endPolity, moveCapital, picks, policyAt, polityModelOf, POLITIES_KNOBS, powerScaleOf, regentOf, rulerOf, rulingLeanings, tribalAnnexMul, type PolityModel } from './polities';
+import { befriends, canCross, coreOf, effOf, endPolity, moveCapital, picks, policyAt, polityModelOf, POLITIES_KNOBS, powerScaleOf, regentOf, landWorth, rulerOf, rulingLeanings, tribalAnnexMul, type PolityModel } from './polities';
 import { faithOpposeMul, faithScale, polityFaithGap } from './faithRules';
-import { reignBorn } from './rulers';
+import { reignBorn, reignStart } from './rulers';
 import { REGENTS_KNOBS } from './regents';
 import { POLICY_KNOBS } from './policy';
 import { capitalAt, populationAt } from './growth';
@@ -290,6 +290,34 @@ export const WARS_KNOBS = defineKnobs('wars', {
   FAITH_WAR_SAME: 0.16,
   FAITH_WAR_FAR: 0.22,
   FAITH_THEO: 1.4,
+  /**
+   * 开战动机(看邻国时):想打的程度 = 机会(上面那些胜算、对方虚弱……照旧)× 动机。动机取下面几条里最强的一条(不相加),都没有 = MOTIVE_FLOOR:
+   * - 土地:边境上最值钱那州的 值 ÷ 和平扩张的门槛(polities.ts 的 WORTH,同一把尺子)的 MOTIVE_LAND_EXP 次方,最多 1
+   * - 物产:边境对面有本国缺的物产 MOTIVE_RES
+   * - 宣称:对方手里有本国的旧土 MOTIVE_CLAIM + 每多一州 MOTIVE_CLAIM_STEP(最多 1);复仇:近年输给它 MOTIVE_REVENGE
+   * - 政治:国内动荡到 DIVERT_U 以上 MOTIVE_DIVERT,1 以上 MOTIVE_UNREST
+   * - 君主:好战、好扩张(两项均值超过 50 的部分 ÷ 50)× MOTIVE_RULER;新君即位 MOTIVE_NEW_REIGN 年内而且好战 ≥ MOTIVE_NEW_WAR:MOTIVE_NEW_RULER(立威)
+   * - 宗教:两国异教 MOTIVE_FAITH + MOTIVE_FAITH_K × 信仰差 × 神权倍数(最多 1)
+   * - 民族:同族、国力是对方 MOTIVE_KIN_RATIO 倍以上 MOTIVE_KIN(统一诸部);趁乱:对方有内忧 MOTIVE_CHAOS;方针里的仇国 1
+   * 动机记在史事 war 的 motive 里(接着推时由它重建;纳贡式议和看它,见 diplomacy.ts)
+   */
+  MOTIVE_FLOOR: 0.15,
+  MOTIVE_LAND_EXP: 2,
+  MOTIVE_RES: 0.8,
+  MOTIVE_CLAIM: 0.5,
+  MOTIVE_CLAIM_STEP: 0.2,
+  MOTIVE_REVENGE: 0.6,
+  MOTIVE_DIVERT: 0.8,
+  MOTIVE_UNREST: 0.4,
+  MOTIVE_RULER: 0.8,
+  MOTIVE_NEW_REIGN: 10,
+  MOTIVE_NEW_WAR: 60,
+  MOTIVE_NEW_RULER: 0.6,
+  MOTIVE_FAITH: 0.25,
+  MOTIVE_FAITH_K: 0.3,
+  MOTIVE_KIN_RATIO: 2,
+  MOTIVE_KIN: 0.5,
+  MOTIVE_CHAOS: 0.5,
 });
 /** 这张表的值(一套数里取出来的) */
 export type WarsKnobs = typeof WARS_KNOBS.values;
@@ -323,6 +351,9 @@ const U_TRIBAL = 19;
 // 模型
 
 /** 一场战争(由史事就能重建) */
+/** 没有现成由头的几种动机写进史事 war 的 cause(别的照 causeOf 推:收复失地、乘乱、为夺物产、与某国争边……) */
+const MOTIVE_CAUSE: Partial<Record<WarMotive, AnnalCause>> = { revenge: 'revenge', ruler: 'glory', prestige: 'prestige', faith: 'heresy', kin: 'unify' };
+
 export interface War {
   /** 战争编号(0 起,按宣战先后) = 史事里的 war */
   id: number;
@@ -336,6 +367,8 @@ export interface War {
   /** 这场战争里攻占的州(按先后):by = 攻占它的一方 */
   /** 攻占的州(tribal = 顺手收服的无主部落州,史事 conquer 的 b = −1;接着推时由史事重建,一场每边的上限照它数) */
   takes: { year: Year; region: number; by: number; tribal?: true }[];
+  /** 开战动机(看邻国时开的仗才有;史事 war 的 motive) */
+  motive?: WarMotive;
 }
 
 export interface WarModel {
@@ -676,7 +709,7 @@ export function warModelOf(sim: CivSim): WarModel | undefined {
 
 /** 登记战争的事件处理和监听(installPolities 之后调用) */
 export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarModel = newModel(pm)): WarModel {
-  const { PROJECT, KIN_ATTACK, HOME_DEF, CAPITAL_DEF, PROTECT_DEF, P_MAX, P_MIN, CAPITAL_GRACE, PROTECT_KEEP, HOLD, DEFENSE, REGAIN, RES_TARGET, MAX_CUT, MIN_STATE, CEDE_I, SURRENDER_SHARE, SURRENDER_POWER, ALLY_JOIN, TWO_FRONTS, REST, BROKE_CUT, PURSE_0, PLUNDER_FLOOR, TRUCE, NEWBORN, CONF_NEWBORN, COLLAPSE_TRUCE, COLLAPSE_WEAK, COLLAPSE_WEAK_YEARS, COLLAPSE_VIGOR, COLLAPSE_VIGOR_YEARS, COLLAPSE_CLAIM_POWER, COLLAPSE_CLAIM_FULL, COLLAPSE_CLAIM_FADE, COLLAPSE_REUNIFY, MAX_WARS, CRUSH, WAR_ODDS, LOCAL_EXP, BORDER_FULL, FOREIGN, REVANCHE, PIANAN_K, PREY, PREY_ODDS, GRUDGE_YEARS, GRUDGE, RES_WANT, RES_MAX, RICH, DIVERT, DIVERT_U, DIVERT_STEP, CHAOS_YEARS, PREY_UNREST, PREY_CALM, PREY_HIGH, WEAK_PREY, BLIGHT_MIN, BLIGHT_PREY, BLIGHT_FULL, LORD_PREY, LORD_PREY_MAX, STAND, STAND_DAYS, STAND_SLAIN, STAND_TAKEN, WINTER_T, WINTER_ALWAYS, WINTER_JITTER, BREAK_MAX, BREAK, COUNTER, STALL, BROKE_LENGTH, BROKE_PEACE, REVOLT_LENGTH, CRUSH_GOAL, CEDE, FAITH_WAR_SAME, FAITH_WAR_FAR, FAITH_THEO } = wm.k;
+  const { PROJECT, KIN_ATTACK, HOME_DEF, CAPITAL_DEF, PROTECT_DEF, P_MAX, P_MIN, CAPITAL_GRACE, PROTECT_KEEP, HOLD, DEFENSE, REGAIN, RES_TARGET, MAX_CUT, MIN_STATE, CEDE_I, SURRENDER_SHARE, SURRENDER_POWER, ALLY_JOIN, TWO_FRONTS, REST, BROKE_CUT, PURSE_0, PLUNDER_FLOOR, TRUCE, NEWBORN, CONF_NEWBORN, COLLAPSE_TRUCE, COLLAPSE_WEAK, COLLAPSE_WEAK_YEARS, COLLAPSE_VIGOR, COLLAPSE_VIGOR_YEARS, COLLAPSE_CLAIM_POWER, COLLAPSE_CLAIM_FULL, COLLAPSE_CLAIM_FADE, COLLAPSE_REUNIFY, MAX_WARS, CRUSH, WAR_ODDS, LOCAL_EXP, BORDER_FULL, FOREIGN, REVANCHE, PIANAN_K, PREY, PREY_ODDS, GRUDGE_YEARS, GRUDGE, RES_WANT, RES_MAX, RICH, DIVERT, DIVERT_U, DIVERT_STEP, CHAOS_YEARS, PREY_UNREST, PREY_CALM, PREY_HIGH, WEAK_PREY, BLIGHT_MIN, BLIGHT_PREY, BLIGHT_FULL, LORD_PREY, LORD_PREY_MAX, STAND, STAND_DAYS, STAND_SLAIN, STAND_TAKEN, WINTER_T, WINTER_ALWAYS, WINTER_JITTER, BREAK_MAX, BREAK, COUNTER, STALL, BROKE_LENGTH, BROKE_PEACE, REVOLT_LENGTH, CRUSH_GOAL, CEDE, FAITH_WAR_SAME, FAITH_WAR_FAR, FAITH_THEO, MOTIVE_FLOOR, MOTIVE_LAND_EXP, MOTIVE_RES, MOTIVE_CLAIM, MOTIVE_CLAIM_STEP, MOTIVE_REVENGE, MOTIVE_DIVERT, MOTIVE_UNREST, MOTIVE_RULER, MOTIVE_NEW_REIGN, MOTIVE_NEW_WAR, MOTIVE_NEW_RULER, MOTIVE_FAITH, MOTIVE_FAITH_K, MOTIVE_KIN_RATIO, MOTIVE_KIN, MOTIVE_CHAOS } = wm.k;
   const { FOE_ODDS, FRIEND_JOIN } = pm.knobs.get(POLICY_KNOBS);
   const { ADULT } = pm.knobs.get(REGENTS_KNOBS);
   const api = civApi(sim);
@@ -1116,14 +1149,14 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
   /** x、y 的国土接壤(x 能走过去的边) */
   const borders =  (x: number, y: number): boolean => polityBorders(pm, owner, x, y, sim.now);
 
-  const declare = (x: number, y: number, t: number, ally = -1, cause?: AnnalCause, res?: { region: number; want: number }): War => {
-    const w: War = { id: wm.wars.length, a: x, b: y, start: t, takes: [] };
+  const declare = (x: number, y: number, t: number, ally = -1, cause?: AnnalCause, res?: { region: number; want: number }, motive?: WarMotive): War => {
+    const w: War = { id: wm.wars.length, a: x, b: y, start: t, takes: [], ...(motive ? { motive } : {}) };
     // 邦交:作者下令盟国、宗藩之间开战,盟约、宗藩之分先断了(diplomacy.ts)
     api.diplomacy.sever?.(x, y, t, w.id);
     wm.wars.push(w);
     wm.active.push(w);
     // 为夺物产:region 列记由头里那一州,n 列记想要的物产(按位);乘内乱、为掠夺而战:region 列记割据的那州、要掠的富州
-    sim.record('war', { a: x, b: y, war: w.id, ...(ally >= 0 ? { settlement: ally } : {}), ...(cause ? { cause } : {}), ...(res ? { region: res.region, ...(res.want ? { n: res.want } : {}) } : {}) });
+    sim.record('war', { a: x, b: y, war: w.id, ...(ally >= 0 ? { settlement: ally } : {}), ...(cause ? { cause } : {}), ...(res ? { region: res.region, ...(res.want ? { n: res.want } : {}) } : {}), ...(motive ? { motive } : {}) });
     sim.schedule(t + gapOf(wm, w, 0), Ev.Campaign, 0, w.id);
     // 阶段 4 干预的结盟:y 被宣战,它的盟国(和 x 接壤、没和 x 结盟、和 x 没有宗藩之分、没在和 x 打)有 ALLY_JOIN 的机会援盟
     const iv = wm.iv;
@@ -1147,6 +1180,38 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
    * 第 k 次看邻国;k ≥ LOOK_K = 照大纲顺着引时多看的一眼(不接着预约下一次,见 interventions.ts 的 Ev.Look);
    * k ≥ REVENGE_K = 议和后替输的一方多看的一眼(复仇之战,同样不接着预约);k ≥ CHAIN_K = 大胜的一方多看的一眼(连续吞并,同上)
    */
+  /**
+   * p 想打 q 的动机(见 MOTIVE_*):[最强的那一条, 强度]。front = 边境上 q 的州,got = 边境对面有本国缺的哪几样物产,wq = q 的内忧,pol = p 的方针,cl = 可主张收复的州数
+   */
+  const motiveOf = (p: number, q: number, t: number, front: Map<number, number>, pow: Float64Array, got: number, wq: Woe, pol: ReturnType<typeof policyAt> | null, cl: number): [WarMotive, number] => {
+    const P = pm.polities[p];
+    const Q = pm.polities[q];
+    let best: WarMotive = 'none';
+    let m = MOTIVE_FLOOR;
+    const offer = (k: WarMotive, v: number) => {
+      if (v > m) [best, m] = [k, v];
+    };
+    let worth = 0;
+    for (const y of front.keys()) worth = Math.max(worth, landWorth(pm, owner, p, y, culture[y], t));
+    offer('land', fpow(Math.min(1, worth), MOTIVE_LAND_EXP));
+    if (got) offer('resource', MOTIVE_RES);
+    if (cl > 0) offer('claim', Math.min(1, MOTIVE_CLAIM + MOTIVE_CLAIM_STEP * cl));
+    if (t - (wm.grudge.get(p * 32768 + q) ?? -Infinity) < GRUDGE_YEARS) offer('revenge', MOTIVE_REVENGE);
+    const up = api.war.unrest ? api.war.unrest(p, t) : 0;
+    offer('politics', up >= DIVERT_U ? MOTIVE_DIVERT : up >= 1 ? MOTIVE_UNREST : 0);
+    const lean = rulingLeanings(pm, p, t);
+    if (lean) {
+      offer('ruler', MOTIVE_RULER * Math.max(0, Math.min(1, ((lean.war ?? 50) + (lean.expand ?? 50)) / 100 - 1)));
+      if ((lean.war ?? 50) >= MOTIVE_NEW_WAR && t - reignStart(rulerOf(pm, p, t)) < MOTIVE_NEW_REIGN) offer('prestige', MOTIVE_NEW_RULER);
+    }
+    const gap = polityFaithGap(pm, P, Q, t);
+    if (gap > 0) offer('faith', Math.min(1, MOTIVE_FAITH + MOTIVE_FAITH_K * gap * faithScale(P, t, FAITH_THEO)));
+    if (Q.culture === P.culture && pow[p] >= MOTIVE_KIN_RATIO * pow[q]) offer('kin', MOTIVE_KIN);
+    if (wq.cause) offer('chaos', MOTIVE_CHAOS);
+    if (pol && picks(pm, pol.foes, q)) offer('foe', 1);
+    return [best, m];
+  };
+
   const warCheck = (k: number, p: number, t: number): void => {
     const P = pm.polities[p];
     if (!P || P.ended !== undefined) return;
@@ -1231,6 +1296,7 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     const needy = money < PLUNDER_FLOOR && !!api.war.rich;
     let target = -1;
     let odds = 0;
+    let motive: WarMotive = 'none';
     let traitor = false;
     let breaker = false;
     /** 挑中的那一国:边境上有本国缺的哪几样物产 */
@@ -1315,9 +1381,13 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
         }
       }
       o *= rich >= 0 ? PLUNDER_FLOOR : money;
+      // 开战动机:取最强的一条(见 MOTIVE_*)
+      const mv = motiveOf(p, q, t, front.get(q)!, pow, got, wq, pol, claims(q));
+      o *= mv[1];
       if (o > odds) {
         odds = o;
         target = q;
+        motive = mv[0];
         traitor = betray;
         breaker = oath > 0;
         covet = got;
@@ -1341,22 +1411,22 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     if (traitor) {
       // 背盟:先记盟约断了(war 列 = 紧跟着的这场战争),再宣战
       api.diplomacy.note!('unally', { a: p, b: target, war: wm.wars.length, cause: 'betray' });
-      declare(p, target, t, -1, 'betray');
+      declare(p, target, t, -1, 'betray', undefined, motive);
       return;
     }
     // 背约(treaties.ts;背约那一条在宣战时记,见 接口 diplomacy.sever)
     if (breaker) {
-      declare(p, target, t, -1, 'breach');
+      declare(p, target, t, -1, 'breach', undefined, motive);
       return;
     }
-    const cause = causeOf(p, target, t, claims(target), covet, woe, loot, up);
+    const cause = MOTIVE_CAUSE[motive] ?? causeOf(p, target, t, claims(target), covet, woe, loot, up);
     // 乘内乱(有割据的写割据的那州)、为掠夺而战(写要掠的富州):region 列记那一州
     if (cause === 'unrest' || cause === 'plunder') {
-      declare(p, target, t, -1, cause, { region: cause === 'plunder' ? loot : woe.region, want: 0 });
+      declare(p, target, t, -1, cause, { region: cause === 'plunder' ? loot : woe.region, want: 0 }, motive);
       return;
     }
     if (cause !== 'resource') {
-      declare(p, target, t, -1, cause);
+      declare(p, target, t, -1, cause, undefined, motive);
       return;
     }
     // 为夺物产:由头里写边境上物产最全的那一州(一样多的取治所地块小的);这场战争想要的就是那一州有的几样
@@ -1369,7 +1439,7 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
         best = y;
       }
     }
-    declare(p, target, t, -1, cause, { region: best, want: api.war.resOf!(best) & covet });
+    declare(p, target, t, -1, cause, { region: best, want: api.war.resOf!(best) & covet }, motive);
   };
   sim.on(Ev.WarCheck, warCheck);
   api.war.look = (p, k, t) => warCheck(k, p, t);
@@ -1595,7 +1665,7 @@ export function resumeWars(sim: CivSim, world: World, civ: Civ): void {
   const looks: [War, number, Year, boolean][] = [];
   for (const e of civ.annals) {
     if (e.kind === 'war') {
-      wm.wars[e.war] = { id: e.war, a: e.a, b: e.b, start: e.year, takes: [] };
+      wm.wars[e.war] = { id: e.war, a: e.a, b: e.b, start: e.year, takes: [], ...(e.motive ? { motive: e.motive } : {}) };
       if (e.cause === 'quell' || e.cause === 'heir' || e.cause === 'trek') civil.add(e.war);
     } else if (e.kind === 'conquer' && e.war >= 0) wm.wars[e.war]?.takes.push({ year: e.year, region: e.region, by: e.a, ...(e.b === -1 ? { tribal: true as const } : {}) });
     else if (e.kind === 'peace') {

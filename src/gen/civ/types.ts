@@ -502,12 +502,18 @@ export type AnnalKind =
  *   secular 神权里世俗的将军政变 / 起兵革命、pontiff 大祭司交接之际被复辟 / 政变 / 废神权;
  *   dissent:政体一变(教团、世俗派夺权),不服的那一头据地自立(split 的 cause;新国第 0 段是神权 = 残余的神权国)
  */
-export type AnnalCause = 'expand' | 'claim' | 'chaos' | 'prey' | 'resource' | 'betray' | 'punish' | 'ally' | 'rescue' | 'lapse' | 'abandon' | 'vassal' | 'quell' | 'collapse' | 'great' | 'quake' | 'warlord' | 'broke' | 'heir' | 'slain' | 'captured' | 'withdrew' | 'pandemic' | 'breach' | 'peace' | 'renew' | 'deposed' | 'fled' | 'decree' | 'divert' | 'unrest' | 'plagued' | 'minor' | 'regent' | 'plunder' | 'trek' | 'spring' | 'revolution' | 'surrender' | 'cleric' | 'zealot' | 'secular' | 'pontiff' | 'dissent' | 'confed';
+export type AnnalCause = 'expand' | 'claim' | 'chaos' | 'prey' | 'resource' | 'betray' | 'punish' | 'ally' | 'rescue' | 'lapse' | 'abandon' | 'vassal' | 'quell' | 'collapse' | 'great' | 'quake' | 'warlord' | 'broke' | 'heir' | 'slain' | 'captured' | 'withdrew' | 'pandemic' | 'breach' | 'peace' | 'renew' | 'deposed' | 'fled' | 'decree' | 'divert' | 'unrest' | 'plagued' | 'minor' | 'regent' | 'plunder' | 'trek' | 'spring' | 'revolution' | 'surrender' | 'cleric' | 'zealot' | 'secular' | 'pontiff' | 'dissent' | 'confed' | 'revenge' | 'glory' | 'prestige' | 'heresy' | 'unify';
 
 /**
  * 一条史事(阶段 3):推演里各事件处理函数用 CivSim.record 往 Civ.annals 里记,编年史(界面上的事件列表)只读它。
  * 和变化日志的分工:日志记"哪一州归了谁"(画图用,回放按它翻),史事记"发生了什么事"(讲故事用)。
  */
+/**
+ * 开战动机(wars.ts 的 MOTIVE_*):土地、物产、宣称(收复失地)、复仇、政治(外战安内)、君主(雄主开疆)、立威(新君)、宗教(讨伐异教)、
+ * 民族(统一同族)、趁乱、方针里的仇国;都没有 = none
+ */
+export type WarMotive = 'land' | 'resource' | 'claim' | 'revenge' | 'politics' | 'ruler' | 'prestige' | 'faith' | 'kin' | 'chaos' | 'foe' | 'none';
+
 export interface Annal {
   year: Year;
   kind: AnnalKind;
@@ -520,6 +526,8 @@ export interface Annal {
   via?: AdjKind;
   /** 宣战(war)为什么打、盟约(unally)怎么断的(见 AnnalCause);自立(defect)的 betray = 宗主先动的兵;合并(merge)的 vassal = 藩属纳土归附 */
   cause?: AnnalCause;
+  /** 宣战(war)才有:看邻国时开的仗的动机(见 WarMotive;援盟、讨伐、干预开的仗不给) */
+  motive?: WarMotive;
   /**
    * 结盟(alliance)才有:共御的强邻(−1 = 没有);据险断后(stand)借用:大军退保的那一州;
    * 掌实权(regent,n = 0 掌权那一条)借用:作者下令"让他掌权"的第几条干预(推演里自己出的不给);
@@ -548,7 +556,7 @@ export interface Annal {
 }
 
 /** Annal 里可有可无的几列:官方推演登记给引擎(events.ts 的 CIV_ANNALS),记史事时照这个次序抄进去;Annal 加了新的可选列,这里跟着加 */
-export const ANNAL_EXTRAS = ['via', 'cause', 'foe', 'n', 'ps', 'by', 'opt', 'until'] as const satisfies readonly (keyof Annal)[];
+export const ANNAL_EXTRAS = ['via', 'cause', 'foe', 'n', 'ps', 'by', 'opt', 'until', 'motive'] as const satisfies readonly (keyof Annal)[];
 /** 编译期核对:Annal 的可选列都在 ANNAL_EXTRAS 里(漏了这里报错) */
 type AnnalOptional = { [K in keyof Annal]-?: undefined extends Annal[K] ? K : never }[keyof Annal];
 const ANNAL_EXTRAS_COMPLETE: [Exclude<AnnalOptional, (typeof ANNAL_EXTRAS)[number]>] extends [never] ? true : false = true;

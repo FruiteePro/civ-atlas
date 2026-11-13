@@ -1648,6 +1648,13 @@ function warHead(civ: Civ, e: Annal, id: number, general: string): string {
       return `${A}${woeText(civ, e)},${go(B)}`;
     case 'prey':
       return `${A}欲并${B},${general ? `遣${general}伐之` : '举兵伐之'}`;
+    case 'revenge':
+    case 'glory':
+    case 'prestige':
+    case 'unify':
+      return `${A}${motiveText(civ, e)},${go(B)}`;
+    case 'heresy':
+      return `${A}以${B}奉异教,${general ? `遣${general}伐之` : '兴兵伐之'}`;
     case 'expand':
       return `${A}与${B}争边,${general ? `遣${general}伐之` : '起兵伐之'}`;
     case 'betray':
@@ -1698,6 +1705,13 @@ function warReason(civ: Civ, e: Annal, id: number): string {
       return `${woeText(civ, e)},`;
     case 'prey':
       return `欲并${B},`;
+    case 'revenge':
+    case 'glory':
+    case 'prestige':
+    case 'unify':
+      return `${motiveText(civ, e)},`;
+    case 'heresy':
+      return `以${B}奉异教,`;
     case 'expand':
       return `与${B}争边,`;
     case 'betray':
@@ -1853,7 +1867,23 @@ function claimText(civ: Civ, e: Annal, id: number): string {
 const warVerb = (e: Annal) => (e.cause === 'punish' || e.cause === 'quell' || e.cause === 'heir' ? '讨' : '伐');
 
 /** 由头里点了守方的名("以昌国绝贡,"、"乘昌国与索拉特交兵,"、"欲并昌国,"、"与昌国争边,"),后面写"伐之" */
-const NAMES_FOE: ReadonlySet<AnnalCause> = new Set<AnnalCause>(['punish', 'chaos', 'prey', 'expand', 'resource', 'unrest', 'plagued', 'minor', 'regent', 'plunder']);
+const NAMES_FOE: ReadonlySet<AnnalCause> = new Set<AnnalCause>(['punish', 'chaos', 'prey', 'expand', 'resource', 'unrest', 'plagued', 'minor', 'regent', 'plunder', 'heresy']);
+
+/** 开战动机写成的由头(wars.ts 的 MOTIVE_*):复仇"欲雪前耻"、雄主"欲开疆拓土"、新君"新君欲立威"、同族"欲统一诸部"(游牧)/"欲合同族" */
+function motiveText(civ: Civ, e: Annal): string {
+  switch (e.cause) {
+    case 'revenge':
+      return '欲雪前耻';
+    case 'glory':
+      return '欲开疆拓土';
+    case 'prestige':
+      return '新君欲立威';
+    default: {
+      const P = polityOf(civ, e.a);
+      return P?.kind === 'nomad' || P?.lineage === 'khanate' ? '欲统一诸部' : '欲合同族';
+    }
+  }
+}
 
 /**
  * 开战看内政的由头(wars.ts):转移矛盾"国中多事,欲以外战安内";乘内乱"乘昌国瑞州守将拥兵自重"(有割据,region 列 = 那州)/ "乘昌国内乱";
