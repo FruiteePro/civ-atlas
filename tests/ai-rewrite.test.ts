@@ -161,7 +161,8 @@ describe('改写 · 材料与提示词(seed 7)', () => {
     );
     // 没做过修改:不列"已经做过的修改";一个世界的材料不太长(GENERATOR_VERSION 36 多了宗室据地自立的国家,两万字出头)
     expect(t).not.toContain('## 已经做过的修改');
-    expect(t.length).toBeLessThan(23000);
+    // v75 在世的国家多了(小国、联盟丢了国都不亡),seed 7 材料 23189 字:上限放到 25000
+    expect(t.length).toBeLessThan(25000);
     // 同样的输入同样的材料
     expect(rewriteMaterial(world, civ, Y, EMPTY, ['随便说一句']).text).toBe(t);
   });

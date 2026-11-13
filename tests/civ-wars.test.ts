@@ -341,7 +341,8 @@ describe('战争与攻占', () => {
         if (x.role !== 'general') {
           princes++;
           expect(x.role, tag).toBe('prince');
-          expect(x.commands!.some((k) => !k.rear && k.war === e.war && k.first < i && i <= k.last), tag).toBe(true);
+          // v75 丢了国都不亡、朝廷迁走:原来的主将刚折在攻城里,宗室当场接过兵权就断后(接手就在这一条,seed 2024 第 3798 条)
+          expect(x.commands!.some((k) => !k.rear && k.war === e.war && k.first <= i && i <= k.last), tag).toBe(true);
           expect(c!.text, tag).toMatch(/亲率/);
         }
         if (e.cause === 'slain') {
@@ -370,7 +371,8 @@ describe('战争与攻占', () => {
       expect(st.conquests, `seed ${seed}`).toBeGreaterThan(30);
       expect(st.alive, `seed ${seed}`).toBeGreaterThanOrEqual(8);
       // GENERATOR_VERSION 15(立国更早、边缘立国)以后国家多了:20 个种子(1–19、2024)先后立国 35–68 个、结束时在世 15–25 个
-      expect(st.alive, `seed ${seed}`).toBeLessThanOrEqual(30);
+      // GENERATOR_VERSION 75(小国、部落联盟、游牧丢了国都迁都或称臣,不再因州少、破都纳降亡国)以后 46 个种子结束时在世平均 26.5 国,seed 7 40 国:上限放到 45
+      expect(st.alive, `seed ${seed}`).toBeLessThanOrEqual(45);
       expect(st.exclaveShare, `seed ${seed}`).toBeLessThan(0.03);
       // 各个百年的政区图也成片
       for (let y = 1500; y <= 3000; y += 500) {

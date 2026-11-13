@@ -145,7 +145,8 @@ describe('邦交:称臣纳贡、结盟、背盟', () => {
       // GENERATOR_VERSION 48(时代做法)以后 20 个种子结盟 6–40 次、称臣 13–42 次(seed 2024 31 次):上限按 20 个种子的最多放到 45
       pacts += s.pacts;
       expect(s.submits, tag).toBeGreaterThanOrEqual(1);
-      expect(s.submits, tag).toBeLessThanOrEqual(45);
+      // GENERATOR_VERSION 75(纳贡式议和:要的是称臣不是地的仗,守方丢一州、国都就可能奉表称臣;小国丢了国都称臣不亡)以后 seed 7 称臣 77 次:上限放到 100
+      expect(s.submits, tag).toBeLessThanOrEqual(100);
       expect(s.pacts, tag).toBeLessThanOrEqual(36);
       // 断了的盟不多于结过的盟;自立的不多于称过臣的
       expect(s.lapses + s.abandons + s.betrayals, tag).toBeLessThanOrEqual(s.pacts);
