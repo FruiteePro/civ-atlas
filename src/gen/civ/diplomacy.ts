@@ -50,7 +50,7 @@ import { YEAR_TICKS, resolveKey } from '../edits';
 import { Layer, type Annal, type Civ, type Year } from './types';
 import { fpow, keyed, keyed4, subSeed } from './engine/rand';
 import { bookChain, quantize, type CivSim } from './engine/sim';
-import { befriends, canCross, effOf, endPolity, hates, picks, policyAt, polityModelOf, powerScaleOf, type PolityModel } from './polities';
+import { befriends, canCross, effOf, endPolity, hates, picks, policyAt, polityModelOf, landWorth, powerScaleOf, type PolityModel } from './polities';
 import { faithAlignMul, faithOpposeMul, faithScale, polityFaithGap } from './faithRules';
 import { POLICY_KNOBS } from './policy';
 import { MARRIAGES_KNOBS } from './marriages';
@@ -120,6 +120,13 @@ export const DIPLOMACY_KNOBS = defineKnobs('diplomacy', {
   SUE_FAR: 14,
   /** 守方只剩这么多州(含)以下的,攻方索性并掉,不受降 */
   SUE_LEFT: 4,
+  /**
+   * 纳贡式议和:开战的动机不是土地、物产、收复失地(wars.ts 的 MOTIVE_*),或者这场仗打下来的州平均过不了和平扩张的门槛(不值得要)——
+   * 要的是对方称臣,不是它的地:守方丢了国都或至少一州就可能称臣(小国也行,不看 SUE_LEFT、SUE_FRAC),
+   * 受降的机会 × TRIB_ACCEPT、求和的机会 × TRIB_OFFER,同族一心要并的那一折(SUE_UNIFY)不算
+   */
+  TRIB_ACCEPT: 3,
+  TRIB_OFFER: 2,
   /** 藩属自立:称臣满这么多年才会;赔率 = DEFECT_ODDS × 宗主的虚弱 × e^(DEFECT_K × (国力比 − DEFECT_R0)) × 不接壤 × 异族 */
   DEFECT_MIN: 30,
   DEFECT_ODDS: 0.04,
@@ -331,7 +338,7 @@ function checkTime(dm: DiplomacyModel, p: number, k: number): number {
 export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyModel = new DiplomacyModel(pm, civApi(sim).diplomacy)): DiplomacyModel {
   const { KIN_PACT, KIN_JOIN } = pm.knobs.get(MARRIAGES_KNOBS);
   const { FRIEND_PACT, FRIEND_JOIN } = pm.knobs.get(POLICY_KNOBS);
-  const { MAX_WARS, WEAK_YEARS, WEAK_LOSS, DEFECT_MIN, DEFECT_ODDS, DEFECT_K, DEFECT_R0, DEFECT_FAR, DEFECT_FOREIGN, PUNISH, ABSORB_AGE, ABSORB_MAX, ABSORB_RATIO, ABSORB_SETTLE, ABSORB_ODDS, ABSORB_FOREIGN, LAPSE_AGE, LAPSE_RATIO, LAPSE_P, THREAT, SUBMIT_RATIO, SUBMIT_MAX, RESUBMIT_REST, SUBMIT_ODDS, SUBMIT_EXP, MAX_PACTS, PACT_REST, PACT_MIN_POWER, PACT_FEAR, PACT_COWAR, PACT_ODDS, PACT_JOIN, RESCUE, SUE_RATIO, SUE_LEFT, SUE_MIN, SUE_FRAC, SUE_ACCEPT, SUE_KIN, SUE_FOREIGN, SUE_CRUSH, SUE_UNIFY, SUE_FAR, SUE_OFFER, SIB_PACT, FAITH_SAME, FAITH_FAR, FAITH_THEO } = dm.k;
+  const { MAX_WARS, WEAK_YEARS, WEAK_LOSS, DEFECT_MIN, DEFECT_ODDS, DEFECT_K, DEFECT_R0, DEFECT_FAR, DEFECT_FOREIGN, PUNISH, ABSORB_AGE, ABSORB_MAX, ABSORB_RATIO, ABSORB_SETTLE, ABSORB_ODDS, ABSORB_FOREIGN, LAPSE_AGE, LAPSE_RATIO, LAPSE_P, THREAT, SUBMIT_RATIO, SUBMIT_MAX, RESUBMIT_REST, SUBMIT_ODDS, SUBMIT_EXP, MAX_PACTS, PACT_REST, PACT_MIN_POWER, PACT_FEAR, PACT_COWAR, PACT_ODDS, PACT_JOIN, RESCUE, SUE_RATIO, SUE_LEFT, SUE_MIN, SUE_FRAC, SUE_ACCEPT, SUE_KIN, SUE_FOREIGN, SUE_CRUSH, SUE_UNIFY, SUE_FAR, SUE_OFFER, TRIB_ACCEPT, TRIB_OFFER, SIB_PACT, FAITH_SAME, FAITH_FAR, FAITH_THEO } = dm.k;
   const api = civApi(sim);
   const wm = warModelOf(sim);
   if (!wm) throw new Error('installDiplomacy:先 installWars');
@@ -628,6 +635,16 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     }
   };
 
+  /** 这场仗要的是对方称臣、不是它的地(见 TRIB_*):动机不是土地 / 物产 / 收复失地,或打下的州 won 平均不值得要 */
+  const tributary = (w: War, won: Set<number>, t: number): boolean => {
+    if (w.motive !== undefined && w.motive !== 'land' && w.motive !== 'claim' && w.motive !== 'resource') return true;
+    if (!won.size) return false;
+    const cu = sim.owners[Layer.Culture];
+    let sum = 0;
+    for (const r of won) sum += Math.min(1, landWorth(pm, owner, w.a, r, cu[r], t));
+    return sum / won.size < 1;
+  };
+
   /** 第 i 仗之后:守方打得很惨时奉表称臣、攻方受降罢兵(当即议和,紧跟着记 submit)。成了 = true */
   api.war.sue = (w: War, i: number, t: number, pow: Float64Array, capitalFell: boolean): boolean => {
     const a = w.a;
@@ -639,16 +656,20 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     const won = new Set<number>();
     for (const e of w.takes) if (e.by === a && owner[e.region] === a) won.add(e.region);
     const held = won.size;
-    if (pm.size[b] <= SUE_LEFT || (!capitalFell && held < Math.max(SUE_MIN, SUE_FRAC * (pm.size[b] + held)))) return false;
+    const trib = tributary(w, won, t);
+    if (trib) {
+      if (!capitalFell && held < 1) return false;
+    } else if (pm.size[b] <= SUE_LEFT || (!capitalFell && held < Math.max(SUE_MIN, SUE_FRAC * (pm.size[b] + held)))) return false;
     const B = pm.polities[b];
     const kin = B.culture === pm.polities[a].culture;
     let accept = SUE_ACCEPT * (kin ? SUE_KIN : SUE_FOREIGN);
     accept *= faithAlignMul(polityFaithGap(pm, pm.polities[a], B, t), FAITH_SAME, FAITH_FAR, faithScale(pm.polities[a], t, FAITH_THEO));
-    if (kin && pow[a] >= SUE_CRUSH * pow[b]) accept *= SUE_UNIFY;
+    if (kin && pow[a] >= SUE_CRUSH * pow[b] && !trib) accept *= SUE_UNIFY;
+    if (trib) accept *= TRIB_ACCEPT;
     if (warsOf(a).length > 1) accept *= 1.4;
     if (pm.capDist[a][capRegion(b, t)] > SUE_FAR) accept *= 1.4;
     // 守方此刻在位的君主:好战越低越肯奉表称臣,越高越宁可打下去(rulers.ts;加上方针的胆量、和谈底线)
-    const offer = SUE_OFFER * effOf(pm, b, t).sue;
+    const offer = SUE_OFFER * effOf(pm, b, t).sue * (trib ? TRIB_OFFER : 1);
     if (keyed4(dm.base, pm.ptag[a], pm.ptag[b], Math.round(w.start * 256) * 64 + (i & 63), U_SUE) >= offer * Math.min(0.9, accept)) return false;
     api.war.makePeace!(w, t);
     if (!alive(b)) return true;

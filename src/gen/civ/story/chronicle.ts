@@ -3001,7 +3001,7 @@ function warEntry(ctx: Ctx, ids: number[]): ChronicleEntry {
         t = head.text;
         envoys = head.people;
         const terms: string[] = [];
-        if (sworn) terms.push(`${pn(civ, sworn.a, y)}奉表称臣,岁岁纳贡`);
+        if (sworn) terms.push(polityOf(civ, sworn.a)?.confed !== undefined ? `${pn(civ, sworn.a, y)}诸部臣服,岁岁纳贡` : `${pn(civ, sworn.a, y)}奉表称臣,岁岁纳贡`);
         if (gainA.length) terms.push(`${pn(civ, def, y)}割${regionNames(civ, gainA)}予${pn(civ, atk, y)}`);
         if (gainD.length) terms.push(`${pn(civ, atk, y)}割${regionNames(civ, gainD)}予${pn(civ, def, y)}`);
         t += terms.length ? `:${terms.join(';')}` : ',疆界如故';
