@@ -42,7 +42,7 @@ import { WORTH_EXP } from './frontier';
 import { quantize, type CivSim } from './engine/sim';
 import { KIND_EXPANSIONISM } from './kinds';
 import { OwnerReplay, REF_YEAR, cultureModelOf, cultureTerrain, ownersNear, type CultureModel, type CultureTerrain } from './cultures';
-import { RESHAPE_RAMP, SETTLEMENT_RANKS, capacityAt, capitalAt, polityTierAt, portAt, portSince, tierOf, yearReaching, yearReachingPop } from './growth';
+import { RESHAPE_RAMP, SETTLEMENT_RANKS, capacityAt, capitalAt, portAt, portSince, tierOf, yearReaching, yearReachingPop } from './growth';
 import { namePolities, nameSettlements, type RestoreDirection } from './naming';
 import { detectContacts, withHybridContacts } from './contact';
 import type { RouteCity } from './routes';
@@ -700,6 +700,15 @@ function worthParts(m: PolityModel, owner: Int16Array, p: Polity, b: number, dis
   return [value, WORTH * cost * (coast ? e.coast : e.worth) * m.worthMul * tribalAnnexMul(m, p, b, cb, t)];
 }
 
+/** 国家 p 在 t 这一刻之前(不含同一刻的升格)的档位;立国那一档总算 */
+function tierBefore(p: Polity, t: Year): number {
+  const T = p.titles;
+  if (!T || !T.length) return 0;
+  let tier = T[0].tier;
+  for (let i = 1; i < T.length && T[i].year < t; i++) tier = T[i].tier;
+  return tier;
+}
+
 /** 把 x 夹到 [lo, hi] */
 function clamp(x: number, lo: number, hi: number): number {
   return x < lo ? lo : x > hi ? hi : x;
@@ -721,8 +730,10 @@ export function tribalAnnexMul(m: PolityModel, p: Polity, b: number, cb: number,
   if (regime === 'junta') mul *= 1 - (1 - TRIBAL_JUNTA) * fill;
   else if (regime === 'theocracy') mul *= 1 - (1 - TRIBAL_THEOCRACY) * fill;
   else if (regime === 'republic' || p.lineage === 'republic') mul *= 1 - (1 - TRIBAL_REPUBLIC) * fill;
-  // 那一刻的档位(升格记在 Polity.titles;接着推重放旧预约时 m.tier 已是现在的档位,不能用)
-  if (polityTierAt(p, t) >= 3) mul *= 1 - (1 - TRIBAL_EMPIRE) * fill;
+  // 那一刻之前的档位(升格记在 Polity.titles;接着推重放旧预约时 m.tier 已是现在的档位,不能用)。
+  // 同一刻刚升格的不算:升格(Ev.PolityRank)排在拿下那一州的日志后面,一口气推时拿下那一州那一刻预约邻州还是旧档位,
+  // 接着推按日志重放这次预约时 titles 里已经有同一刻的升格(seed 42 接着推多出一次国家到达)
+  if (tierBefore(p, t) >= 3) mul *= 1 - (1 - TRIBAL_EMPIRE) * fill;
   const rich = clamp((m.terrain.meanSuit[b] - TRIBAL_SUIT_REF * 0.5) / Math.max(1e-6, TRIBAL_SUIT_REF), 0, 1);
   mul *= 1 - TRIBAL_WEALTH * fill * rich;
   if (cb === p.culture) mul *= 1 - TRIBAL_KIN * fill;
