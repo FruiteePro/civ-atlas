@@ -2103,7 +2103,7 @@ function simpleEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
     case 'merge': {
       // 并掉的是大国才是大事
       // 藩属纳土归附宗主(diplomacy.ts)
-      const t = e.b < 0 ? `${pn(civ, e.a, y)}并吞邻邦` : e.cause === 'vassal' ? `${pn(civ, e.b, y)}纳土归附${pn(civ, e.a, y)}` : `${pn(civ, e.b, y)}并入${pn(civ, e.a, y)}`;
+      const t = e.b < 0 ? `${pn(civ, e.a, y)}并吞邻邦` : e.cause === 'vassal' ? `${pn(civ, e.b, y)}纳土归附${pn(civ, e.a, y)}` : e.cause === 'unify' ? `${pn(civ, e.b, y)}势孤,举国归附同族${pn(civ, e.a, y)}` : `${pn(civ, e.b, y)}并入${pn(civ, e.a, y)}`;
       return base(e, id, t, isGreat(polityOf(civ, e.b)) ? 3 : 2, [e.a, e.b], []);
     }
     case 'dynasty': {
@@ -2544,7 +2544,7 @@ function diplomacyEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
     }
     case 'submit': {
       // 大汗国退保草原以后汗位之争(wars.ts):诸王不能相下,称臣于打下王庭的那一国
-      const t = e.cause === 'khan' ? `${A}汗位之争,诸王不能相下,遂奉表称臣于${B},岁岁纳贡` : `${A}畏${B}之强,遣使称臣,岁岁纳贡`;
+      const t = e.cause === 'khan' ? `${A}汗位之争,诸王不能相下,遂奉表称臣于${B},岁岁纳贡` : e.cause === 'lone' ? `${A}国小势孤,四邻无援,遣使称臣于${B}` : `${A}畏${B}之强,遣使称臣,岁岁纳贡`;
       const P = polityOf(civ, e.a);
       return base(e, id, t, P && polityTierAt(P, y) >= GREAT_TIER ? 3 : 2, [e.a, e.b], [e.region]);
     }

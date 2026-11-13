@@ -499,13 +499,14 @@ export type AnnalKind =
  *   spring:冬夏分明的地方闹的春荒(史事 famine 的 cause,unrest.ts);
  *   revolution:议立宪 / 废君谈崩、起兵的人打不进国都,据地自立为共和国(史事 split 的 cause,reform.ts;紧跟在那条 council 后面);
  *   surrender 强国打下国都,余下的州一并归降、亡国(破都纳降,wars.ts;fall 的 cause);
+ *   lone 势孤的小国称臣(submit 的 cause,diplomacy.ts 的 LONE_*;举国归附同族大国记 merge,cause = unify);
  *   north 大汗国丢了王庭、退保草原(capital 的 cause,wars.ts 的 deathRule = khan);khan 退保之后汗位之争:分裂(collapse 的 cause)/ 诸王不能相下、称臣(submit 的 cause);
  *   scatter 部落联盟 / 小游牧丢了王庭、诸部离散(fall 的 cause,wars.ts 的 deathRule);retreat 部落联盟 / 游牧丢了王庭迁走(capital 的 cause,方位在 dir);
  *   神权的几条进出路(史事 reform 的 cause,reform.ts;和平改制的不带):cleric 教团专权夺位立神权、zealot 教众起事(打进国都;打不进 = split 的 cause)、
  *   secular 神权里世俗的将军政变 / 起兵革命、pontiff 大祭司交接之际被复辟 / 政变 / 废神权;
  *   dissent:政体一变(教团、世俗派夺权),不服的那一头据地自立(split 的 cause;新国第 0 段是神权 = 残余的神权国)
  */
-export type AnnalCause = 'expand' | 'claim' | 'chaos' | 'prey' | 'resource' | 'betray' | 'punish' | 'ally' | 'rescue' | 'lapse' | 'abandon' | 'vassal' | 'quell' | 'collapse' | 'great' | 'quake' | 'warlord' | 'broke' | 'heir' | 'slain' | 'captured' | 'withdrew' | 'pandemic' | 'breach' | 'peace' | 'renew' | 'deposed' | 'fled' | 'decree' | 'divert' | 'unrest' | 'plagued' | 'minor' | 'regent' | 'plunder' | 'trek' | 'spring' | 'revolution' | 'surrender' | 'cleric' | 'zealot' | 'secular' | 'pontiff' | 'dissent' | 'confed' | 'revenge' | 'glory' | 'prestige' | 'heresy' | 'unify' | 'scatter' | 'retreat' | 'north' | 'khan';
+export type AnnalCause = 'expand' | 'claim' | 'chaos' | 'prey' | 'resource' | 'betray' | 'punish' | 'ally' | 'rescue' | 'lapse' | 'abandon' | 'vassal' | 'quell' | 'collapse' | 'great' | 'quake' | 'warlord' | 'broke' | 'heir' | 'slain' | 'captured' | 'withdrew' | 'pandemic' | 'breach' | 'peace' | 'renew' | 'deposed' | 'fled' | 'decree' | 'divert' | 'unrest' | 'plagued' | 'minor' | 'regent' | 'plunder' | 'trek' | 'spring' | 'revolution' | 'surrender' | 'cleric' | 'zealot' | 'secular' | 'pontiff' | 'dissent' | 'confed' | 'revenge' | 'glory' | 'prestige' | 'heresy' | 'unify' | 'scatter' | 'retreat' | 'north' | 'khan' | 'lone';
 
 /**
  * 一条史事(阶段 3):推演里各事件处理函数用 CivSim.record 往 Civ.annals 里记,编年史(界面上的事件列表)只读它。

@@ -147,6 +147,16 @@ export const DIPLOMACY_KNOBS = defineKnobs('diplomacy', {
   ABSORB_FOREIGN: 0.4,
   /** 归附的州要这么多年没换过国家(和合并一样) */
   ABSORB_SETTLE: 30,
+  /**
+   * 势孤的小国(不超过 LONE_MAX 州、立国满 LONE_AGE 年、没有盟国、没有友好的邻国、不是藩属也没有藩属):
+   * 每次看邦交(约 DIP_EVERY 年一次)有 LONE_MERGE 的机会举国归附同族的大邻国(至少 ABSORB_RATIO 倍大),
+   * 没有同族大邻国的有 LONE_SUBMIT 的机会向国力 LONE_RATIO 倍以上的邻国称臣
+   */
+  LONE_MAX: 2,
+  LONE_AGE: 100,
+  LONE_MERGE: 0.2,
+  LONE_SUBMIT: 0.25,
+  LONE_RATIO: 2,
   /** 一国最多同时打几场仗(和 wars.ts 的 MAX_WARS 一样):手上的仗打满了的不来援盟,不算坐视不救 */
   MAX_WARS: 2,
   /**
@@ -178,6 +188,7 @@ const U_JOIN = 7;
 const U_RESCUE = 8;
 const U_PUNISH = 9;
 const U_SUE = 10;
+const U_LONE = 11;
 
 // ---------------------------------------------------------------------------
 // 模型
@@ -338,7 +349,7 @@ function checkTime(dm: DiplomacyModel, p: number, k: number): number {
 export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyModel = new DiplomacyModel(pm, civApi(sim).diplomacy)): DiplomacyModel {
   const { KIN_PACT, KIN_JOIN } = pm.knobs.get(MARRIAGES_KNOBS);
   const { FRIEND_PACT, FRIEND_JOIN } = pm.knobs.get(POLICY_KNOBS);
-  const { MAX_WARS, WEAK_YEARS, WEAK_LOSS, DEFECT_MIN, DEFECT_ODDS, DEFECT_K, DEFECT_R0, DEFECT_FAR, DEFECT_FOREIGN, PUNISH, ABSORB_AGE, ABSORB_MAX, ABSORB_RATIO, ABSORB_SETTLE, ABSORB_ODDS, ABSORB_FOREIGN, LAPSE_AGE, LAPSE_RATIO, LAPSE_P, THREAT, SUBMIT_RATIO, SUBMIT_MAX, RESUBMIT_REST, SUBMIT_ODDS, SUBMIT_EXP, MAX_PACTS, PACT_REST, PACT_MIN_POWER, PACT_FEAR, PACT_COWAR, PACT_ODDS, PACT_JOIN, RESCUE, SUE_RATIO, SUE_LEFT, SUE_MIN, SUE_FRAC, SUE_ACCEPT, SUE_KIN, SUE_FOREIGN, SUE_CRUSH, SUE_UNIFY, SUE_FAR, SUE_OFFER, TRIB_ACCEPT, TRIB_OFFER, SIB_PACT, FAITH_SAME, FAITH_FAR, FAITH_THEO } = dm.k;
+  const { MAX_WARS, WEAK_YEARS, WEAK_LOSS, DEFECT_MIN, DEFECT_ODDS, DEFECT_K, DEFECT_R0, DEFECT_FAR, DEFECT_FOREIGN, PUNISH, ABSORB_AGE, ABSORB_MAX, ABSORB_RATIO, ABSORB_SETTLE, ABSORB_ODDS, ABSORB_FOREIGN, LONE_MAX, LONE_AGE, LONE_MERGE, LONE_SUBMIT, LONE_RATIO, LAPSE_AGE, LAPSE_RATIO, LAPSE_P, THREAT, SUBMIT_RATIO, SUBMIT_MAX, RESUBMIT_REST, SUBMIT_ODDS, SUBMIT_EXP, MAX_PACTS, PACT_REST, PACT_MIN_POWER, PACT_FEAR, PACT_COWAR, PACT_ODDS, PACT_JOIN, RESCUE, SUE_RATIO, SUE_LEFT, SUE_MIN, SUE_FRAC, SUE_ACCEPT, SUE_KIN, SUE_FOREIGN, SUE_CRUSH, SUE_UNIFY, SUE_FAR, SUE_OFFER, TRIB_ACCEPT, TRIB_OFFER, SIB_PACT, FAITH_SAME, FAITH_FAR, FAITH_THEO } = dm.k;
   const api = civApi(sim);
   const wm = warModelOf(sim);
   if (!wm) throw new Error('installDiplomacy:先 installWars');
@@ -484,6 +495,44 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
     return true;
   };
 
+  // ---- ②' 势孤的小国:归附同族大国 / 称臣 ----
+  const tryLone = (p: number, k: number, t: number): boolean => {
+    const P = pm.polities[p];
+    const n = pm.size[p];
+    if (n <= 0 || n > LONE_MAX || t - P.founded < LONE_AGE || dm.vassalsOf(p).length || dm.alliesOf(p).length || atWar(p)) return false;
+    if (wm.iv?.protects(p, t) || wm.iv?.holdsLock(p, t) || halted(p, t)) return false;
+    const ns = neighbors(p);
+    if (!ns.length || ns.some((q) => friendly(p, q, t) || befriends(pm, p, q, t))) return false;
+    const mine = pm.lands[p].slice();
+    for (const r of mine) if (t - wm.since[r] < ABSORB_SETTLE) return false;
+    const u = keyed(dm.base, pm.ptag[p], k, U_LONE);
+    // 同族的大邻国(最大的那个):举国归附
+    let kin = -1;
+    for (const q of ns) if (pm.polities[q].culture === P.culture && dm.liegeOf(q) < 0 && !atWar(q) && !halted(q, t) && pm.size[q] >= ABSORB_RATIO * n && (kin < 0 || pm.size[q] > pm.size[kin])) kin = q;
+    if (kin >= 0) {
+      if (u >= LONE_MERGE) return false;
+      for (const r of mine) sim.setOwner(Layer.Polity, r, kin, Ev.Merge);
+      endPolity(pm, p, t);
+      pol?.merged.add(p);
+      sim.record('merge', { a: kin, b: p, cause: 'unify' });
+      return true;
+    }
+    // 没有同族大邻国:向最强的邻国称臣
+    const pp = powerOf(p, t);
+    let best = -1;
+    let bp = 0;
+    for (const q of ns) {
+      if (dm.liegeOf(q) >= 0 || fighting(p, q) || halted(q, t)) continue;
+      const v = powerOf(q, t);
+      if (v > bp) ((bp = v), (best = q));
+    }
+    if (best < 0 || bp < LONE_RATIO * pp || u >= LONE_SUBMIT) return false;
+    const d = dm.defected.get(p);
+    if (d && d.liege === best && t - d.year < RESUBMIT_REST) return false;
+    swear(p, best, t, -1, 'lone');
+    return true;
+  };
+
   // ---- ③ 盟约渐废 ----
   const tryLapse = (x: Pact, p: number, k: number, t: number): boolean => {
     if (t - x.since < LAPSE_AGE) return false;
@@ -597,6 +646,7 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
       return;
     }
     for (const v of dm.vassalsOf(p)) if (tryAbsorb(p, v, k, t)) return;
+    if (tryLone(p, k, t)) return;
     for (const x of dm.pactsOf(p)) if (tryLapse(x, p, k, t)) return;
     const pp = powerOf(p, t);
     const [f, ratio] = mainThreat(p, t, pp);
