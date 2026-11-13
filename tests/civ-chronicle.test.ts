@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_PARAMS, generateWorld } from '../src/gen/world';
 import { generateCiv } from '../src/gen/civ';
 import { Layer, type Annal, type AnnalKind, type Civ, type Culture, type Polity, type Settlement } from '../src/gen/civ/types';
-import { polityName, polityTierAt } from '../src/gen/civ/growth';
+import { cededBefore, polityName, polityTierAt } from '../src/gen/civ/growth';
 import {
   BIG_WAR,
   CAPITAL_TIER,
@@ -957,6 +957,15 @@ describe('编年史 · 真实世界(立国、升格)', () => {
       for (const e of list.filter((x) => x.kind === 'split')) {
         // 宗室据地争位:"大昌先君之子李昭不服其弟李恒即位,据瑞州起兵自立,号昭国,都于瑞城"
         const heir = civ.annals[e.id].cause === 'heir';
+        // v74 起事立的神权国(教众起事 / 世俗派夺了神权以后国教最盛的那头不服)、教团上台以后信别的教的那头不服
+        if (e.tag === '教') {
+          expect(e.text).toMatch(/^(.+教众.*起事,(叛.+)?自立,立.+主国事|.*教众.*不服,立.+,据.+),号.+,都于.+$/);
+          continue;
+        }
+        if (civ.annals[e.id].cause === 'dissent') {
+          expect(e.text).toMatch(/^.*之民不服.*立神权,.*据.+自立,号.+,都于.+$/);
+          continue;
+        }
         expect(e.text).toMatch(
           e.tag === '复' ? /^故.+(宗室|王室之后|旧臣).+据.+起兵,脱.+复国,号.+,都于.+$/ : heir ? /^.+(先君之[子女]|宗室).+不服.+即位,据.+起兵自立,号.+,都于.+$/ : /^.+(守将|领主).+叛.+自立,号.+,都于.+$/,
         );
@@ -1037,15 +1046,18 @@ describe('编年史 · 真实世界(默认参数):被迫迁都折进战争,"大�
       let ceded = 0;
       A.forEach((e, i) => {
         if (e.kind !== 'peace' || e.region < 0) return;
-        for (let j = i - e.region; j < i; j++) expect(A[j].kind === 'conquer' && A[j].war === e.war, `第 ${j} 条`).toBe(true);
+        // 割让的那几条(议和前顺手收的无主部落州 b = −1 夹在中间、不算,见 growth.ts 的 cededBefore)
+        const cs = cededBefore(A, i);
+        expect(cs.length).toBe(e.region);
+        for (const j of cs) expect(A[j].kind === 'conquer' && A[j].war === e.war, `第 ${j} 条`).toBe(true);
         const n = e.n ?? 0;
         if (n > 0) {
-          const k = kidOf.get(i - e.region)!;
+          const k = kidOf.get(cs[0])!;
           expect(k.text).toMatch(/^.+割.+求和$/);
           expect(k.tag).toBe('割');
         }
         if (e.region > n) {
-          const k = kidOf.get(i - e.region + n)!;
+          const k = kidOf.get(cs[n])!;
           expect(k.text).toMatch(/^议定疆界,.+划归.+$/);
           expect(k.tag).toBe('割');
         }

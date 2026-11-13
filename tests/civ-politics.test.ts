@@ -350,7 +350,7 @@ describe('分与合', () => {
           const F = civ.polities[p.restores];
           // "故昌宗室李昭据瑞州起兵"(故国是共和国的写"旧臣";没有人物的写"遗民")
           expect(e.text).toMatch(new RegExp(`^故${polityRootAt(F, F.ended!)}(宗室|王室之后|旧臣|遗民)`));
-        } else expect(e.tag).toBe('分');
+        } else expect(e.tag).toBe(civ.polities[e.polities[0]].dynasties?.[0]?.regime === 'theocracy' ? '教' : '分'); // v74:起事立的神权国标"教"
         expect(e.text).not.toMatch(/某国|undefined|NaN|-1/);
       }
       const merges = list.filter((e) => e.kind === 'merge');
