@@ -81,9 +81,8 @@ export const FAITH = {
   /** 同化的速率:异教 × 0.6(别派按一半折),同教 × 1.1 */
   assimFar: 0.6,
   assimSame: 1.1,
-  /** 宣战的赔率:邻国全同教 × 0.85,全异教 × 1.3,按邻国里异教占几成折 */
-  warSame: 0.85,
-  warFar: 1.3,
+  /** 为信仰开战的劲头(影响口 war.faith,乘在宗教这条开战动机上,挑打谁时就算进去):邻国全异教 × 3,全同教不变,按邻国里异教占几成折 */
+  zeal: 3,
   /** 圣城在接壤的异教国手里,每次出手兴兵的几成;打过一次隔几年才再为它打 */
   holy: 0.2,
   holyGap: 40,
@@ -103,14 +102,14 @@ export function faithGap(faiths: readonly SimFaith[], f: number, g: number): num
 }
 
 /**
- * 宗教生效:每 5 年出手(信仰也是每 5 年算一步)。按州交动荡、同化,按国交宣战的赔率;
+ * 宗教生效:每 5 年出手(信仰也是每 5 年算一步)。按州交动荡、同化,按国交为信仰开战的劲头(war.faith);
  * 下两种命令:圣城在接壤的异教国手里,奉这个大教的国兴兵(复圣城);两个同教的邻国都挨着一个更强的异教国,结盟拒之。都在编年史记一句
  */
 export function faithEffect(id = 'faith'): SimPlugin<SimRead> {
   return {
     id,
     every: 5,
-    influences: ['unrest.add', 'assim.rate', 'war.odds'],
+    influences: ['unrest.add', 'assim.rate', 'war.faith'],
     act(turn) {
       const r = turn.read;
       const ps = r.polities();
@@ -121,7 +120,7 @@ export function faithEffect(id = 'faith'): SimPlugin<SimRead> {
       const R = owner.length;
       const unrest = turn.influence('unrest.add');
       const assim = turn.influence('assim.rate');
-      const odds = turn.influence('war.odds');
+      const zeal = turn.influence('war.faith');
       const stateOf = (p: number) => (p >= 0 && ps[p] ? ps[p].faith : -1);
       for (let q = 0; q < R; q++) {
         const gap = faithGap(faiths, stateOf(owner[q]), faith[q]);
@@ -138,7 +137,7 @@ export function faithEffect(id = 'faith'): SimPlugin<SimRead> {
           if (b >= 0 && b !== a) near[a].add(b);
         }
       }
-      for (let p = 0; p < odds.length; p++) {
+      for (let p = 0; p < zeal.length; p++) {
         let n = 0;
         let far = 0;
         for (const q of near[p]) {
@@ -147,7 +146,7 @@ export function faithEffect(id = 'faith'): SimPlugin<SimRead> {
           n++;
           far += gap;
         }
-        odds[p] = n ? FAITH.warSame + (FAITH.warFar - FAITH.warSame) * (far / n) : 1;
+        zeal[p] = n ? 1 + (FAITH.zeal - 1) * (far / n) : 1;
       }
 
       // holy:国 → 上回为圣城兴兵那年;pact:「甲:乙」→ 下令结的盟到哪年
@@ -197,7 +196,7 @@ export function faithEffect(id = 'faith'): SimPlugin<SimRead> {
       }
       return {
         note: note as unknown as PluginNote,
-        influences: { 'unrest.add': unrest, 'assim.rate': assim, 'war.odds': odds },
+        influences: { 'unrest.add': unrest, 'assim.rate': assim, 'war.faith': zeal },
         ...(commands.length ? { commands, chronicle } : {}),
       };
     },

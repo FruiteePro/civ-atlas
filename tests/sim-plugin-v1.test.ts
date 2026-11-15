@@ -188,7 +188,7 @@ describe('试金石效果(多种子合计)', () => {
 });
 
 describe('两个插件一起装', () => {
-  it('推到 1500 年存下、读回来接着推到 3000 年,和一口气推完一样(都往 war.odds 交数,乘在一起)', () => {
+  it('推到 1500 年存下、读回来接着推到 3000 年,和一口气推完一样(厌战往 war.odds、宗教往 war.faith 交数)', () => {
     const w = generateWorld({ ...DEFAULT_PARAMS, cells: 12000, seed: 2024 });
     const plugins = [weariness(), faithEffect()];
     const roundTrip = (c: Civ) => unpackValue(packValue(c)) as Civ;
