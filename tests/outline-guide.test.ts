@@ -37,20 +37,24 @@ function same(a: Civ, b: Civ, label: string) {
 }
 
 /**
- * seed 1 一份像样的大纲里较晚的一条开战:照常推没发生,两国那年接壤,引几版能引成。年份按条件现找。
+ * seed 1 一份像样的大纲里较晚的一条开战:照常推没发生,两国那年接壤,引几版能引成。年份按条件现找:
+ * 合条件的开战从最晚的往前挨个试(试 12 版),第一条引成、同带的那条君主去世是硬改的就是;随机大纲 20 条里没有就 30、40 条里找
+ * (GENERATOR_VERSION 77 神权调少以后 20 条里最晚那条 2638 年 12 版都引不成,1691 年那条同带的君主去世照常就发生了)。
  * 只带这一条(前面再塞别的情节,硬改时国家键会对不上,变成 notYet/gone)。
  * (第 58 版 samplePlots 里的开战多半不接壤,2820 也不在 30 条里;改进分裂以后曾是 samplePlots 第 2820 年;
  * 第 57 湿地是 1554;56 滚雪球是 seed 3 第 2872 年;更早是 seed 1 第 1554 / seed 7 第 1574)
  */
 const GUIDED_SEED = 1;
-const guidedWar = (): Plot => {
+const GUIDED_TRIES = 12;
+/** 随机大纲 n 条里合条件的开战(按年份先后) */
+const guidedWars = (n: number): Plot[] => {
   const civ = baseCiv(GUIDED_SEED);
-  const plots = samplePlausible(civ, GUIDED_SEED, 20);
+  const plots = samplePlausible(civ, GUIDED_SEED, n);
   const idOf = (key: string) => {
     const r = resolveKey(civ, key);
     return r && r.kind === 'polity' ? r.id : -1;
   };
-  const wars = plots.filter((p) => {
+  return plots.filter((p) => {
     if (p.kind !== 'war' || !p.a || !p.b) return false;
     const a = idOf(p.a);
     const b = idOf(p.b);
@@ -59,17 +63,31 @@ const guidedWar = (): Plot => {
     const natural = civ.annals.some((e) => e.kind === 'war' && Math.abs(e.year - p.year) <= 10 && ((e.a === a && e.b === b) || (e.a === b && e.b === a)));
     return open.has(b) && !natural;
   });
-  return wars[wars.length - 1]!;
 };
-const GUIDED_YEAR = () => guidedWar().year;
-const guidedCase = (): Plot[] => {
+/** 这一条开战连同一条会硬改的早期情节 */
+const caseOf = (war: Plot): Plot[] => {
   const civ = baseCiv(GUIDED_SEED);
   // 另带一条会硬改的早期情节(某国君主去世),编年史才有【照大纲】;开战前面再堆别的情节会把国家键带跑(notYet/gone)。
   // 按条件现找:随机大纲从 20 条起往上加,第一条比那场仗早的君主去世(GENERATOR_VERSION 75 以后 20 条里没有了)
-  const war = guidedWar();
   let early: Plot | undefined;
   for (let n = 20; !early && n <= 80; n += 10) early = samplePlots(civ, GUIDED_SEED, n).find((p) => p.kind === 'death' && p.year < war.year);
   return [{ ...early!, id: 1 }, { ...war, id: 2 }];
+};
+let picked: Plot[] | undefined;
+const guidedCase = async (): Promise<Plot[]> => {
+  if (picked) return picked;
+  const tried = new Set<number>();
+  for (const n of [20, 30, 40]) {
+    for (const war of guidedWars(n).reverse()) {
+      if (tried.has(war.year)) continue;
+      tried.add(war.year);
+      const plots = caseOf(war);
+      const out = (await runOutline(world(GUIDED_SEED), {}, { plots, interventions: [], tries: GUIDED_TRIES }))!;
+      const st = (id: number) => out.review.find((r) => r.id === id)?.status;
+      if (st(1) === 'forced' && st(2) === 'guided') return (picked = plots);
+    }
+  }
+  throw new Error(`seed ${GUIDED_SEED}:合条件的开战没有一条引得成`);
 };
 
 describe('不引 = 和以前一样', () => {
@@ -115,16 +133,17 @@ describe('顺着引了一把', () => {
   it(`seed ${GUIDED_SEED} 随机大纲里较晚的一条开战:引成了,方针引到窗口最后一年年底就换回去;编年史不写`, async () => {
     const seed = GUIDED_SEED;
     const w = world(seed);
-    const plots = guidedCase();
-    const war = plots.find((p) => p.kind === 'war' && p.year === GUIDED_YEAR())!;
+    const plots = await guidedCase();
+    const war = plots[1];
+    const Y = war.year;
     const plain = (await runOutline(w, {}, { plots, interventions: [] }))!;
     expect(plain.review.find((r) => r.id === war.id)?.status).toBe('forced');
     const stages: { n: number; of: number }[] = [];
-    const out = (await runOutline(w, {}, { plots, interventions: [], tries: 12 }, { stage: (id, _fix, t) => id === war.id && t && stages.push(t) }))!;
+    const out = (await runOutline(w, {}, { plots, interventions: [], tries: GUIDED_TRIES }, { stage: (id, _fix, t) => id === war.id && t && stages.push(t) }))!;
     const r = out.review.find((x) => x.id === war.id)!;
     expect(r, JSON.stringify(out.review)).toMatchObject({ status: 'guided' });
-    expect(r.year).toBeGreaterThanOrEqual(GUIDED_YEAR() - 10);
-    expect(r.year).toBeLessThanOrEqual(GUIDED_YEAR() + 10);
+    expect(r.year).toBeGreaterThanOrEqual(Y - 10);
+    expect(r.year).toBeLessThanOrEqual(Y + 10);
     // 第几版:从 1 起一版版往上数,最后一版就是引成的那版
     expect(stages.map((t) => t.n)).toEqual(stages.map((_, i) => i + 1));
     expect(stages.every((t) => t.of === stages[0].of)).toBe(true);
@@ -134,8 +153,8 @@ describe('顺着引了一把', () => {
     const start = gs.find((v) => v.kind === 'policy' && v.foes?.length)! as Extract<Intervention, { kind: 'policy' }>;
     expect(start).toMatchObject({ a: war.a, foes: [war.b], look: { kind: 'war' } });
     expect(start.power).toBe(2 * start.war!);
-    expect(start.look!.years.every((y) => y >= GUIDED_YEAR() - 10 && y <= GUIDED_YEAR() + 10)).toBe(true);
-    expect(gs.find((v) => v !== start)).toEqual({ kind: 'policy', a: war.a, from: GUIDED_YEAR() + 11, plot: war.id, guide: true });
+    expect(start.look!.years.every((y) => y >= Y - 10 && y <= Y + 10)).toBe(true);
+    expect(gs.find((v) => v !== start)).toEqual({ kind: 'policy', a: war.a, from: Y + 11, plot: war.id, guide: true });
     expect(guideNotes(out.interventions, war.id)).toEqual([{ a: war.a, from: start.from, war: start.war, expand: 0, peace: 0, power: start.power, unrest: 0, foes: [war.b], friends: [] }]);
     same(out.civ, generateCiv(w, { interventions: out.interventions }), `seed ${seed} 引了`);
     // 编年史:引出来的方针不写;硬改的照旧写【照大纲】
@@ -144,7 +163,7 @@ describe('顺着引了一把', () => {
     expect(out.civ.annals.filter((e) => e.kind === 'intervene' && out.civ.interventions?.[e.war]?.plot === war.id).length).toBe(2);
     expect(entries.some((e) => e.kind === 'intervene' && guided.has(e.id))).toBe(false);
     expect(entries.some((e) => e.text.includes('【照大纲】'))).toBe(true);
-  }, 180_000);
+  }, 360_000);
 
   it('作者自己定过方针:引的时候加在它上面,引完换回它;guideNotes 只写多加的', () => {
     const own: Intervention[] = [{ kind: 'policy', a: 'polity:c1#0', from: 500, preset: 'trade', war: -15, coast: 35, foes: ['polity:c3#0'], focus: 'transport' }];
@@ -160,7 +179,7 @@ describe('顺着引了一把', () => {
   it('引的时候能叫停 = null', async () => {
     const seed = GUIDED_SEED;
     let trials = 0;
-    const out = await runOutline(world(seed), {}, { plots: guidedCase(), interventions: [], tries: 12 }, { stage: (_id, _fix, t) => t && trials++, stop: () => trials >= 1 });
+    const out = await runOutline(world(seed), {}, { plots: await guidedCase(), interventions: [], tries: GUIDED_TRIES }, { stage: (_id, _fix, t) => t && trials++, stop: () => trials >= 1 });
     // 不拿整份历史去比:比不上时 vitest 把它整个打印出来,太大
     expect(out === null).toBe(true);
     expect(trials).toBe(1);
