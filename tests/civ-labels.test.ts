@@ -182,8 +182,8 @@ describe('国名、城名标注与城镇符号(视口文字层)', () => {
           // 文字不压符号(自家符号也不压)
           const marks = placed.marks.map((m) => ({ id: m.mark.id, b: markBox(m.mark, view) }));
           for (const e of boxes) for (const m of marks) expect(overlap(e.b, m.b), `${e.text} 压了符号 ${m.id}(k=${k})`).toBe(false);
-          // 符号之间也不重叠(国都总画,不算)
-          const cap = new Set(c.civ.polities.map((p) => p.capital));
+          // 符号之间也不重叠(国都总画,不算;算那一年的国都,迁过都的按新都)
+          const cap = new Set(c.civ.polities.filter((p) => polityAlive(p, c.civ.endYear)).map((p) => capitalAt(p, c.civ.endYear)));
           const plain = marks.filter((m) => !cap.has(m.id));
           for (let a = 0; a < plain.length; a++)
             for (let b = a + 1; b < plain.length; b++) expect(overlap(plain[a].b, plain[b].b), `符号 ${plain[a].id} × ${plain[b].id}`).toBe(false);
