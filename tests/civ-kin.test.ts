@@ -99,6 +99,13 @@ describe.each([7, 2024])('复国之君接上故国世系 · seed=%i', (seed) => 
         continue;
       }
       if (F.parent === undefined) continue;
+      // 故国从头到尾都是改制开的共和那一段(lineage 是王国,可第一段 regime 就是共和):没有王室可接,
+      // 他的父辈(要是有)是他自己那一国补的(和继位的兄弟同父),不算接上故国
+      if (!P.some((x) => x.role === 'ruler' && x.polity === fallen.id && royalSeg(fallen, x.dynasty ?? 0))) {
+        expect(P[F.parent].polity).toBe(F.polity);
+        expect(F.descent).toBeUndefined();
+        continue;
+      }
       linked++;
       const f = P[F.parent];
       expect(f.polity).toBe(fallen.id);
@@ -161,6 +168,8 @@ describe.each([7, 2024])('复国之君的世系图 · seed=%i', (seed) => {
     for (const F of P.filter((x) => x.rise === 'restore' && x.parent !== undefined)) {
       const pol = c.polities[F.polity];
       const f = P[F.parent!];
+      // 故国没有王室可接(第一段就是共和):父辈是他自己那一国补的,不是复国接上的(见上)
+      if (f.polity === F.polity) continue;
       if (hasLineage(c, F.polity)) {
         const t = layoutDynasty(c, dynastyRows(c, F.polity)[0])[0];
         const root = t.nodes.find((n) => n.depth === 0)!.p;
