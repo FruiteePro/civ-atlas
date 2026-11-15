@@ -101,6 +101,7 @@ import {
   cededBefore,
   dynastyIndexAt,
   dynastyTitle,
+  easternTitles,
   polityAlive,
   polityName,
   polityRootAt,
@@ -642,6 +643,24 @@ function rankTiers(ctx: Ctx, e: Annal, p: Polity): [number, number] {
   return [before, after];
 }
 
+/** 东方国名词根换成占位符时,和占位符写法同样字形(单字 / 带"大" / 两字以上)的替身词根:比两档国号换回名字以后一样不一样 */
+const SHAPE_STAND_IN = { big: '大甲', long: '甲乙', single: '甲' } as const;
+
+/**
+ * 第 i 档和第 j 档的国号写出来是不是同一个("大隆汗国"第 2、3 档都叫大隆汗国)。词根是占位符(存进世界的编年史,story/nameTokens.ts)时
+ * 两档的占位符写法不一样,换回名字才一样:按生成时记下的字形(rootShapeOf)拿替身词根算一遍,和直接算的一样
+ */
+function sameTitle(p: Polity, titles: readonly string[], i: number, j: number, year: Year): boolean {
+  if (titles[i] === titles[j]) return true;
+  const root = polityRootAt(p, year);
+  if (!p.eastern || !isNameToken(root)) return false;
+  const lineage = p.lineage ?? 'realm';
+  const own = easternTitles(root, lineage);
+  if (own[i] !== titles[i] || own[j] !== titles[j]) return false;
+  const t = easternTitles(SHAPE_STAND_IN[rootShapeOf(root) ?? 'single'], lineage);
+  return t[i] === t[j];
+}
+
 function rankEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
   const { civ } = ctx;
   const p = polityOf(civ, e.a);
@@ -655,8 +674,9 @@ function rankEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
     const advisers = envoysOf(ctx.ix?.envoys.get(id) ?? [], p.id);
     const oldName = titles[Math.min(3, Math.max(0, b))];
     const newName = titles[Math.min(3, Math.max(0, a))];
+    const same = sameTitle(p, titles, Math.min(3, Math.max(0, b)), Math.min(3, Math.max(0, a)), e.year);
     if (a > b) {
-      if (newName === oldName) {
+      if (same) {
         text = `${newName}拓地至${cnNumber(TIER_REGIONS[Math.min(3, a)])}州`;
         importance = a >= GREAT_TIER ? 2 : 1;
       } else if (newName.endsWith('帝国') && !oldName.endsWith('帝国')) {
@@ -668,14 +688,14 @@ function rankEntry(ctx: Ctx, e: Annal, id: number): ChronicleEntry {
         // (帝国的一生读起来是"立国 → 称帝",不再夹一条"称王");部 → 国是小事
         importance = a >= GREAT_TIER ? (a >= peakTier(p) ? 3 : 2) : 1;
       }
-      if (advisers.length && newName !== oldName) {
+      if (advisers.length && !same) {
         text += `,${advisers.map((m) => ministerRef(m, e.year)).join('、')}${classical(p) ? '劝进' : '力主其事'}`;
         return withPeople(base(e, id, text, importance, [e.a], [], tag), ...advisers);
       }
     } else if (a < b) {
       tag = '降';
-      text = newName === oldName ? `${newName}国势衰微` : `${oldName}国势衰微,降为${newName}`;
-      importance = newName === oldName ? 1 : 2;
+      text = same ? `${newName}国势衰微` : `${oldName}国势衰微,降为${newName}`;
+      importance = same ? 1 : 2;
     } else text = `${newName}更定国号`;
   }
   return base(e, id, text, importance, [e.a], [], tag);
