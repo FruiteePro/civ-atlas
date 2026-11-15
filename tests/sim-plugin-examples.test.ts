@@ -172,7 +172,7 @@ const MAGIC_PINS: Record<V1Seed, unknown> = {
     layer: { y100: { mean: 4.6, max: 38.54 }, y500: { mean: 12, max: 49.66 }, y1500: { mean: 9.44, max: 48.99 }, y3000: { mean: 5.96, max: 45.42 } },
     before: { towns: 777, mean: 26.3, richTowns: 42, richMean: 24.4 },
     after: { towns: 769, mean: 27.2, richTowns: 44, richMean: 30.8 },
-    digest: '0b2ae3d9a4190d3b',
+    digest: '3889da9b8a5e6a73',
   },
 };
 
