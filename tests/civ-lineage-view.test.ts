@@ -112,7 +112,9 @@ describe('世系图 · seed=7 的几处写法(例子按条件现找)', () => {
         if (p.eastern || p.lineage === 'khanate' || p.lineage === 'republic' || p.ended !== undefined) continue;
         const rows = dynastyRows(civ, p.id);
         if (rows[0]?.rulers[0].rise !== 'found') continue;
-        const i = rows.findIndex((r, k) => k > 0 && k < rows.length - 1 && r.rulers[0].rise === 'usurp' && !r.rulers[0].female && rows[k + 1].rulers[0].rise !== 'usurp');
+        // 传位给弟弟的不挑:兄弟俩得有同一位父亲(世系里补一位宗室),篡位的开国之君就连上了父亲(见下面单独查的那一条)
+        const brother = (r: (typeof rows)[number]) => r.rulers[1] !== undefined && fatherOf(civ, r.rulers[0]) !== undefined && fatherOf(civ, r.rulers[1]) === fatherOf(civ, r.rulers[0]);
+        const i = rows.findIndex((r, k) => k > 0 && k < rows.length - 1 && r.rulers[0].rise === 'usurp' && !r.rulers[0].female && rows[k + 1].rulers[0].rise !== 'usurp' && !brother(r));
         if (i > 0) return { civ, rows, i };
       }
     }
@@ -168,6 +170,16 @@ describe('世系图 · seed=7 的几处写法(例子按条件现找)', () => {
     // 篡位的权臣没有连上父亲:这一朝的树从他起
     expect(fatherOf(civ, founder)).toBeUndefined();
     expect(layoutDynasty(civ, row)[0].nodes[0].p).toBe(founder);
+    // 篡位开朝的君主连上了父亲的,只有一种:传位给了弟弟(兄弟俩同一位父亲)
+    for (const sd of seeds) {
+      const cv = civOf(sd);
+      for (const p of cv.polities)
+        for (const r of dynastyRows(cv, p.id)) {
+          const F = r.rulers[0];
+          if (F.rise !== 'usurp' || fatherOf(cv, F) === undefined) continue;
+          expect(r.rulers[1] && fatherOf(cv, r.rulers[1]), `${sd} ${personName(cv, F)}`).toBe(fatherOf(cv, F));
+        }
+    }
 
     // 2. 父亲没即位的西幻君主(GENERATOR_VERSION 40 时是埃维里亚的威尔贝尔特二世,父亲特里斯贝尔特,兄弟威洛尔德、埃姆里克)
     const s = princeSon();
