@@ -288,7 +288,10 @@ export function deskLayout(g: RelGraph, W: number, H: number, cardW: number): La
 
   // ---- 中心
   // ---- 上一辈:父亲(母亲)在他正上方,家谱线只从父母连下来;别的长辈(叔伯……)按生年分到两边
-  const up = upRow(ups, 3);
+  // 两边的簇占着上一辈那一排的地方时少放几格(放不下的进"还有 N 位"),不和簇里的人叠在一起
+  const [loU, hiU] = limits(yUp - 30, yUp + 64);
+  let up = upRow(ups, 3);
+  for (let cap = 2; cap >= 1 && up.cells.some((c) => cx + c.dx * 112 - HALF < loU || cx + c.dx * 112 + HALF > hiU); cap--) up = upRow(ups, cap);
   for (const c of up.cells) {
     const x = cx + c.dx * 112;
     if (c.n) put(c.n, x, yUp, `M${cx} ${cardTop}V${yBar}H${x}V${yUp + 70}`, x < cx ? -1 : 1);
