@@ -361,7 +361,11 @@ describe.each([7, 2024])('世系 · seed=%i', (seed) => {
       // 西幻的预定继承人照君主起名(沿用先王的名字),可以和先君同名
       const west = !civ.polities[x.polity].eastern;
       // 西幻沿用王室名字的(和本国某位君主同名),也可以和早先的将领同名
-      const royal = west && P.some((o) => o.polity === x.polity && o.role === 'ruler' && o.name === x.name);
+      // 西幻的预定继承人没即位的(父亲是君主、兄弟里没人接着即位,比如父亲那一朝就亡了国):名字照君主起,
+      // 和那以前出道的将领、名臣撞了也照旧(lineage.ts 起宗室名字那一段;另起的话接着推到他即位前后名字不一样)
+      const father = x.parent !== undefined ? P[x.parent] : undefined;
+      const heirOnly = west && father?.role === 'ruler' && !(kids.get(father.id) ?? []).some((k) => k.role === 'ruler');
+      const royal = heirOnly || (west && P.some((o) => o.polity === x.polity && o.role === 'ruler' && o.name === x.name));
       const names = P.filter((o) => o.polity === x.polity && o.id < x.id && o.role !== 'prince' && o.role !== 'consort' && !(west && o.role === 'ruler') && Math.abs(o.born - x.born) < 300).map((o) => o.name);
       if (!royal) expect(names, x.name).not.toContain(x.name);
       if (x.died !== undefined) expect(x.died).toBeLessThanOrEqual(civ.endYear);
