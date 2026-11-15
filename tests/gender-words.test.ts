@@ -284,7 +284,8 @@ describe('推演出来的人物改成女的', () => {
     expect(rulerRef(c, x!, end)).toContain(`国王${x!.name}${x!.title}`);
     // 当上皇帝的西幻君主:种子 7 里没有就看种子 1(GENERATOR_VERSION 47 季节进推演以后种子 7 没有)
     const emperor = (cc: Civ) =>
-      cc.people!.find((r) => r.role === 'ruler' && r.author === undefined && !cc.polities[r.polity].eastern && (cc.polities[r.polity].lineage ?? 'realm') === 'realm' && tierEnd(cc, r) >= 3);
+      // 改制改出来的共和、神权那几段的执政不算君主(GENERATOR_VERSION 77 种子 7 头一个找到的是共和那一段的执政)
+      cc.people!.find((r) => r.role === 'ruler' && r.author === undefined && !cc.polities[r.polity].eastern && (cc.polities[r.polity].lineage ?? 'realm') === 'realm' && royalSeg(cc.polities[r.polity], r.dynasty ?? 0) && tierEnd(cc, r) >= 3);
     let ce = c;
     let e = emperor(c);
     if (!e) e = emperor((ce = generateCiv(generateWorld({ ...DEFAULT_PARAMS, cells: 12000, seed: 1 }))));
