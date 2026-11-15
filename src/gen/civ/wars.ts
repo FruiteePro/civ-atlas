@@ -972,6 +972,9 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
   /** 议和。extra = 罢兵割地:守方再割几州给攻方(见 CEDE;只有战役里议和时给) */
   const makePeace = (w: War, t: number, extra = 0) => {
     if (w.end !== undefined) return;
+    // 议和以前先看一眼前线边上的无主部落州(中古以前 scoopTribal 自己会挡;扫快照,不沿着刚收的部落州再往外滚)。
+    // 放在割地以前:割让的几条要紧挨在议和前面(议和的 region 列照条数数回去),收部落州的不能插进中间
+    for (const e of w.takes.slice()) scoopTribal(w, e.by, e.region, t);
     let ceded = 0;
     // 罢兵割地:守方割边上几州(挑法和打仗时一样;不割国都,割完至少还剩 MIN_STATE + 1 州)
     let yielded = 0;
@@ -1024,8 +1027,6 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
     wm.truce.set(pairKey(w.a, w.b), t);
     // region 列记割让了几州(紧挨在这条议和前面的那么多条攻占是割让的,编年史写"划归""割某州求和"而不写"攻取");没割让 = −1。
     // n 列记其中最前面几条是罢兵割地
-    // 议和记账以前先看一眼前线边上的无主部落州(中古以前 scoopTribal 自己会挡;扫快照,不沿着刚收的部落州再往外滚,也不插进亡国 / 迁都那几条中间)
-    for (const e of w.takes.slice()) scoopTribal(w, e.by, e.region, t);
     sim.record('peace', { a: w.a, b: w.b, war: w.id, region: ceded > 0 ? ceded : -1, ...(yielded > 0 ? { n: yielded } : {}) });
     // 记恨赢了自己的那一国;停战期满后几年替输的一方多看一眼邻国(复仇之战)
     const g = grudgeOf(w, !!api.war.revolt?.(w));
