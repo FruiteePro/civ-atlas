@@ -340,6 +340,9 @@ export function placeMap(items: LabelItem[], marks: LabelMark[], view: LabelView
   const out: PlacedLabel[] = [];
   const placedMarks: PlacedMark[] = [];
   const markOk = new Set<number>();
+  /** 这一视口里会排的文字;已经跟着自家国名提前放过(或试过)的 */
+  const queued = new Set(order.filter((e) => e.it).map((e) => e.it!));
+  const settled = new Set<LabelItem>();
   for (const e of order) {
     if (e.mk) {
       const mk = e.mk;
@@ -355,12 +358,24 @@ export function placeMap(items: LabelItem[], marks: LabelMark[], view: LabelView
       continue;
     }
     const it = e.it!;
-    if (it.mark !== undefined && !markOk.has(it.mark)) continue;
+    if (settled.has(it)) continue;
+    if (!placeItem(it)) continue;
+    // 国都名紧跟在自家国名后面放:国名刚给它留出的位置,不能让同一档的别国国都名(排在前面的)先占了
+    const mate = it.keepRoomFor;
+    if (mate && queued.has(mate) && !settled.has(mate) && (mate.mark === undefined || markOk.has(mate.mark))) {
+      settled.add(mate);
+      placeItem(mate);
+    }
+  }
+
+  function placeItem(it: LabelItem): boolean {
+    if (it.mark !== undefined && !markOk.has(it.mark)) return false;
     const ch = (it.keepRoomNear?.length ? tryPlace(it, null, true, true) : null) ?? tryPlace(it, null, true);
-    if (!ch) continue;
+    if (!ch) return false;
     for (const g of ch.c.glyphs) grid.add(glyphBox(g, ch.px, ch.pad + ch.space), -1);
     const fade = it.minZoom <= 1 ? 1 : Math.min(1, Math.max(0, (view.k - it.minZoom * 0.92) / (it.minZoom * 0.1)));
     out.push({ item: it, glyphs: ch.c.glyphs, px: ch.px, alpha: fade });
+    return true;
   }
 
   interface Choice {

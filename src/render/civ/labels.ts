@@ -690,6 +690,8 @@ export function civMapLayer(p: CivDrawParams, opt: { fast?: boolean; proj?: MapP
   if ((p.show.polities || p.show.routes) && civ.settlements.length) {
     const { x: mx, y: my } = world.mesh;
     const boxes = SYMBOL_BOX[style === 'fantasy' ? 'fantasy' : 'realistic'];
+    const capitalNames: { name: LabelItem; x: number; y: number }[] = [];
+    const cssPerWorldRef = REF_MAP_CSS / world.width;
     for (const e of settlementsAt(civ, p.year)) {
       const k = e.kind;
       const mark: LabelMark & SettlementMarkInfo = {
@@ -732,10 +734,18 @@ export function civMapLayer(p: CivDrawParams, opt: { fast?: boolean; proj?: MapP
       const pi = k === 4 ? polityItemOfCapital.get(e.s.id) : undefined;
       if (pi) pi.keepRoomFor = name;
       // 别国的国名压在这座国都上面(大国里夹着的小国):国名挑位置时能留就给它的名字留出地方
-      if (k === 4)
+      if (k === 4) {
         for (const [q, b] of polityBoxes)
           if (q !== pi && mark.x >= b[0] && mark.x <= b[2] && mark.y >= b[1] && mark.y <= b[3]) (q.keepRoomNear ??= []).push(name);
+        capitalNames.push({ name, x: mark.x, y: mark.y });
+      }
     }
+    // 挨得很近的两座国都:先放的那个国都名挑位置时也给旁边那个留出地方(能留就留,和 keepRoomNear 一样)
+    const nearCss = 6 * NAME_SIZE[4];
+    const near2 = (nearCss / cssPerWorldRef) ** 2;
+    for (const a of capitalNames)
+      for (const b of capitalNames)
+        if (a !== b && (a.x - b.x) ** 2 + (a.y - b.y) ** 2 < near2) (a.name.keepRoomNear ??= []).push(b.name);
     // 故城遗址:淡淡的记号,放大后写"古某城"
     const ruinLook =
       style === 'fantasy'
