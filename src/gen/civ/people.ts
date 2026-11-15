@@ -1617,7 +1617,8 @@ function peopleOnce(civ: PeopleInput, kills: Kills): { people: Person[]; ids: Ma
   // 宗室的名字在 lineage.ts 起,那时本国有的君主名字还没定(起了女名的女君、自立为君的执政 / 将军用回原来的名字):
   // 定下来以后,和本国先出道的君主、将领、名臣在前后 NAME_GAP 年里出生的同名了的宗室,换一个本国前后 NAME_GAP 年里没人用的
   // (西幻沿用王室名字的照旧:和本国某位君主同名本来就可以)
-  renamePrinceClashes(out, polities, (p, at) => namerOf(p, at), tag, NAME_GAP, NAME_TRIES);
+  // 西幻的男君和本国先出道的女王同名了(女名是最后才起的,他起名时她还用着男名):他换一个本国君主没用过的,再重排序数
+  for (const pid of renamePrinceClashes(out, polities, (p, at) => namerOf(p, at), tag, NAME_GAP, NAME_TRIES)) wctx.retitle(pid);
   return { people: out, ids, usurped: [...usurpers.values()] };
 }
 
@@ -1691,7 +1692,10 @@ class NameBook {
   }
 }
 
-/** 见 buildPeople 末尾:宗室和本国先出道的人(按编号)前后 gap 年里出生的同名,换一个 */
+/**
+ * 见 buildPeople 末尾:宗室和本国先出道的人(按编号)前后 gap 年里出生的同名,换一个;西幻的男君和本国先出道的女王同名,换一个。
+ * 只和先出道的人比(往后推时先出道的人名字不变)。返回改了君主名字的国家(要重排序数)
+ */
 function renamePrinceClashes(
   out: Person[],
   polities: readonly Polity[],
@@ -1699,33 +1703,42 @@ function renamePrinceClashes(
   tag: readonly number[],
   gap: number,
   tries: number,
-): void {
+): Set<number> {
   const byPolity = new Map<number, Person[]>();
   for (const o of out) {
     const l = byPolity.get(o.polity);
     if (l) l.push(o);
     else byPolity.set(o.polity, [o]);
   }
+  const retitle = new Set<number>();
   for (const x of out) {
-    if (x.role !== 'prince') continue;
     const P = polities[x.polity];
     if (!P) continue;
     const mates = byPolity.get(x.polity) ?? [];
     const west = !P.eastern;
-    const clash = (n: string) => mates.some((o) => o.id < x.id && o.name === n && o.role !== 'prince' && o.role !== 'consort' && !(west && o.role === 'ruler') && Math.abs(o.born - x.born) < gap);
-    if (!clash(x.name)) continue;
-    if (west && mates.some((o) => o.role === 'ruler' && o.name === x.name)) continue;
+    const before = (o: Person) => o.id < x.id;
+    let king = false;
+    if (x.role === 'prince') {
+      const clash = (n: string) => mates.some((o) => before(o) && o.name === n && o.role !== 'prince' && o.role !== 'consort' && !(west && o.role === 'ruler') && Math.abs(o.born - x.born) < gap);
+      if (!clash(x.name)) continue;
+      if (west && mates.some((o) => o.role === 'ruler' && o.name === x.name)) continue;
+    } else if (x.role === 'ruler' && west && !x.female && x.author === undefined) {
+      if (!mates.some((o) => before(o) && o.role === 'ruler' && o.female && o.name === x.name)) continue;
+      king = true;
+    } else continue;
     const namer = namerOf(P, x.born);
     const sur = namer.surnamed ? splitSurname(x.name) : '';
-    const near = (n: string) => mates.some((o) => o !== x && o.name === n && Math.abs(o.born - x.born) < gap);
+    const near = (n: string) => mates.some((o) => before(o) && o.name === n && ((king && o.role === 'ruler') || Math.abs(o.born - x.born) < gap));
     for (let a = 0; a < tries; a++) {
-      const n = sur + (x.female ? namer.femaleGiven(tag[x.polity] ?? 0, 2, x.id, a) : namer.given(tag[x.polity] ?? 0, 2, x.id, a));
+      const n = sur + (x.female ? namer.femaleGiven(tag[x.polity] ?? 0, 2, x.id, a) : namer.given(tag[x.polity] ?? 0, king ? 1 : 2, x.id, a));
       if (n && !near(n)) {
         x.name = n;
+        if (king) retitle.add(x.polity);
         break;
       }
     }
   }
+  return retitle;
 }
 
 /** 某一刻在位的君主(即位那一刻起算;到结束年份还在位的 until 不给) */
