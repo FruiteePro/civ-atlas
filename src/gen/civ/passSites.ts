@@ -116,9 +116,13 @@ export function passSites(world: World, regions: Regions, routes: readonly Route
   }
   // 守关战
   if (hist) {
-    for (const { annal, cell, year } of standCells(world, hist)) {
+    for (const { annal, cell, year, pair } of standCells(world, hist)) {
       const s = sites.find((o) => o.cell === cell) ?? sites.find((o) => geo.dist(o.cell, cell) <= MERGE * sp);
       if (!s) continue;
+      // 守的那道口子并进了附近的一处(口子本身没认成一处):两边的州也记上,关隘卡片「这一带打过的仗」才列得到它
+      let has = false;
+      for (let q = 0; q + 1 < s.pairs.length; q += 2) if ((s.pairs[q] === pair[0] && s.pairs[q + 1] === pair[1]) || (s.pairs[q] === pair[1] && s.pairs[q + 1] === pair[0])) has = true;
+      if (!has) s.pairs.push(pair[0], pair[1]);
       if (s.stand === undefined || year < s.stand) s.stand = year;
       (s.stands ??= []).push(annal);
     }
@@ -225,16 +229,16 @@ function detourFinder(world: World, regions: Regions, sp: number): (s: PassSite)
  * 不在再取共享边界最长的、一样长取治所地块小的(和推演里挑关隘的先后一样)。
  * "当时"= 守关那一刻:同一刻这场仗随即议和、割让的州(史事里排在它后面的攻占)退回去再看
  */
-export function standCells(world: World, hist: PassHistory): { annal: number; cell: number; year: number }[] {
+export function standCells(world: World, hist: PassHistory): { annal: number; cell: number; year: number; pair: [number, number] }[] {
   const reg = hist.regions;
   const gate = regionPasses(world, reg);
-  const out: { annal: number; cell: number; year: number }[] = [];
+  const out: { annal: number; cell: number; year: number; pair: [number, number] }[] = [];
   const annals: readonly Annal[] = hist.annals;
   for (let i = 0; i < annals.length; i++) {
     const an = annals[i];
     if (an.kind !== 'stand' || an.foe === undefined || an.foe < 0) continue;
-    const cell = standCell(hist, i, gate);
-    if (cell >= 0) out.push({ annal: i, cell, year: an.year });
+    const k = standCell(hist, i, gate);
+    if (k >= 0) out.push({ annal: i, cell: gate[k], year: an.year, pair: [an.foe, reg.adj[k]] });
   }
   return out;
 }
@@ -250,6 +254,7 @@ function ownersAtStand(hist: PassHistory, i: number): Int16Array {
   return own;
 }
 
+/** 守的是哪道口子:州交界的那一项(regions.adj 的下标;认不出 = −1),口子 = gate[它] */
 function standCell(hist: PassHistory, i: number, gate: Int32Array): number {
   const reg = hist.regions;
   const an = hist.annals[i];
@@ -261,22 +266,22 @@ function standCell(hist: PassHistory, i: number, gate: Int32Array): number {
     if (g < 0 || reg.of[g] !== an.region) continue;
     const j = reg.adj[k];
     if (an.region !== foe) {
-      if (j === an.region) return g;
+      if (j === an.region) return k;
       continue;
     }
     owner ??= ownersAtStand(hist, i);
     if (owner[j] === an.b) cand.push(k);
   }
-  if (cand.length <= 1) return cand.length ? gate[cand[0]] : -1;
+  if (cand.length <= 1) return cand.length ? cand[0] : -1;
   // 几个都是:这一场仗紧挨着的上一件攻下 / 打的那一州
   for (let j = i - 1; j >= 0; j--) {
     const p = hist.annals[j];
     if (p.war !== an.war || (p.kind !== 'conquer' && p.kind !== 'battle')) continue;
     const hit = cand.find((k) => reg.adj[k] === p.region);
-    if (hit !== undefined) return gate[hit];
+    if (hit !== undefined) return hit;
     break;
   }
   let best = cand[0];
   for (const k of cand) if (reg.adjBorder[k] > reg.adjBorder[best] || (reg.adjBorder[k] === reg.adjBorder[best] && reg.seat[reg.adj[k]] < reg.seat[reg.adj[best]])) best = k;
-  return gate[best];
+  return best;
 }
