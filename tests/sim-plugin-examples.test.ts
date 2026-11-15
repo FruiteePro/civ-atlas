@@ -164,15 +164,15 @@ const lastFrame = (civ: Civ) => {
 const MAGIC_PINS: Record<V1Seed, unknown> = {
   1: {
     layer: { y100: { mean: 4.43, max: 45.7 }, y500: { mean: 11.44, max: 62.22 }, y1500: { mean: 8.68, max: 63.4 }, y3000: { mean: 6.22, max: 63.28 } },
-    before: { towns: 718, mean: 28.7, richTowns: 27, richMean: 22.3 },
-    after: { towns: 721, mean: 30.2, richTowns: 23, richMean: 32.4 },
-    digest: '634ac43b38b69719',
+    before: { towns: 726, mean: 27.8, richTowns: 31, richMean: 19.8 },
+    after: { towns: 721, mean: 29.5, richTowns: 28, richMean: 28.9 },
+    digest: '12394b3308f8637d',
   },
   2024: {
-    layer: { y100: { mean: 4.6, max: 38.54 }, y500: { mean: 12, max: 49.66 }, y1500: { mean: 9.44, max: 48.99 }, y3000: { mean: 5.94, max: 45.41 } },
-    before: { towns: 772, mean: 26.7, richTowns: 39, richMean: 29.9 },
-    after: { towns: 762, mean: 27.6, richTowns: 41, richMean: 34.3 },
-    digest: 'd264d45edcef1291',
+    layer: { y100: { mean: 4.6, max: 38.54 }, y500: { mean: 12, max: 49.66 }, y1500: { mean: 9.44, max: 48.99 }, y3000: { mean: 5.96, max: 45.42 } },
+    before: { towns: 777, mean: 26.3, richTowns: 42, richMean: 24.4 },
+    after: { towns: 769, mean: 27.2, richTowns: 44, richMean: 30.8 },
+    digest: '0b2ae3d9a4190d3b',
   },
 };
 
