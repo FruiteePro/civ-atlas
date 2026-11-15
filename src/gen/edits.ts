@@ -667,7 +667,8 @@
  *      势孤的小国归附 / 称臣(logs/war-motive-design.md)。历史变了
  *  76:编年史里称号字面不同、读出来一样的国号升降(存占位符的那一路)不再写成升格 / 降格,和直接写的那一路一样;
  *      宗室起名也避开本国改制那几段(神权、共和、军政府)的君主。地形、历史不变,一部分宗室的名字变了
- *  77:藩属和宗主结着亲时按亲的分量少想自立(同一刻刚结的亲也算:不再结了亲当场自立、挨讨伐)。历史变了
+ *  77:藩属和宗主结着亲时按亲的分量少想自立(同一刻刚结的亲也算:不再结了亲当场自立、挨讨伐);起女名和比她们晚出道的男子
+ *      同一遍按出道先后起(男子撞上先出道的人新起的女名就另起)。历史变了
  */
 import type { Civ, Culture, Faith, MigrationDir, Person, Place, Polity, Regions, RulerLeanings, Settlement } from './civ/types';
 import { FRAGMENT_MODE_CHOICES, type FragmentModeChoice } from './civ/fragmentMode';
