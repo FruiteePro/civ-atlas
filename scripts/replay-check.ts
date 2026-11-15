@@ -1194,11 +1194,18 @@ if (part('作者的人物')) {
   const chipName = chipText.split(' ')[0];
   let personRefs = '';
   if (chipName) {
-    await page.fill('.sidebar .search-input', chipName);
-    await page.waitForTimeout(300);
-    await page.locator('.search-row[data-kind=person]').first().click();
-    await page.waitForTimeout(500);
-    personRefs = await text('.inspector [data-oc=refs]');
+    // 同名的推演人物可能有几位(同一国隔了几百年的将领常同名):搜出来的人物挨个点,找卡片里写着他的那一位
+    for (let i = 0; i < 6; i++) {
+      await page.fill('.sidebar .search-input', '');
+      await page.fill('.sidebar .search-input', chipName);
+      await page.waitForTimeout(300);
+      const rows = page.locator('.search-row[data-kind=person]');
+      if (i >= (await rows.count())) break;
+      await rows.nth(i).click();
+      await page.waitForTimeout(500);
+      personRefs = await text('.inspector [data-oc=refs]');
+      if (personRefs.includes('林小满')) break;
+    }
   }
   // 出生的城的卡片;「更多」→ 在这里加人物
   let cityRefs = '';
