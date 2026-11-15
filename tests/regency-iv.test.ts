@@ -40,15 +40,18 @@ const free = (civ: Civ, pid: number, T: number, n: number) => {
 
 /** 君主 N 和接着即位的太子 H(他的儿子),T = H 满 17 岁、N 在位、那几年没人掌权的一年 */
 function heirCase(civ: Civ): { N: Person; H: Person; T: number } | null {
+  for (const c of heirCases(civ)) return c;
+  return null;
+}
+function* heirCases(civ: Civ): Generator<{ N: Person; H: Person; T: number }> {
   const rs = rulersOf(civ);
   for (const N of rs) {
     if ((N.from ?? 0) < 700 || N.until === undefined) continue;
     const H = rs.find((x) => x.polity === N.polity && x.parent === N.id && x.rise === 'heir' && x.from === N.until);
     if (!H) continue;
     const T = Math.ceil(Math.max(N.from!, H.born + 17)) + 1;
-    if (T + 6 < N.until && free(civ, N.polity, T, 6)) return { N, H, T };
+    if (T + 6 < N.until && free(civ, N.polity, T, 6)) yield { N, H, T };
   }
-  return null;
 }
 
 /** 君主 N 和他在世、成年的兄弟 U(同一朝,没即位),T = N 即位后一两年 */
@@ -194,21 +197,26 @@ for (const seed of [7, 2024]) {
     it('太子娶别国宗室女(互嫁):两国各记一门亲,人物卡上有配偶;从哪一刻接着推都一样', () => {
       const w = world(seed);
       const base = baseOf(seed);
-      const c = heirCase(base)!;
-      // 和这一年还在、不是共和国的别国试几回(正在交战、对方君主没有成年女儿的不生效)
-      const others = base.polities.filter((p) => p.id !== c.H.polity && p.lineage !== 'republic' && p.founded < c.T - 50 && (p.ended ?? Infinity) > c.T + 20);
-      let done: { civ: Civ; v: Intervention; q: number } | null = null;
-      for (const Q of others.slice(0, 12)) {
-        const v = cleanIntervention({ kind: 'marry', a: polityKey(base, c.H.polity), person: personKey(base, c.H.id), b: polityKey(base, Q.id), from: c.T, how: 'mutual' })!;
-        const civ = generateCiv(w, { interventions: [v], endYear: c.T + 12 });
-        if (ivAnnal(civ).b >= 0) {
-          done = { civ, v, q: Q.id };
-          break;
+      // 太子、别国按条件现找:和那一年还在、不是共和国的别国试几回(正在交战、对方君主没有成年女儿、
+      // 互嫁时对方没有能娶的宗室的不生效;GENERATOR_VERSION 75 碎片化以后最早的那位太子那年只有两三个老国家,换下一位太子再试)
+      let done: { civ: Civ; v: Intervention; q: number; c: { N: Person; H: Person; T: number } } | null = null;
+      let tries = 0;
+      for (const c of heirCases(base)) {
+        const others = base.polities.filter((p) => p.id !== c.H.polity && p.lineage !== 'republic' && p.founded < c.T - 50 && (p.ended ?? Infinity) > c.T + 20);
+        for (const Q of others.slice(0, 12)) {
+          const v = cleanIntervention({ kind: 'marry', a: polityKey(base, c.H.polity), person: personKey(base, c.H.id), b: polityKey(base, Q.id), from: c.T, how: 'mutual' })!;
+          const civ = generateCiv(w, { interventions: [v], endYear: c.T + 12 });
+          tries++;
+          if (ivAnnal(civ).b >= 0) {
+            done = { civ, v, q: Q.id, c };
+            break;
+          }
+          expect(ivAnnal(civ).b).toBeLessThan(-1);
         }
-        expect(ivAnnal(civ).b).toBeLessThan(-1);
+        if (done || tries >= 30) break;
       }
       expect(done).not.toBeNull();
-      const { civ, v, q } = done!;
+      const { civ, v, q, c } = done!;
       const H = again(civ, base, c.H);
       expect(H.spouses?.some((s) => s.polity === q && s.year === c.T)).toBe(true);
       expect(civ.people!.some((x) => x.polity === q && x.spouses?.some((s) => s.polity === H.polity && s.year === c.T))).toBe(true);
