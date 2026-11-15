@@ -136,8 +136,11 @@ export const REFORM_KNOBS = defineKnobs('reform', {
   /** 政变的将军、革命起兵的人:年纪(随机)、倾向偏移(将军好战) */
   LEADER_AGE: [36, 58] as [number, number],
   /** 立神权:本国信国教的州至少多少;赔率;天命再乘多少(窘迫并进了"世俗弱",见 secularMul) */
+  // GENERATOR_VERSION 77 调过一回神权(logs/tuning-v77 的 T5):立神权 0.03→0.01、教团专权 0.15→0.08、夺位 0.3→0.1、
+  // 教众起事 0.5→0.2(上限 0.6→0.4)、异教起事立神权 0.08→0.03(上限 0.35→0.2)、不服自立 0.15→0.06,废神权赔率不动;
+  // 46 个世界每个世界的神权段从平均 14.7 降到 5.4(中位 5),25 个落在 3–6
   THEO_FAITH: 0.45,
-  THEO_ODDS: 0.03,
+  THEO_ODDS: 0.01,
   THEO_SKY: 0.6,
   /**
    * 世俗强弱(神权设计稿第 2、5 节):强 = STRONG_CENTRAL × 收归朝廷几样 ÷ 3 + STRONG_SIZE × min(1, 州数 ÷ BIG_SIZE) + STRONG_CHARTER × 设了议事会 / 议会;
@@ -174,25 +177,25 @@ export const REFORM_KNOBS = defineKnobs('reform', {
    * 起事那片州的主流信仰和母国国教不同 —— 机会 REBEL_THEO × 异教程度(异教 1、同教异派 0.5)× (1 + 母国动荡)
    * × (大崩解 REBEL_THEO_COLLAPSE)× 入世倍数,最多 REBEL_THEO_MAX
    */
-  REBEL_THEO: 0.08,
+  REBEL_THEO: 0.03,
   REBEL_THEO_COLLAPSE: 1.5,
-  REBEL_THEO_MAX: 0.35,
+  REBEL_THEO_MAX: 0.2,
   /**
    * 教团专权、夺位(神权设计稿第 8 节;regency.ts 看王朝没换代时问 clericSeize):王国以上、国教占比到 THEO_FAITH、这些年有危机 ——
    * 机会 CLERIC_P × 入世倍数 × 世俗倍数(最多 CLERIC_MAX)出一位国师 / 大祭司专权;他到期 CLERIC_USURP 的机会夺位立神权,
    * 其余伏诛 / 卒于位(不改历史,只挡住这一回的大臣大将专权)
    */
-  CLERIC_P: 0.15,
+  CLERIC_P: 0.08,
   CLERIC_MAX: 0.4,
-  CLERIC_USURP: 0.3,
+  CLERIC_USURP: 0.1,
   /**
    * 教众革命:议立宪 / 废君谈崩起兵时,国教入世到 ZEALOT_E、天命之说盛过共治 + 民权 —— 有
    * min(ZEALOT_MAX, ZEALOT_K × 入世程度 × 2 × max(0, 国教占比 − ZEALOT_SHARE0))的机会是教众起事:打进国都立神权,打不进据地立神权国
    */
   ZEALOT_E: 0.5,
-  ZEALOT_K: 0.5,
+  ZEALOT_K: 0.2,
   ZEALOT_SHARE0: 0.3,
-  ZEALOT_MAX: 0.6,
+  ZEALOT_MAX: 0.4,
   /** 神权里的世俗革命:共治 + 民权到 SECULAR_PUSH、动荡到 REVOLT_U 才有人起兵(打分照 revolt,天命那一项换成国教占比) */
   SECULAR_PUSH: 0.4,
   /**
@@ -206,7 +209,7 @@ export const REFORM_KNOBS = defineKnobs('reform', {
    * × (1 + 异教程度 / 入世程度);不服的那片州(DISSENT_MIN–DISSENT_MAX 州,最多国土 DISSENT_FRAC)据地自立:
    * 教团上台 = 信别的教、离国都远的那头立世俗国;世俗派上台 = 国教最盛的那头(圣城优先)立残余的神权国
    */
-  DISSENT: 0.15,
+  DISSENT: 0.06,
   DISSENT_K: 1.2,
   DISSENT_U0: 1,
   DISSENT_MIN: 3,
