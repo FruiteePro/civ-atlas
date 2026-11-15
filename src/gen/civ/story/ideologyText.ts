@@ -84,8 +84,9 @@ function polityCands(civ: Civ, p: number, out: Cand[]): void {
       chal = -1;
       continue;
     }
-    if (lead < 0 || best === lead) {
-      lead = best;
+    // 和最盛的那说打平不算压着(打平时 best 取的是编号小的那说):照旧是原来那说
+    if (lead < 0 || best === lead || v[at + best] <= v[at + lead]) {
+      if (lead < 0) lead = best;
       chal = -1;
       continue;
     }
