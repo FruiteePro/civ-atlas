@@ -189,5 +189,6 @@ describe('在一张地图上新开一段历史', () => {
     void _h2;
     const b = await makePart('map', { ...rest2, history: [] });
     expect(b.sum).toBe(a.sum);
-  });
+    // 生成两遍地图、推一遍历史:CI 上 3–5 秒,默认 5 秒不够
+  }, 60_000);
 });
