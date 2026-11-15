@@ -665,6 +665,8 @@
  *      国号、朝代名用完时不再加数字。历史变了
  *  75:部落联盟立国;开战看动机、纳贡式议和;亡国规则分政体(小国、部落联盟、游牧迁都或称臣,诸部离散);大汗国退保草原、汗位之争;
  *      势孤的小国归附 / 称臣(logs/war-motive-design.md)。历史变了
+ *  76:人物起名:宗室和本国先出道的君主(起了女名的女君、自立为君的执政)前后 NAME_GAP 年里同名的换名;西幻男君和本国先出道的女王同名的换名、
+ *      重排序数;编年史里称号字面不同、读出来一样的国号升降不再写成升格。地形、疆域、兴亡、战争不变,一部分人物名字变了
  */
 import type { Civ, Culture, Faith, MigrationDir, Person, Place, Polity, Regions, RulerLeanings, Settlement } from './civ/types';
 import { FRAGMENT_MODE_CHOICES, type FragmentModeChoice } from './civ/fragmentMode';
@@ -681,7 +683,7 @@ import { SLUMP_CHOICES, SLUMP_DEFAULT, type Calamity } from './civ/calamity';
 import { stampCalc, type RuleSet } from './civ/ruleSet';
 
 /** 生成器版本:生成算法有改动、同种子会得到不同世界时加一(存档读档时核对);加一时在 GENERATOR_CHANGES 里补一条 */
-export const GENERATOR_VERSION = 75;
+export const GENERATOR_VERSION = 76;
 
 /**
  * 一版生成器的改动有多大(从小到大):打开旧存档、旧链接时,按跨过的几版里最大的那一种说清变了什么(savefile.ts 的 versionNote)
@@ -777,6 +779,7 @@ export const GENERATOR_CHANGES: Readonly<Record<number, { change: GeneratorChang
   73: { change: 'history' },
   74: { change: 'history' },
   75: { change: 'history' },
+  76: { change: 'people' },
 };
 
 /** 干预的种类(见文件头的表) */
