@@ -24,7 +24,7 @@
  *     盟国的方针把守方当亲国的,援盟的机会是 FRIEND_JOIN;当仇国的不救(盟约断了);把攻方当亲国的不出兵(policy.ts)。
  *     援盟、救藩参战的不再连锁。
  *   联姻(marriage.ts):看邦交时先看要不要结亲(不占"一次最多出一件事");结着亲的两国挑盟友时分数 × KIN_PACT、援盟的机会 × KIN_JOIN
- *     (都随结亲的年数淡回,见 marriages.ts 的 bond)。
+ *     (都随结亲的年数淡回,见 marriages.ts 的 bond);藩属和宗主结着亲,自立的机会 × (1 − 分量)。
  *   - 每一仗之后(接口 war.sue):守方打得很惨(丢了国都,或丢了 SUE_FRAC 以上国土)、攻方国力是它 SUE_RATIO 倍以上
  *     (守方在位的君主好战越低越肯称臣、越高越宁可打下去,rulers.ts),
  *     守方可能奉表称臣、攻方受降罢兵:当即议和(占了的州照旧归攻方),紧跟着记 submit(守方正和攻方的藩属交兵时不受降)。异族、攻方另有战事、离攻方国都远,攻方更肯受降。
@@ -466,6 +466,9 @@ export function installDiplomacy(sim: CivSim, pm: PolityModel, dm: DiplomacyMode
       const Liege = pm.polities[L];
       odds *= faithOpposeMul(polityFaithGap(pm, V, Liege, t), FAITH_SAME, FAITH_FAR, faithScale(V, t, FAITH_THEO));
     }
+    // 和宗主结着亲:按亲的分量少想自立(刚结亲 = 不自立,随结亲的年数淡回;见 marriages.ts 的 bond)。
+    // GENERATOR_VERSION 77 以前同一刻结了亲又自立、挨宗主讨伐
+    if (api.diplomacy.bond) odds *= 1 - api.diplomacy.bond(v, L, t, true);
     if (keyed(dm.base, pm.ptag[v], k, U_DEFECT) >= odds / (1 + odds)) return false;
     record('defect', { a: v, b: L, region: capRegion(v, t), settlement: capitalAt(pm.polities[v], t) });
     // 宗主发兵讨伐:接壤、没在和它打、没被下令和它结盟、手上的仗没打满、没被下令不许扩张

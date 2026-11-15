@@ -667,6 +667,7 @@
  *      势孤的小国归附 / 称臣(logs/war-motive-design.md)。历史变了
  *  76:编年史里称号字面不同、读出来一样的国号升降(存占位符的那一路)不再写成升格 / 降格,和直接写的那一路一样;
  *      宗室起名也避开本国改制那几段(神权、共和、军政府)的君主。地形、历史不变,一部分宗室的名字变了
+ *  77:藩属和宗主结着亲时按亲的分量少想自立(同一刻刚结的亲也算:不再结了亲当场自立、挨讨伐)。历史变了
  */
 import type { Civ, Culture, Faith, MigrationDir, Person, Place, Polity, Regions, RulerLeanings, Settlement } from './civ/types';
 import { FRAGMENT_MODE_CHOICES, type FragmentModeChoice } from './civ/fragmentMode';
@@ -683,7 +684,7 @@ import { SLUMP_CHOICES, SLUMP_DEFAULT, type Calamity } from './civ/calamity';
 import { stampCalc, type RuleSet } from './civ/ruleSet';
 
 /** 生成器版本:生成算法有改动、同种子会得到不同世界时加一(存档读档时核对);加一时在 GENERATOR_CHANGES 里补一条 */
-export const GENERATOR_VERSION = 76;
+export const GENERATOR_VERSION = 77;
 
 /**
  * 一版生成器的改动有多大(从小到大):打开旧存档、旧链接时,按跨过的几版里最大的那一种说清变了什么(savefile.ts 的 versionNote)
@@ -780,6 +781,7 @@ export const GENERATOR_CHANGES: Readonly<Record<number, { change: GeneratorChang
   74: { change: 'history' },
   75: { change: 'history' },
   76: { change: 'people' },
+  77: { change: 'history' },
 };
 
 /** 干预的种类(见文件头的表) */

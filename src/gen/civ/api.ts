@@ -200,8 +200,11 @@ export interface DiplomacyApi {
   neighborsOf?: (p: number) => number[];
   /** 看邦交时(第 k 次)先看要不要和别国结亲(marriage.ts 提供) */
   marry?: (p: number, k: number, t: Year) => void;
-  /** 两国结着亲的分量(marriage.ts 提供;0 = 没有 / 断了,1 = 刚结亲,KIN_FADE 年里淡到 0):挑盟友、援盟照它加 */
-  bond?: (p: number, q: number, t: Year) => number;
+  /**
+   * 两国结着亲的分量(marriage.ts 提供;0 = 没有 / 断了,1 = 刚结亲,KIN_FADE 年里淡到 0):挑盟友、援盟照它加。
+   * same = 此刻刚结的亲也算(藩属自立看它:同一刻结了亲就不自立)
+   */
+  bond?: (p: number, q: number, t: Year, same?: boolean) => number;
   /** 立约(treaties.ts 提供):两国此刻在同一份约里(约期内互不宣战,和结盟一样算友好) */
   bound?: (p: number, q: number) => boolean;
   /** 立约(treaties.ts 提供):q 和 L 立了有限竞争之约,不收 L 的藩属(刚脱离 L 的国家来称臣也不收) */

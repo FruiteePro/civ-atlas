@@ -122,7 +122,7 @@ function hook(sim: CivSim, mm: MarriageModel): void {
     }
     return false;
   };
-  const bond = (p: number, q: number, t: Year) => bondOf(KIN_FADE, mm.pair.get(kinKey(p, q)), t, fought(p, q));
+  const bond = (p: number, q: number, t: Year, same = false) => bondOf(KIN_FADE, mm.pair.get(kinKey(p, q)), t, fought(p, q), same);
   const married = (p: number, born: Year) => mm.groom.has(`${p}:${born}`);
   /** 君主 r(国家 p)的母亲出自哪国(她是联姻嫁来的;不是 = −1) */
   const mothers = new WeakMap<Reign, number>();

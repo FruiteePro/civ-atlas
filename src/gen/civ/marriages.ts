@@ -7,7 +7,8 @@
  *   (那位君主至少 BRIDE_FATHER 岁)。史事 marry 的 n 列记娶亲的是谁:那时在位的君主在在位表里第几位 × 16 + 第几个儿子(groomBorn)。
  * **对邦交的加成**(分量 bond:刚结亲 = 1,KIN_FADE 年里淡到 0;那以后两国开过战 = 0,姻亲就此断了):
  *   宣战赔率 × (1 − (1 − KIN_DECLARE) × 分量);挑盟友时分数 × (1 + (KIN_PACT − 1) × 分量);援盟的机会 × (1 + (KIN_JOIN − 1) × 分量);
- *   背盟去打的赔率 × (1 − (1 − KIN_BETRAY) × 分量)。方针里把对方定为仇国的照旧(方针的倍数另乘)。
+ *   背盟去打的赔率 × (1 − (1 − KIN_BETRAY) × 分量);藩属向宗主自立的机会 × (1 − 分量)(这一条连同一刻刚结的亲也算)。
+ *   方针里把对方定为仇国的照旧(方针的倍数另乘)。
  * **母亲**:娶亲以后生的儿子,母亲就是这位宗室女;他即位以后在位期间对舅家宣战的赔率再 × UNCLE_DECLARE。纯计算。
  */
 import type { Annal, Polity, Year } from './types';
@@ -108,13 +109,13 @@ export const kinKey = (a: number, b: number) => Math.min(a, b) * 32768 + Math.ma
 
 /**
  * 两国结着亲的分量(见文件头):list = 这两国之间的几门亲(按先后),fought(t0) = 两国 t0 以后(到此刻)开过战。没有 = 0。
- * fade = 淡回的年数(这个世界的 KIN_FADE)
+ * fade = 淡回的年数(这个世界的 KIN_FADE);same = 此刻刚结的亲也算(默认只算此刻以前结的)
  */
-export function bondOf(fade: number, list: readonly Match[] | undefined, t: Year, fought: (t0: Year) => boolean): number {
+export function bondOf(fade: number, list: readonly Match[] | undefined, t: Year, fought: (t0: Year) => boolean, same = false): number {
   if (!list) return 0;
   for (let i = list.length - 1; i >= 0; i--) {
     const m = list[i];
-    if (!(m.t < t)) continue;
+    if (!(m.t < t || (same && m.t === t))) continue;
     const age = t - m.t;
     if (age >= fade || fought(m.t)) return 0;
     return 1 - age / fade;
