@@ -152,7 +152,8 @@ describe('国旗 · 作者改过的', () => {
   function pickPolities() {
     const civ = civOf(seed);
     const book = flagBook(world(seed), civ);
-    const east = book.eras.findIndex((es) => es.length >= 3 && isEastern(es[0].spec) && es.every((e) => deOf(e.spec.c[0]) >= 0));
+    // 东方的同样找没有改制那几段的(改共和那一段底色照前面一段,不按五德往下推;GENERATOR_VERSION 74 以后种子 7 第一个东方王朝第三段改了共和)
+    const east = book.eras.findIndex((es, i) => es.length >= 3 && isEastern(es[0].spec) && es.every((e) => deOf(e.spec.c[0]) >= 0) && (civ.polities[i].dynasties ?? []).every((d) => !d.regime));
     // 西幻的找一个没有政变、神权、共和那几段的(那几段照前面一段的旗不换图案;GENERATOR_VERSION 75 以后种子 7 第一个西幻王国有了神权一段)
     const west = book.eras.findIndex((es, i) => es.length >= 3 && !isEastern(es[0].spec) && es[0].spec.charge?.sym !== 'tamga' && (civ.polities[i].dynasties ?? []).every((d) => !d.regime));
     expect(east).toBeGreaterThanOrEqual(0);
