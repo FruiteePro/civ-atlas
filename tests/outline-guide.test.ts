@@ -64,9 +64,12 @@ const guidedWar = (): Plot => {
 const GUIDED_YEAR = () => guidedWar().year;
 const guidedCase = (): Plot[] => {
   const civ = baseCiv(GUIDED_SEED);
-  // 另带一条会硬改的早期情节,编年史才有【照大纲】;开战前面再堆别的情节会把国家键带跑(notYet/gone)
-  const early = samplePlots(civ, GUIDED_SEED, 20).find((p) => p.kind === 'death')!;
-  return [early, guidedWar()];
+  // 另带一条会硬改的早期情节(某国君主去世),编年史才有【照大纲】;开战前面再堆别的情节会把国家键带跑(notYet/gone)。
+  // 按条件现找:随机大纲从 20 条起往上加,第一条比那场仗早的君主去世(GENERATOR_VERSION 75 以后 20 条里没有了)
+  const war = guidedWar();
+  let early: Plot | undefined;
+  for (let n = 20; !early && n <= 80; n += 10) early = samplePlots(civ, GUIDED_SEED, n).find((p) => p.kind === 'death' && p.year < war.year);
+  return [{ ...early!, id: 1 }, { ...war, id: 2 }];
 };
 
 describe('不引 = 和以前一样', () => {
@@ -165,14 +168,15 @@ describe('顺着引了一把', () => {
 });
 
 /**
- * seed 7 第 1600 年:c24493 本来不打 c12572;引它更好战、国力更强、主攻 c12572,窗口里多看几眼邻国就打了,不多看就不打
+ * seed 7 第 1600 年:c19600 本来不打 c14512;引它更好战、国力更强、主攻 c14512,窗口里多看几眼邻国就打了,不多看就不打
  * (GENERATOR_VERSION 43 以前是 c6045 打 c16152;46 大迁徙以前是 c16152 打 c6760;47 季节进推演是 c693 打 c4912,48 时代做法以后又是 c693 打 c16152;
- * 57 湿地以后第 1500 年挨着的只有 c24493 和 c12572 两国(隔着海峡、海路),多看几眼也不打,换成第 1600 年)
+ * 57 湿地以后第 1500 年挨着的只有 c24493 和 c12572 两国(隔着海峡、海路),多看几眼也不打,换成第 1600 年;
+ * 75 碎片化以后 c24493 多看几眼也不打 c12572,按条件重找(接壤、可宣战、前后都没打过、多看打、不多看不打):c19600 打 c14512)
  */
 const LOOK_SEED = 7;
 const LOOK_Y = 1600;
-const LOOK_A = 'polity:c24493#0';
-const LOOK_B = 'polity:c12572#0';
+const LOOK_A = 'polity:c19600#0';
+const LOOK_B = 'polity:c14512#0';
 const lookList = (look: boolean): Intervention[] => [
   { kind: 'policy', a: LOOK_A, from: LOOK_Y, war: 35, power: 70, foes: [LOOK_B], ...(look ? { look: { kind: 'war' as const, years: [0, 5, 10, 15, 20].map((d) => LOOK_Y + d) } } : {}), plot: 1, guide: true },
   { kind: 'policy', a: LOOK_A, from: LOOK_Y + 21, plot: 1, guide: true },
