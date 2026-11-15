@@ -1614,6 +1614,10 @@ function peopleOnce(civ: PeopleInput, kills: Kills): { people: Person[]; ids: Ma
     if (K.died !== undefined) C.died = K.died;
     else delete C.died;
   }
+  // 宗室的名字在 lineage.ts 起,那时本国有的君主名字还没定(起了女名的女君、自立为君的执政 / 将军用回原来的名字):
+  // 定下来以后,和本国先出道的君主、将领、名臣在前后 NAME_GAP 年里出生的同名了的宗室,换一个本国前后 NAME_GAP 年里没人用的
+  // (西幻沿用王室名字的照旧:和本国某位君主同名本来就可以)
+  renamePrinceClashes(out, polities, (p, at) => namerOf(p, at), tag, NAME_GAP, NAME_TRIES);
   return { people: out, ids, usurped: [...usurpers.values()] };
 }
 
@@ -1684,6 +1688,43 @@ class NameBook {
     name ||= pick || at(0);
     this.use(name, born);
     return name;
+  }
+}
+
+/** 见 buildPeople 末尾:宗室和本国先出道的人(按编号)前后 gap 年里出生的同名,换一个 */
+function renamePrinceClashes(
+  out: Person[],
+  polities: readonly Polity[],
+  namerOf: (p: Polity, at?: Year) => { surnamed: boolean; given(...k: number[]): string; femaleGiven(...k: number[]): string },
+  tag: readonly number[],
+  gap: number,
+  tries: number,
+): void {
+  const byPolity = new Map<number, Person[]>();
+  for (const o of out) {
+    const l = byPolity.get(o.polity);
+    if (l) l.push(o);
+    else byPolity.set(o.polity, [o]);
+  }
+  for (const x of out) {
+    if (x.role !== 'prince') continue;
+    const P = polities[x.polity];
+    if (!P) continue;
+    const mates = byPolity.get(x.polity) ?? [];
+    const west = !P.eastern;
+    const clash = (n: string) => mates.some((o) => o.id < x.id && o.name === n && o.role !== 'prince' && o.role !== 'consort' && !(west && o.role === 'ruler') && Math.abs(o.born - x.born) < gap);
+    if (!clash(x.name)) continue;
+    if (west && mates.some((o) => o.role === 'ruler' && o.name === x.name)) continue;
+    const namer = namerOf(P, x.born);
+    const sur = namer.surnamed ? splitSurname(x.name) : '';
+    const near = (n: string) => mates.some((o) => o !== x && o.name === n && Math.abs(o.born - x.born) < gap);
+    for (let a = 0; a < tries; a++) {
+      const n = sur + (x.female ? namer.femaleGiven(tag[x.polity] ?? 0, 2, x.id, a) : namer.given(tag[x.polity] ?? 0, 2, x.id, a));
+      if (n && !near(n)) {
+        x.name = n;
+        break;
+      }
+    }
   }
 }
 
