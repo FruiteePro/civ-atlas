@@ -23,7 +23,9 @@
  *
  * 名字:女名表在 names/persons.ts(femaleGiven);东方带姓的语感保留原来的姓(王朝的姓、将领名臣自己的姓)。
  * 原来的男名记在 Person.maleName(不显示;头像的长相按它一代代往下传,她的后人长相不变)。
- * 按出道先后起,不和此前出道的人重名(名字少的语感至少和本国的人、前后 NAME_GAP 年里出生的同名人物错开);
+ * 按出道先后起,不和此前出道的人重名(名字少的语感至少和本国的人、前后 NAME_GAP 年里出生的同名人物错开,再不行至少不和本国君主同名);
+ * 同一遍里,比她晚出道的男子(名字是起女名以前起的)撞上本国先出道的人新起的名字的,照他出道时的身份另起一个男名,
+ * 所以名字一律只看先出道的人,接着往后推不改;
  * 西幻同一朝的女王(和预定即位的公主)有 REUSE 的机会沿用本朝女王用过的名字(序数照男王的规矩编,男女分开数)。
  * 将领、名臣的字照女名另起(officials.ts 的 courtesyName)。后妃(嫁来的宗室女、临朝的太后,consorts.ts)本来就是女的,
  * 名字在这里和别的女性一起按出道先后起(nameWomen)。纯计算,不碰 DOM。
@@ -86,6 +88,8 @@ const U_COURTESY = 16;
 /** 身份:宗室(有父亲的,即位没即位都算这一种)、别的君主、将领、名臣(篡位开国的名臣也算名臣) */
 const K_ROYAL = 2;
 const K: Record<Person['role'], number> = { ruler: 1, prince: K_ROYAL, general: 3, minister: 4, consort: 5 };
+/** 男子撞上先出道的人新起的名字、另起男名时,身份加上这个数(和原来那套起名的随机数分开) */
+const K_RENAME = 32;
 
 const TICK = 256;
 const qi = (x: number) => Math.round(x * TICK);
@@ -276,7 +280,13 @@ export function pickWomen(
  * 换成女的、起女名:people = 排好编号、连好父亲的全部人物(下标 = Person.id;就地改),women = pickWomen 挑的再加上
  * 临朝篡位的太后(新朝第一位);consorts = 后妃(都是女的,名字还空着)的姓和身份
  */
-export function nameWomen(people: Person[], ctx: WomenCtx, women: ReadonlySet<Person>, consorts: ReadonlyMap<Person, ConsortName> = new Map()): void {
+export function nameWomen(
+  people: Person[],
+  ctx: WomenCtx,
+  women: ReadonlySet<Person>,
+  consorts: ReadonlyMap<Person, ConsortName> = new Map(),
+  follows: ReadonlySet<Person> = new Set(),
+): void {
   const { polities, tag } = ctx;
   const { REUSE, NAME_TRIES, NAME_GAP } = ctx.knobs.get(WOMEN_KNOBS);
   if (!people.length || (!women.size && !consorts.size)) return;
@@ -296,9 +306,35 @@ export function nameWomen(people: Person[], ctx: WomenCtx, women: ReadonlySet<Pe
   /** 西幻:国家:第几朝 → 这一朝女王(和预定即位的公主)用过的名字 */
   const queens = new Map<string, string[]>();
   const retitle = new Set<number>();
+  /** 国家 → 这一步里新起的名字(女名、下面改过的男名):比他晚出道的男子起名时还不知道 */
+  const fresh: Set<string>[] = polities.map(() => new Set());
+  /** 本国君主用过的名字(女名用满了退一步时,至少不和本国君主同名) */
+  const crowned: Set<string>[] = polities.map(() => new Set());
+  const renamed = new Set<Person>();
   for (const x of people) {
     const cn = consorts.get(x);
     if (!women.has(x) && !cn) {
+      // 男子:名字是起女名以前起的,不知道比他先出道的人后来换成了什么女名。撞上本国先出道的人新起的名字,
+      // 就照他出道时的身份另起一个(只看先出道的人:往后推不改他的名字)
+      const pid = home(x);
+      if (x.name && x.author === undefined && !follows.has(x) && fresh[pid]?.has(x.name)) {
+        const P = polities[pid];
+        const namer = ctx.namerOf(P, x.born);
+        const sur = namer.surnamed ? splitSurname(x.name) : '';
+        const near = (n: string) => mine[pid].has(n) || !!used.get(n)?.some((y) => Math.abs(y - x.born) < NAME_GAP);
+        let name = '';
+        for (let a = 0; a < NAME_TRIES && !name; a++) {
+          const c = sur + namer.given(tag[pid] ?? 0, K_RENAME + kind(x), qi(x.born), a);
+          if (!near(c)) name = c;
+        }
+        if (name) {
+          x.name = name;
+          fresh[pid].add(name);
+          renamed.add(x);
+          if (x.role === 'ruler' && namer.family === 'western') retitle.add(x.polity);
+        }
+      }
+      if (x.role === 'ruler') crowned[x.polity]?.add(x.name);
       use(x);
       continue;
     }
@@ -325,6 +361,8 @@ export function nameWomen(people: Person[], ctx: WomenCtx, women: ReadonlySet<Pe
       // 女名不取和他原来的男名一样的(两边的字库有重的字,东方带姓的名字偶尔撞上)
       for (let a = 0; a < NAME_TRIES && !name; a++) if (cand(a) !== x.name && !used.has(cand(a)) && !mine[pid].has(cand(a))) name = cand(a);
       for (let a = 0; a < NAME_TRIES && !name; a++) if (cand(a) !== x.name && !near(cand(a))) name = cand(a);
+      // 名字少的语感都用过了:至少不和本国的君主同名
+      for (let a = 0; a < NAME_TRIES && !name; a++) if (cand(a) !== x.name && !crowned[pid].has(cand(a))) name = cand(a);
       name ||= cand(0);
     }
     if (queen) {
@@ -338,11 +376,14 @@ export function nameWomen(people: Person[], ctx: WomenCtx, women: ReadonlySet<Pe
     if (x.name) x.maleName = x.name;
     x.name = name;
     x.female = true;
+    fresh[pid]?.add(name);
+    if (x.role === 'ruler') crowned[x.polity]?.add(name);
     use(x);
     // 字照女名另起
     if (x.courtesy) x.courtesy = courtesyName(ctx.styleOf(P), name, (u) => R(x, U_COURTESY + u), true);
   }
   for (const [S, F] of ctx.usurped) {
+    if (renamed.has(F)) S.name = F.name;
     if (!F.female) continue;
     S.female = true;
     S.maleName = F.maleName;

@@ -1605,8 +1605,9 @@ function peopleOnce(civ: PeopleInput, kills: Kills): { people: Person[]; ids: Ma
     const end = civ.annals.find((a) => a.kind === 'neutral' && a.cause === 'lapse' && a.war === e.war);
     x.exile = { how, annal: i, zone: e.war, region: e.region, year: e.year, ...(by ? { by: by.id } : {}), ...(end ? { until: end.year } : {}) };
   }
-  // 起女名(women.ts):换成女的人只换性别、名字、字,西幻同名女王另编序数;后妃一起按出道先后起
-  nameWomen(out, wctx, new Set([...women, ...dowagerF.values()]), consortNames);
+  // 起女名(women.ts):换成女的人只换性别、名字、字,西幻同名女王另编序数;后妃一起按出道先后起;
+  // 比她们晚出道、名字撞上她们新起的女名的男子另起一个(自立为君的执政 / 将军不算:名字跟着做执政时的那一份)
+  nameWomen(out, wctx, new Set([...women, ...dowagerF.values()]), consortNames, new Set(selfOf.keys()));
   // 自立为君的执政 / 将军:名字照做执政时的那一份(起女名、改撞名以后)
   for (const [K, C] of selfOf) {
     K.name = C.name;
