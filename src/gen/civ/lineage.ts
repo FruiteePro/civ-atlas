@@ -280,6 +280,8 @@ export function buildLineage(
       if (ys) ys.push(born);
       else used.set(name, [born]);
     };
+    // 起名避开的君主连同改制那几段(神权的大祭司、共和的执政、军政府):他们不连世系,名字照样是本国君主的名字
+    const crownedAll = rulers[p.id].slice().sort((a, b) => (a.from ?? a.born) - (b.from ?? b.born) || a.id - b.id);
     let ri = 0;
     let gi = 0;
     const others = generalNames[p.id].slice().sort((a, b) => a[0] - b[0]);
@@ -294,13 +296,13 @@ export function buildLineage(
     let named = 0;
     mine.forEach((n) => {
       const t = n.debut!;
-      for (; ri < list.length && (list[ri].from ?? list[ri].born) <= t; ri++) use(list[ri].name, list[ri].born);
+      for (; ri < crownedAll.length && (crownedAll[ri].from ?? crownedAll[ri].born) <= t; ri++) use(crownedAll[ri].name, crownedAll[ri].born);
       for (; gi < others.length && others[gi][0] <= t; gi++) use(others[gi][1], others[gi][2]);
       for (; hi < heirs.length && heirs[hi][0] <= t; hi++) use(heirs[hi][1], heirs[hi][2]);
       // 预定的继承人没即位的:名字照君主起(西幻可以和先君同名)。和那以前出道的将领、名臣撞了也照旧 —— 他日后即位,
       // 君主的名字本来就不避先出道的将领、名臣;这里另起的话,推到他即位以前、以后名字就不一样了(接着推改了过去)。
       // 东方的和那以前即位的君主撞了另起(父亲被废、换了一支即位时,照"下一位君主"起的名字会和真即位的那位一样)
-      const crowned = (x: string) => !!p.eastern && list.some((o) => o.name === x && (o.from ?? o.born) <= t && Math.abs(o.born - n.born) < NAME_GAP);
+      const crowned = (x: string) => !!p.eastern && crownedAll.some((o) => o.name === x && (o.from ?? o.born) <= t && Math.abs(o.born - n.born) < NAME_GAP);
       if (n.p.name && !crowned(n.p.name)) {
         use(n.p.name, n.born);
         if (Number.isFinite(n.died)) n.p.died = q(n.died);
