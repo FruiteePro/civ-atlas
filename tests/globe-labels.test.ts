@@ -11,6 +11,7 @@ import { placeMap, placedMarkBox, pathToCanvas } from '../src/render/labels/draw
 import { Polyline, glyphBox } from '../src/render/labels/layout';
 import { GLYPH_MIN_D, MARK_MIN_D, globeLabelView, globeToCanvas, isQuickLabel, overviewFloor, visibleMarks } from '../src/render/globeLabels';
 import { LEFT_W, RIGHT_W, TILT, fitPose } from '../src/ui/studio/layout';
+import { worldToLonLat } from '../src/render/globe';
 import { planetGlobeLabelView } from '../src/ui/studio/planetLabels';
 import type { StillPose } from '../src/ui/studio/scene';
 
@@ -127,6 +128,17 @@ describe('地球仪文字:排版', () => {
       [150, -20, 3],
       [0, -40, 3],
       [60, 30, 3],
+      // 按条件现找:几条最要紧的河、山脉的中段放大 5 倍(GENERATOR_VERSION 74 以后上面几处放大了都没有河名;河名比山名晚一级才出)
+      ...civ.places
+        .map((pl, i) => ({ pl, i }))
+        .filter(({ pl }) => (pl.kind === 'river' || pl.kind === 'mountains') && pl.path.length >= 4)
+        .sort((a, b) => b.pl.rank - a.pl.rank || a.i - b.i)
+        .slice(0, 6)
+        .map(({ pl }): [number, number, number] => {
+          const m = Math.floor(pl.path.length / 4) * 2;
+          const [lo, la] = worldToLonLat(pl.path[m], pl.path[m + 1], world.width, world.height);
+          return [lo / D, la / D, 5];
+        }),
     ] as [number, number, number][]) {
       const { lv, layer, items } = setup(lon, lat, k);
       const placed = placeMap(items, visibleMarks(layer.marks, lv).marks, lv);
