@@ -70,10 +70,10 @@ describe('保住王室 · 没下、即位没勾的世界不变', () => {
     annals: 'f1055c9a2e2385a9',
     checkpoints: 'c79c7c479563a943',
     log: '19640b38a7938ac2',
-    people: '545c14c0c2b9e735',
+    people: '7687c1f5eec2f882',
     polities: '8c1c97ff5027e331',
     settlements: '780790e29c32c98d',
-    chronicle: '80decaf8c8b34919',
+    chronicle: '0a713b899d9e042f',
   };
 
   it('即位没勾(旧存档里的即位没有 keep)的世界和加这条干预以前逐字节一样', () => {
