@@ -665,8 +665,7 @@
  *      国号、朝代名用完时不再加数字。历史变了
  *  75:部落联盟立国;开战看动机、纳贡式议和;亡国规则分政体(小国、部落联盟、游牧迁都或称臣,诸部离散);大汗国退保草原、汗位之争;
  *      势孤的小国归附 / 称臣(logs/war-motive-design.md)。历史变了
- *  76:人物起名:宗室和本国先出道的君主(起了女名的女君、自立为君的执政)前后 NAME_GAP 年里同名的换名;西幻男君和本国先出道的女王同名的换名、
- *      重排序数;编年史里称号字面不同、读出来一样的国号升降不再写成升格。地形、疆域、兴亡、战争不变,一部分人物名字变了
+ *  76:编年史里称号字面不同、读出来一样的国号升降(存占位符的那一路)不再写成升格 / 降格,和直接写的那一路一样。地形、历史、人物不变
  */
 import type { Civ, Culture, Faith, MigrationDir, Person, Place, Polity, Regions, RulerLeanings, Settlement } from './civ/types';
 import { FRAGMENT_MODE_CHOICES, type FragmentModeChoice } from './civ/fragmentMode';
@@ -779,7 +778,7 @@ export const GENERATOR_CHANGES: Readonly<Record<number, { change: GeneratorChang
   73: { change: 'history' },
   74: { change: 'history' },
   75: { change: 'history' },
-  76: { change: 'people' },
+  76: { change: 'chronicle' },
 };
 
 /** 干预的种类(见文件头的表) */
