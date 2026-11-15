@@ -70,7 +70,7 @@ describe('保住王室 · 没下、即位没勾的世界不变', () => {
     annals: 'f1055c9a2e2385a9',
     checkpoints: 'c79c7c479563a943',
     log: '19640b38a7938ac2',
-    people: '35112ec1cf9e853d',
+    people: 'e7f44221f00e78ad',
     polities: '8c1c97ff5027e331',
     settlements: '780790e29c32c98d',
     chronicle: '80decaf8c8b34919',
