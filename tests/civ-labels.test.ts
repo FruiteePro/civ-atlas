@@ -298,7 +298,8 @@ describe('国名、城名标注与城镇符号(视口文字层)', () => {
       }
       expect(narrow).toBeLessThanOrEqual(5);
       expect(crowded).toBeLessThanOrEqual(1);
-      expect(bigPx).toBeGreaterThan(20);
+      // 最大的大国的字号(GENERATOR_VERSION 75 碎片化以后最大的国家小了一圈,测的世界里最小的一个是 19.0 像素,以前是 20 以上)
+      expect(bigPx).toBeGreaterThan(18);
       // GENERATOR_VERSION 22 大国崩过以后,国都一带留下的残国(不到 25 州)国土还铺得开,字号能到大国的七成多(测的两个世界里最紧的是 1.39 倍)
       if (smallPx < Infinity) expect(bigPx).toBeGreaterThan(smallPx * 1.3);
     }
