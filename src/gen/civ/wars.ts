@@ -1275,7 +1275,9 @@ export function installWars(sim: CivSim, pm: PolityModel, world: World, wm: WarM
       if ((lean.war ?? 50) >= MOTIVE_NEW_WAR && t - reignStart(rulerOf(pm, p, t)) < MOTIVE_NEW_REIGN) offer('prestige', MOTIVE_NEW_RULER);
     }
     const gap = polityFaithGap(pm, P, Q, t);
-    if (gap > 0) offer('faith', Math.min(1, MOTIVE_FAITH + MOTIVE_FAITH_K * gap * faithScale(P, t, FAITH_THEO)));
+    // 插件的 war.faith 乘在这条动机上(挑打谁时就算进去);不接 = 原样
+    const faithIn = sim.influence?.get('war.faith');
+    if (gap > 0) offer('faith', Math.min(1, MOTIVE_FAITH + MOTIVE_FAITH_K * gap * faithScale(P, t, FAITH_THEO)) * (faithIn ? mulOf(faithIn, p) : 1));
     if (Q.culture === P.culture && pow[p] >= MOTIVE_KIN_RATIO * pow[q]) offer('kin', MOTIVE_KIN);
     if (wq.cause) offer('chaos', MOTIVE_CHAOS);
     if (pol && picks(pm, pol.foes, q)) offer('foe', 1);

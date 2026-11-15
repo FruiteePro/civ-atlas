@@ -114,6 +114,7 @@ export const SIM_INFLUENCE_TEXT: Readonly<Record<string, string>> = {
   'dynasty.odds': '改朝换代的几率（按国）',
   'plague.odds': '起瘟疫的几率（按州）',
   'plague.loss': '瘟疫死几成（按州）',
+  'war.faith': '为信仰开战的劲头（按国）',
 };
 
 /** 清单 sim.commands → 「宣战、结盟」 */

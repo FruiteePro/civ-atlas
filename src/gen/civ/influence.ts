@@ -29,6 +29,8 @@ export const OFFICIAL_INFLUENCES: readonly InfluencePoint[] = [
   { id: 'plague.odds', unit: 'region', op: 'mul', min: 0, max: 4 },
   /** 自己起的瘟疫里染疫的城死几成(不含全球大疫、作者下的瘟疫;最多死到「天灾很多」的上限) */
   { id: 'plague.loss', unit: 'region', op: 'mul', min: 0.25, max: 4 },
+  /** 宗教这条开战动机有多强(挑打谁的时候就算进去:只对异教、别派的邻国有用;不接 = 和原来一字不差) */
+  { id: 'war.faith', unit: 'polity', op: 'mul', min: 0, max: 3 },
 ];
 
 /** 按国的口里一国的数:后立的国(超出插件交的格数)按不影响算 */

@@ -310,7 +310,8 @@ export type InfluenceName =
   | 'split.odds'
   | 'dynasty.odds'
   | 'plague.odds'
-  | 'plague.loss';
+  | 'plague.loss'
+  | 'war.faith';
 
 /** 命令里指一国、一州、一城、一族:读口里的编号(只在这一刻有效),或稳定键 */
 export type SimRef = number | string;

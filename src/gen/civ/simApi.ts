@@ -1,7 +1,8 @@
 /**
  * 推演插件接口第 1 版(sim.*@1):插件只照这里的类型写。名字、单位、上下限给出去就是承诺:加可选字段不升版,意思变了出 @2,@1 至少留 12 个月。
  * 插件只在「插件那一刻」整批出手(每隔几年、自己约的时刻、第 0 年开头),官方的决策点不等插件,只查影响口里交好的数。
- * 已知的边界:两国之间的宣战、结盟没有影响口(按国的 war.odds 乘在挑好了打谁以后,只能折成一国一个数;要指名两国就下命令);
+ * 已知的边界:两国之间的宣战、结盟没有影响口(按国的 war.odds 乘在挑好了打谁以后,只能折成一国一个数;war.faith 乘在宗教这条开战动机上,
+ * 挑打谁时只偏向异教、别派的邻国;别的指名两国就下命令);
  * 插件下过命令的历史,接着推时作者新加了干预就从第 0 年重推(结果一样,只是不省时间)。
  * 作者下的不许灭、禁止分裂、不许扩张、结盟、不许迁在那一刻挡得住插件的命令:挡下的不办、不记,下一回合在 turn.refused 里(why 见 REFUSE_REASONS)。
  */
@@ -52,7 +53,8 @@ export type InfluenceName =
   | 'split.odds'
   | 'dynasty.odds'
   | 'plague.odds'
-  | 'plague.loss';
+  | 'plague.loss'
+  | 'war.faith';
 
 export const INFLUENCE_NAMES: readonly InfluenceName[] = OFFICIAL_INFLUENCES.map((p) => p.id as InfluenceName);
 

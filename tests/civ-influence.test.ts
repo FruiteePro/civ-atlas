@@ -92,7 +92,7 @@ const ability = (c: Civ, k: number) => {
 };
 
 describe('影响口:没有插件接时照原来的算', () => {
-  it('官方登记了十二个口,名字、单位、上下限', () => {
+  it('官方登记了十三个口,名字、单位、上下限', () => {
     expect(OFFICIAL_INFLUENCES.map((p) => [p.id, p.unit, p.cols ?? 1, p.op, p.min, p.max])).toEqual([
       ['city.capacity', 'region', 1, 'mul', 0.25, 4],
       ['rural.capacity', 'region', 1, 'mul', 0.25, 4],
@@ -106,6 +106,7 @@ describe('影响口:没有插件接时照原来的算', () => {
       ['dynasty.odds', 'polity', 1, 'mul', 0, 4],
       ['plague.odds', 'region', 1, 'mul', 0, 4],
       ['plague.loss', 'region', 1, 'mul', 0.25, 4],
+      ['war.faith', 'polity', 1, 'mul', 0, 3],
     ]);
   });
 
@@ -119,7 +120,7 @@ describe('影响口:没有插件接时照原来的算', () => {
       const n = generateCiv(w, { ...params, plugins: [steady('neutral', NEUTRAL)] });
       sameBytes(official(n), base, `${seed} 不影响的数`);
       expect(Object.keys(n.simPlugins![0].influences!).sort()).toEqual(Object.keys(NEUTRAL).sort());
-      const silent: SimPlugin<SimRead> = { id: 'silent', every: 100, influences: ['city.capacity', 'dev.rate', 'control.reach', 'war.power', 'plague.loss'], act: () => {} };
+      const silent: SimPlugin<SimRead> = { id: 'silent', every: 100, influences: ['city.capacity', 'dev.rate', 'control.reach', 'war.power', 'plague.loss', 'war.faith'], act: () => {} };
       const s = generateCiv(w, { ...params, plugins: [silent] });
       sameBytes(official(s), base, `${seed} 不交数`);
       expect(s.simPlugins![0].influences).toBeUndefined();
